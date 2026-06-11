@@ -324,7 +324,9 @@ const GAMES=[
   {id:'dualnback',name:'Word Chain',cat:'Memory',skill:'memory',bg:'#EFF6FF',iconBg:'linear-gradient(135deg,#3B82F6,#1D4ED8)',icon:'🔗',desc:'Remember the chain of words — test your verbal memory'},
   {id:'math',name:'Quick Math',cat:'Speed',skill:'speed',bg:'#FFFBEB',iconBg:'linear-gradient(135deg,#FBBF24,#F59E0B)',icon:'🔢',desc:'Solve math problems at speed'},
   {id:'stroopx',name:'Color Stroop Xtreme',cat:'Focus',skill:'focus',bg:'#FFF0F3',iconBg:'linear-gradient(135deg,#F472B6,#EC4899)',icon:'🎨',desc:'Name the ink color, not the word — as fast as you can'},
-  {id:'iqtest',name:'IQ Test',cat:'Reasoning',skill:'logic',bg:'#F0FDF4',iconBg:'linear-gradient(135deg,#34D399,#059669)',icon:'🧩',desc:'15 Hinglish reasoning questions — find your IQ score'},
+  {id:'iqtest',name:'IQ Test',cat:'Reasoning',skill:'logic',bg:'#F0FDF4',iconBg:'linear-gradient(135deg,#34D399,#059669)',icon:'🧩',desc:'25 Hinglish reasoning questions — find your IQ score'},
+  {id:'reactionlab',name:'Reaction Lab',cat:'Speed',skill:'speed',bg:'#FFFBEB',iconBg:'linear-gradient(135deg,#F59E0B,#EF4444)',icon:'⚡',desc:'Tap the circle the instant it appears — test your raw reaction speed'},
+  {id:'spatialspin',name:'Spatial Spin',cat:'Logic',skill:'logic',bg:'#EEF2FF',iconBg:'linear-gradient(135deg,#6366F1,#8B5CF6)',icon:'🔄',desc:'Rotate shapes mentally — can you see in 3D?'},
 ];
 const CATS=['All','Memory','Focus','Logic','Speed','Reasoning'];
 let gamesFilter='All';
@@ -444,6 +446,8 @@ function openGame(id){
   else if(id==='math')playMath(body,setScore,endGame,wrap,startClock);
   else if(id==='stroopx')playStroopX(body,setScore,endGame,wrap,startClock);
   else if(id==='iqtest')playIQTest(body,setScore,endGame,wrap,startClock);
+  else if(id==='reactionlab')playReactionLab(body,setScore,endGame,wrap,startClock);
+  else if(id==='spatialspin')playSpatialSpin(body,setScore,endGame,wrap,startClock);
 }
 
 /* ===================== SCHULTE TABLE ===================== */
@@ -1766,7 +1770,7 @@ function showOnboarding(){
   document.body.appendChild(onb);
   let step=0,userName='',goal=3;
   const steps=[
-    ()=>{onb.innerHTML=`<div class="onb-em">🧠</div><h1>Welcome to NeuroZen</h1><p>Train your brain with 8 science-inspired games. Build focus, memory, speed & more.</p>
+    ()=>{onb.innerHTML=`<div class="onb-em">🧠</div><h1>Welcome to NeuroZen</h1><p>Train your brain with 10 science-inspired games. Build focus, memory, speed & more.</p>
       <div class="dots"><div class="dot active"></div><div class="dot"></div><div class="dot"></div></div>
       <button class="btn-primary next">Let's Start →</button>`;
       onb.querySelector('.next').onclick=()=>{step=1;steps[step]();};
@@ -1806,6 +1810,298 @@ function showOnboarding(){
     },
   ];
   steps[0]();
+}
+
+/* ===================== REACTION LAB ===================== */
+function playReactionLab(body,setScore,end,wrap,startClock){
+  const instrEl=$(`<div class="instr">Tap the circle the moment it appears!<br>
+    <span style="font-size:11px;color:var(--text2);">Rd 5+: 🔴=tap &nbsp;🔵=don't tap &nbsp;|&nbsp; Rd 8+: tap BIGGER circle</span><br>
+    <button style="margin-top:12px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="rlStart">▶ Start</button>
+  </div>`);
+  body.appendChild(instrEl);
+  const arena=$(`<div id="rlArena" style="position:relative;width:100%;height:220px;background:var(--card);border-radius:16px;overflow:hidden;display:none;margin-top:8px;box-shadow:var(--shadow);"></div>`);
+  body.appendChild(arena);
+  const infoBar=$(`<div id="rlInfo" style="text-align:center;font-size:12px;color:var(--text2);margin-top:6px;min-height:18px;"></div>`);
+  body.appendChild(infoBar);
+  const times=[];
+  let round=0,score=0,delayT=null,holdT=null,busy=false;
+
+  instrEl.querySelector('#rlStart').onclick=()=>{
+    instrEl.style.display='none';arena.style.display='block';
+    startClock&&startClock();doRound();
+  };
+
+  function showFb(msg,color){
+    const old=arena.querySelector('.rl-fb');if(old)old.remove();
+    const el=$(`<div class="rl-fb" style="position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:13px;font-weight:700;color:${color};pointer-events:none;">${msg}</div>`);
+    arena.appendChild(el);
+  }
+
+  function advance(t,msg,color,pts){
+    clearTimeout(holdT);busy=true;
+    times.push(t);
+    if(pts>0){score+=pts;setScore(score);}
+    showFb(msg,color);
+    round++;setTimeout(()=>{busy=false;doRound();},900);
+  }
+
+  function doRound(){
+    if(round>=10){showChart();return;}
+    const rnd=round;
+    const isNoGo=rnd>=4&&rnd<7;
+    const isBig=rnd>=7;
+    const info=body.querySelector('#rlInfo');
+    if(info)info.textContent=`Round ${rnd+1}/10${isNoGo?' · 🔴=tap  🔵=skip':''}${isBig?' · Tap BIGGER circle':''}`;
+    arena.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:14px;letter-spacing:.15em;">+ + +</div>';
+    const delay=1000+Math.random()*2500;
+    delayT=setTimeout(()=>{
+      if(round!==rnd)return;
+      arena.innerHTML='';
+      const aw=arena.clientWidth||300,ah=arena.clientHeight||220;
+      if(isBig){
+        let s1=30+Math.floor(Math.random()*22);
+        let s2=s1;while(Math.abs(s2-s1)<18)s2=30+Math.floor(Math.random()*22);
+        const bigS=Math.max(s1,s2),smallS=Math.min(s1,s2);
+        const sides=[{size:bigS,correct:true},{size:smallS,correct:false}];
+        if(Math.random()>0.5)sides.reverse();
+        const ts=Date.now();
+        sides.forEach((c,i)=>{
+          const hw=aw/2-c.size-6,hh=ah-c.size-10;
+          const x=(i===0?4:Math.floor(aw/2)+4)+Math.floor(Math.random()*Math.max(1,hw));
+          const y=10+Math.floor(Math.random()*Math.max(1,hh));
+          const col=['#7C3AED','#4F8EF7'][i];
+          const el=$(`<div style="position:absolute;left:${x}px;top:${y}px;width:${c.size}px;height:${c.size}px;border-radius:50%;background:${col};cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.22);transition:transform .08s;"></div>`);
+          el.onclick=()=>{
+            if(busy)return;
+            arena.querySelectorAll('div').forEach(d=>{d.style.pointerEvents='none';});
+            const rt=Date.now()-ts;
+            if(c.correct){
+              const pts=rt<200?5:rt<350?3:rt<500?2:1;
+              advance(rt,`+${pts} pts · ${rt}ms ✓`,'#22C55E',pts);
+            } else {
+              advance(rt,'Wrong circle! 0 pts','#EF4444',0);
+            }
+          };
+          arena.appendChild(el);
+        });
+        holdT=setTimeout(()=>{if(!busy)advance(2000,'Too slow! ⏱','#EF4444',0);},2000);
+      } else {
+        const goChance=isNoGo?0.62:1;
+        const isGo=Math.random()<goChance;
+        const col=isGo?'#EF4444':'#3B82F6';
+        const size=50;
+        const maxX=Math.max(0,aw-size-10),maxY=Math.max(0,ah-size-10);
+        const x=10+Math.floor(Math.random()*maxX);
+        const y=10+Math.floor(Math.random()*maxY);
+        const el=$(`<div style="position:absolute;left:${x}px;top:${y}px;width:${size}px;height:${size}px;border-radius:50%;background:${col};cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.22);transition:transform .08s;"></div>`);
+        const ts=Date.now();
+        arena.appendChild(el);
+        if(!isGo){
+          el.onclick=()=>{if(busy)return;advance(-1,"Don't tap blue! ❌",'#EF4444',0);};
+          holdT=setTimeout(()=>{if(!busy)advance(0,'+3 · Correctly ignored ✓','#22C55E',3);},1500);
+        } else {
+          el.onclick=()=>{
+            if(busy)return;
+            const rt=Date.now()-ts;
+            const pts=rt<200?5:rt<350?3:rt<500?2:1;
+            el.style.transform='scale(0.75)';
+            advance(rt,`+${pts} pts · ${rt}ms`,'#22C55E',pts);
+          };
+          holdT=setTimeout(()=>{if(!busy)advance(2000,'Too slow! ⏱','#EF4444',0);},1800);
+        }
+      }
+    },delay);
+  }
+
+  function showChart(){
+    const validTimes=times.filter(t=>t>0&&t<1999);
+    const avg=validTimes.length?Math.round(validTimes.reduce((a,b)=>a+b,0)/validTimes.length):999;
+    const ach=S('nz_achievements')||[];
+    if(avg<250&&!ach.includes('Lightning')){ach.push('Lightning');setS('nz_achievements',ach);playSound('achievement');}
+    if(score>=40&&!ach.includes('Robot')){ach.push('Robot');setS('nz_achievements',ach);playSound('achievement');}
+    const n=10,cw=24,gap=3,ph=64,pw=n*(cw+gap)+gap*2;
+    const maxMs=Math.max(...validTimes,300);
+    const bars=times.map((t,i)=>{
+      const x=gap+i*(cw+gap);
+      let bh,fc,lbl;
+      if(t===0){bh=10;fc='#22C55E';lbl='✓';}
+      else if(t<0){bh=10;fc='#EF4444';lbl='✗';}
+      else if(t>=1999){bh=ph;fc='#EF4444';lbl='⏱';}
+      else{bh=Math.max(8,Math.round(t/maxMs*ph));fc=t<200?'#7C3AED':t<350?'#34D399':t<500?'#FBBF24':'#F97316';lbl=t+'ms';}
+      return`<rect x="${x}" y="${ph-bh}" width="${cw}" height="${bh}" rx="3" fill="${fc}"/>
+<text x="${x+cw/2}" y="${ph+11}" text-anchor="middle" fill="var(--text2)" font-size="7">${lbl}</text>`;
+    }).join('');
+    const chartSvg=`<svg width="${pw}" height="${ph+14}" viewBox="0 0 ${pw} ${ph+14}" style="display:block;margin:0 auto;overflow:visible;">${bars}</svg>`;
+    end({
+      title:'Reaction Lab ⚡',emoji:'⚡',
+      sub:`Avg: ${avg}ms · Score: ${score}${avg<250?' · ⚡ Lightning':''}${score>=40?' · 🤖 Robot':''}`,
+      value:score,points:score*4,starThresh:[14,26,38],
+      statsHtml:`<div class="end-stats">
+        <div class="row"><span>Score</span><span class="val">${score} pts</span></div>
+        <div class="row"><span>Avg Reaction</span><span class="val">${avg}ms</span></div>
+        <div class="row"><span>Best Single</span><span class="val">${validTimes.length?Math.min(...validTimes)+'ms':'—'}</span></div>
+        ${avg<250?'<div class="row"><span>🏆 Achievement</span><span class="val">⚡ Lightning</span></div>':''}
+        ${score>=40?'<div class="row"><span>🏆 Achievement</span><span class="val">🤖 Robot</span></div>':''}
+      </div>
+      <div style="margin-top:14px;">
+        <div style="font-size:11px;color:var(--text2);text-align:center;margin-bottom:6px;">Reaction times — 10 rounds</div>
+        ${chartSvg}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px;font-size:10px;">
+          <span style="color:#7C3AED;">■ &lt;200ms</span>
+          <span style="color:#34D399;">■ &lt;350ms</span>
+          <span style="color:#FBBF24;">■ &lt;500ms</span>
+          <span style="color:#F97316;">■ 500ms+</span>
+          <span style="color:#22C55E;">■ ✓ skipped</span>
+        </div>
+      </div>`
+    });
+  }
+}
+
+/* ===================== SPATIAL SPIN ===================== */
+function playSpatialSpin(body,setScore,end,wrap,startClock){
+  const SHAPES={
+    L:[[0,0],[1,0],[2,0],[2,1]],
+    T:[[0,0],[0,1],[0,2],[1,1]],
+    J:[[0,1],[1,1],[2,1],[2,0]],
+  };
+  function rotateCW(cells){
+    const maxR=Math.max(...cells.map(([r])=>r));
+    const rotated=cells.map(([r,c])=>[c,maxR-r]);
+    const minR=Math.min(...rotated.map(([r])=>r));
+    const minC=Math.min(...rotated.map(([,c])=>c));
+    return rotated.map(([r,c])=>[r-minR,c-minC]);
+  }
+  function getRots(cells){
+    const rots=[cells];
+    for(let i=0;i<3;i++)rots.push(rotateCW(rots[rots.length-1]));
+    return rots;
+  }
+  function drawShapeSvg(cells,cs,color){
+    const maxR=Math.max(...cells.map(([r])=>r));
+    const maxC=Math.max(...cells.map(([,c])=>c));
+    const p=2,w=(maxC+1)*cs+p*2,h=(maxR+1)*cs+p*2;
+    const rects=cells.map(([r,c])=>`<rect x="${c*cs+p}" y="${r*cs+p}" width="${cs-2}" height="${cs-2}" rx="3" fill="${color}"/>`).join('');
+    return{svg:`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${rects}</svg>`,w,h};
+  }
+  const ROT_LABELS=['90° CW','180°','270° CW'];
+  const SHAPE_SEQ=['L','L','L','T','T','T','J','J','J','L','T','J'];
+  const questions=SHAPE_SEQ.map((type,i)=>({
+    type,dispRot:Math.floor(Math.random()*4),rotAmt:(i%3)+1,hint:i<2
+  }));
+  let qi=0,score=0,barT=null;
+  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Mental rotation challenge!<br>
+    <span style="font-size:11px;color:var(--text2);">Pick the correct rotation from 4 options. 8 seconds each.</span><br>
+    <button style="margin-top:10px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="ssStart">▶ Start</button>
+  </div>`);
+  body.appendChild(instrEl);
+  const host=$(`<div></div>`);body.appendChild(host);
+
+  function nextQ(){
+    if(qi>=12){
+      const ach=S('nz_achievements')||[];
+      const gotCadet=score>=8&&!ach.includes('Space Cadet');
+      const gotAstro=score>=12&&!ach.includes('Astronaut');
+      if(gotCadet){ach.push('Space Cadet');setS('nz_achievements',ach);}
+      if(gotAstro){ach.push('Astronaut');setS('nz_achievements',ach);}
+      if(gotCadet||gotAstro)playSound('achievement');
+      end({
+        title:'Spatial Spin! 🔄',emoji:'🔄',
+        sub:`${score}/12 correct${score>=12?' 🚀 Astronaut!':score>=8?' 🛸 Space Cadet!':''}`,
+        value:score,points:score*8,starThresh:[5,8,11],
+        statsHtml:`<div class="end-stats">
+          <div class="row"><span>Correct</span><span class="val">${score} / 12</span></div>
+          <div class="row"><span>Accuracy</span><span class="val">${Math.round(score/12*100)}%</span></div>
+          ${score>=12?'<div class="row"><span>🏆 Achievement</span><span class="val">🚀 Astronaut</span></div>':
+            score>=8?'<div class="row"><span>🏆 Achievement</span><span class="val">🛸 Space Cadet</span></div>':''}
+        </div>`
+      });
+      return;
+    }
+    clearInterval(barT);
+    const {type,dispRot,rotAmt,hint}=questions[qi];
+    const cells=SHAPES[type];
+    const rots=getRots(cells);
+    const dispCells=rots[dispRot];
+    const targetRot=(dispRot+rotAmt)%4;
+    const label=ROT_LABELS[rotAmt-1];
+    const optColors=['#7C3AED','#4F8EF7','#34D399','#F97316'];
+    const optOrder=[0,1,2,3].sort(()=>Math.random()-.5);
+    const {svg:dispSvg,w:dw,h:dh}=drawShapeSvg(dispCells,26,'#7C3AED');
+    const optButtons=optOrder.map((r,i)=>{
+      const {svg:oSvg}=drawShapeSvg(rots[r],20,optColors[i]);
+      return`<button class="ss-opt" data-r="${r}" style="padding:10px;background:var(--card);border:2px solid var(--border);border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:64px;transition:border .12s;">${oSvg}</button>`;
+    }).join('');
+    host.innerHTML=`
+      <div class="timer-bar"><div class="timer-fill timer-green" id="ssBar" style="width:100%"></div></div>
+      <div style="text-align:center;font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px;">Q${qi+1}/12 · <span style="color:var(--primary);">Rotate ${label}</span></div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:14px;">
+        <div style="text-align:center;">
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Original</div>
+          <div id="ssDisp" style="display:inline-flex;align-items:center;justify-content:center;padding:10px;background:var(--card);border-radius:12px;box-shadow:var(--shadow);">${dispSvg}</div>
+        </div>
+        <div style="font-size:20px;color:var(--text2);">→</div>
+        <div style="text-align:center;">
+          <div style="font-size:10px;color:var(--primary);font-weight:700;margin-bottom:4px;">${label}?</div>
+          <div style="width:${dw+20}px;height:${dh+20}px;background:var(--card);border-radius:12px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--text2);">?</div>
+        </div>
+      </div>
+      ${hint?'<div style="text-align:center;font-size:11px;color:#A78BFA;margin-bottom:8px;">💡 Hint: watch the shape animate!</div>':''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:290px;margin:0 auto;" id="ssOpts">${optButtons}</div>
+      <div id="ssFb" style="text-align:center;font-size:13px;font-weight:700;min-height:22px;margin-top:8px;"></div>`;
+    if(hint){
+      const dispEl=host.querySelector('#ssDisp');
+      if(dispEl){
+        const deg=rotAmt*90;
+        setTimeout(()=>{
+          dispEl.style.transition='transform 0.9s ease-in-out';
+          dispEl.style.transform=`rotate(${deg}deg)`;
+          setTimeout(()=>{
+            dispEl.style.transition='transform 0.4s ease-in-out';
+            dispEl.style.transform='';
+          },950);
+        },350);
+      }
+    }
+    let elapsed=0;
+    barT=setInterval(()=>{
+      elapsed+=100;
+      const pct=Math.max(0,100-elapsed/8000*100);
+      const bar=host.querySelector('#ssBar');
+      if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
+      if(elapsed>=8000){
+        clearInterval(barT);
+        host.querySelectorAll('.ss-opt').forEach(b=>{
+          if(+b.dataset.r===targetRot){b.style.border='3px solid #22C55E';b.style.background='rgba(52,211,153,.1)';}
+          b.disabled=true;
+        });
+        const fb=host.querySelector('#ssFb');if(fb){fb.style.color='#EF4444';fb.textContent='⏱ Time\'s up!';}
+        qi++;setTimeout(nextQ,1000);
+      }
+    },100);
+    host.querySelectorAll('.ss-opt').forEach(btn=>{
+      btn.onclick=()=>{
+        clearInterval(barT);
+        const chosen=+btn.dataset.r;
+        const fb=host.querySelector('#ssFb');
+        host.querySelectorAll('.ss-opt').forEach(b=>b.disabled=true);
+        if(chosen===targetRot){
+          playSound('correct');score++;setScore(score);
+          btn.style.border='3px solid #22C55E';btn.style.background='rgba(52,211,153,.12)';
+          if(fb){fb.style.color='#22C55E';fb.textContent='✅ Correct!';}
+        } else {
+          playSound('wrong');
+          btn.style.border='3px solid #EF4444';
+          host.querySelectorAll('.ss-opt').forEach(b=>{
+            if(+b.dataset.r===targetRot){b.style.border='3px solid #22C55E';b.style.background='rgba(52,211,153,.12)';}
+          });
+          if(fb){fb.style.color='#EF4444';fb.textContent='❌ Wrong!';}
+        }
+        qi++;setTimeout(nextQ,900);
+      };
+    });
+  }
+  instrEl.querySelector('#ssStart').onclick=()=>{instrEl.remove();startClock&&startClock();nextQ();};
 }
 
 /* ===================== INIT ===================== */
