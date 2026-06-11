@@ -298,3 +298,19 @@ body.dark .relax-bg{opacity:.25;}
 .skill-bar-fill{height:100%;border-radius:50px;background:var(--grad);transition:width 1s ease;}
 .skill-bar-val{font-size:12px;font-weight:700;width:30px;text-align:right;}
 .start-btn{display:block;margin:10px auto;padding:12px 32px;background:var(--grad);color:#fff;border-radius:14px;font-weight:700;font-size:15px;box-shadow:var(--shadow);}
+/* Featured card float */
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+.feat-float{animation:float 3s ease-in-out infinite;}
+/* Achievement gold glow pulse on toast */
+@keyframes achGlowPulse{0%,100%{box-shadow:0 8px 32px rgba(124,58,237,.5)}50%{box-shadow:0 8px 40px rgba(251,191,36,.75),0 0 36px rgba(251,191,36,.55)}}
+.ach-unlock-toast.show{transform:translateX(-50%) scale(1);animation:achGlowPulse 1s ease-in-out 3;}
+/* Daily workout card */
+.workout-card{background:linear-gradient(135deg,#7C3AED 0%,#4F8EF7 100%);border-radius:20px;padding:18px;color:#fff;margin-bottom:16px;box-shadow:0 10px 30px rgba(124,58,237,.35);}
+.workout-card h3{margin:0 0 2px;font-size:15px;font-weight:700;}
+.wo-sub{font-size:11px;opacity:.82;margin-bottom:12px;}
+.wo-games{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.wo-game{background:rgba(255,255,255,.18);border-radius:10px;padding:6px 10px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px;}
+.wo-start{background:#fff;color:#7C3AED;border-radius:12px;padding:13px;font-weight:700;font-size:14px;width:100%;cursor:pointer;border:none;font-family:inherit;transition:transform .15s;}
+.wo-start:active{transform:scale(.97);}
+/* Workout transition overlay */
+.wo-transition{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:36px;animation:fadeUp .3s;}

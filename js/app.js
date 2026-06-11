@@ -16,6 +16,7 @@ const FRESH={
 };
 function S(k){return LS.get(k,FRESH[k])}
 function setS(k,v){LS.set(k,v)}
+let _homePrevScore=0;
 function applyDark(){document.body.classList.toggle('dark',!!S('nz_dark_mode'));}
 applyDark();
 
@@ -36,7 +37,12 @@ function tone(freq,dur,type='sine',vol=0.28,ac=null){
     o.start(a.currentTime);o.stop(a.currentTime+dur+0.01);
   }catch(e){}
 }
+function haptic(p){try{if(navigator.vibrate)navigator.vibrate(p);}catch(e){}}
 function playSound(type){
+  if(type==='correct')haptic(10);
+  else if(type==='wrong')haptic([30,50,30]);
+  else if(type==='complete')haptic(50);
+  else if(type==='achievement')haptic(100);
   if(!S('nz_settings').sfx)return;
   const ac=getAC();if(!ac)return;
   try{
@@ -266,7 +272,7 @@ function renderHome(){
     <div class="sec-title"><h2>Your Skills</h2><a href="#" onclick="render('progress');return false;">Details ›</a></div>
     <div class="card skills-card"><div id="skillBars"></div></div>
     <div class="sec-title"><h2>Today's Challenge</h2></div>
-    <div class="cta" id="featuredCard" style="cursor:pointer;">
+    <div class="cta feat-float" id="featuredCard" style="cursor:pointer;">
       <div>
         <div class="lbl">FEATURED TODAY</div>
         <div class="ttl">${todayGame.icon} ${todayGame.name}</div>
@@ -276,6 +282,8 @@ function renderHome(){
     </div>
     <div class="sec-title"><h2>Quick Play</h2><a href="#" onclick="render('games');return false;">See all ›</a></div>
     <div class="hscroll" id="qpRow"></div>
+    <div class="sec-title"><h2>Daily Brain Workout</h2></div>
+    <div id="woSection"></div>
   `;
   p.querySelector('#greetTxt').textContent=greet();
   p.querySelector('#darkToggle').onclick=()=>{setS('nz_dark_mode',!S('nz_dark_mode'));applyDark();render('home');};
@@ -290,6 +298,20 @@ function renderHome(){
     c.onclick=()=>{playSound('tap');openGame(g.id);};
     qp.appendChild(c);
   });
+  const wo=p.querySelector('#woSection');
+  if(wo){
+    const wGames=getWorkoutGames();
+    const woCard=$(`<div class="workout-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div><h3>🏋️ Daily Workout</h3><div class="wo-sub">Targets your 3 weakest skill areas</div></div>
+        <div style="font-size:26px;opacity:.85;">💪</div>
+      </div>
+      <div class="wo-games">${wGames.map(g=>`<div class="wo-game"><span>${g.icon}</span><span>${g.name}</span></div>`).join('')}</div>
+      <button class="wo-start">Start Workout 🏋️</button>
+    </div>`);
+    woCard.querySelector('.wo-start').onclick=()=>{playSound('tap');showWorkoutTransition({games:wGames,idx:0});};
+    wo.appendChild(woCard);
+  }
   const skillBars=p.querySelector('#skillBars');
   const sk=S('nz_skill_scores');
   Object.entries({Memory:'memory',Focus:'focus',Logic:'logic',Speed:'speed'}).forEach(([label,key])=>{
@@ -308,8 +330,9 @@ function renderHome(){
     fg.style.transition='stroke-dashoffset 1.8s cubic-bezier(.22,1,.36,1)';
     fg.style.strokeDashoffset=circ*(1-pct);
     const num=p.querySelector('#ringNum');
+    const fromS=_homePrevScore;_homePrevScore=score;
     const start=performance.now();
-    function tick(t){const k=Math.min(1,(t-start)/1800);const e=1-Math.pow(1-k,3);num.textContent=Math.round(score*e);if(k<1)requestAnimationFrame(tick);}
+    function tick(t){const k=Math.min(1,(t-start)/1800);const e=1-Math.pow(1-k,3);num.textContent=Math.round(fromS+(score-fromS)*e);if(k<1)requestAnimationFrame(tick);}
     requestAnimationFrame(tick);
   },40);
   return p;
@@ -368,7 +391,7 @@ function renderGames(){
 }
 
 /* ===================== GAME SCREEN FRAMEWORK ===================== */
-function openGame(id){
+function openGame(id,wkCtx){
   const g=GAMES.find(x=>x.id===id);
   const wrap=$(`<div class="game-screen"></div>`);
   document.body.appendChild(wrap);
@@ -434,6 +457,17 @@ function openGame(id){
       const txt=`I scored ${opts.value} in ${g.name} on NeuroZen! 🧠 Can you beat it?`;
       navigator.clipboard?.writeText(txt).then(()=>toast('📋 Copied to clipboard!')).catch(()=>toast(txt));
     };
+    if(wkCtx!==undefined){
+      const isLast=wkCtx.idx>=wkCtx.games.length-1;
+      const backBtn=wrap.querySelector('#back');
+      if(backBtn){
+        backBtn.textContent=isLast?'✅ Finish Workout':`Next: ${wkCtx.games[wkCtx.idx+1].name} ›`;
+        backBtn.style.cssText='background:var(--grad);color:#fff;padding:16px;border-radius:14px;font-weight:700;font-size:15px;box-shadow:var(--shadow);';
+        backBtn.onclick=()=>{closeGame();if(!isLast)setTimeout(()=>showWorkoutTransition({...wkCtx,idx:wkCtx.idx+1}),240);else setTimeout(()=>{toast('🏋️ Workout complete! Great job!');render('home');},240);};
+      }
+      const againBtn=wrap.querySelector('#again');
+      if(againBtn)againBtn.onclick=()=>{wrap.remove();openGame(id,wkCtx);};
+    }
   }
   wrap.innerHTML=hdr()+`<div class="gs-body" id="gsBody"></div>`;
   wrap.querySelector('.gs-back').onclick=closeGame;
@@ -1516,92 +1550,210 @@ function drawLineChart(host,data){
 
 /* ===================== RELAX ===================== */
 const SOUNDS=[
-  {name:'Rain',emoji:'🌧',desc:'Gentle rainfall'},
-  {name:'Ocean',emoji:'🌊',desc:'Rolling waves'},
-  {name:'Forest',emoji:'🌲',desc:'Wind & birdsong'},
-  {name:'White Noise',emoji:'💨',desc:'Pure white noise'},
+  {name:'Rain',emoji:'🌧',desc:'Rainfall + thunder'},
+  {name:'Ocean',emoji:'🌊',desc:'Waves + seagulls'},
+  {name:'Forest',emoji:'🌲',desc:'Wind + birdsong'},
+  {name:'White Noise',emoji:'💨',desc:'Breathing rhythm'},
+  {name:'Deep Focus',emoji:'🎯',desc:'40Hz binaural beats'},
 ];
-let relaxAudio={ctx:null,source:null,gain:null,lfo:null,chirpTimer:null,playing:-1};
+let relaxAudio={ctx:null,master:null,nodes:[],timers:[],playing:-1,targetVol:0.7};
+
 function stopRelaxAudio(){
-  if(relaxAudio.source)try{relaxAudio.source.stop();}catch(e){}
-  if(relaxAudio.lfo)try{relaxAudio.lfo.stop();}catch(e){}
-  clearInterval(relaxAudio.chirpTimer);
-  relaxAudio.source=null;relaxAudio.lfo=null;relaxAudio.chirpTimer=null;relaxAudio.playing=-1;
+  const ac=relaxAudio.ctx;
+  relaxAudio.timers.forEach(t=>{clearInterval(t);clearTimeout(t);});
+  relaxAudio.timers=[];
+  if(ac&&relaxAudio.master){
+    const m=relaxAudio.master;const stale=[...relaxAudio.nodes];
+    try{m.gain.cancelScheduledValues(ac.currentTime);m.gain.setValueAtTime(m.gain.value,ac.currentTime);m.gain.linearRampToValueAtTime(0,ac.currentTime+1.5);}catch(e){}
+    setTimeout(()=>stale.forEach(n=>{try{n.stop();}catch(e){}}),1600);
+  }else{relaxAudio.nodes.forEach(n=>{try{n.stop();}catch(e){}});}
+  relaxAudio.nodes=[];relaxAudio.master=null;relaxAudio.playing=-1;
 }
+
 function makeNoiseBuffer(ac,type){
   const len=ac.sampleRate*4;
   const buf=ac.createBuffer(1,len,ac.sampleRate);
   const d=buf.getChannelData(0);
   if(type==='brown'){
-    // Deep, smooth noise — great for ocean & wind
     let last=0;
     for(let i=0;i<len;i++){const w=Math.random()*2-1;last=(last+0.02*w)/1.02;d[i]=last*3.5;}
-  } else if(type==='pink'){
-    // Natural, rain-like noise (Paul Kellet approximation)
+  }else if(type==='pink'){
     let b0=0,b1=0,b2=0;
     for(let i=0;i<len;i++){
       const w=Math.random()*2-1;
-      b0=0.99765*b0+w*0.099046;
-      b1=0.96300*b1+w*0.2965164;
-      b2=0.57000*b2+w*1.0526913;
+      b0=0.99765*b0+w*0.099046;b1=0.96300*b1+w*0.2965164;b2=0.57000*b2+w*1.0526913;
       d[i]=(b0+b1+b2+w*0.1848)*0.18;
     }
-  } else {
-    for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*0.5;
-  }
+  }else{for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*0.5;}
   return buf;
 }
+
 function birdChirp(ac,dest){
   try{
     const o=ac.createOscillator(),g=ac.createGain();
-    const f=2200+Math.random()*1800;
+    const f=1800+Math.random()*2400;
     o.type='sine';
     o.frequency.setValueAtTime(f,ac.currentTime);
-    o.frequency.exponentialRampToValueAtTime(f*1.4,ac.currentTime+0.08);
-    o.frequency.exponentialRampToValueAtTime(f*0.9,ac.currentTime+0.16);
+    o.frequency.exponentialRampToValueAtTime(f*1.5,ac.currentTime+0.07);
+    o.frequency.exponentialRampToValueAtTime(f*0.8,ac.currentTime+0.18);
     g.gain.setValueAtTime(0.0001,ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.07,ac.currentTime+0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+0.28);
-    o.connect(g);g.connect(dest);
-    o.start();o.stop(ac.currentTime+0.3);
+    g.gain.exponentialRampToValueAtTime(0.08,ac.currentTime+0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+0.3);
+    o.connect(g);g.connect(dest);o.start();o.stop(ac.currentTime+0.32);
   }catch(e){}
 }
+
 function playRelaxSound(idx,vol){
-  stopRelaxAudio();
   const ac=getAC();if(!ac)return;
   if(ac.state==='suspended')ac.resume();
-  relaxAudio.ctx=ac;
-  const noiseType=idx===0?'pink':idx===3?'white':'brown';
-  const src=ac.createBufferSource();
-  src.buffer=makeNoiseBuffer(ac,noiseType);src.loop=true;
-  const filter=ac.createBiquadFilter();
-  const mod=ac.createGain();mod.gain.value=1;
-  const g=ac.createGain();g.gain.value=vol;
-  src.connect(filter);filter.connect(mod);mod.connect(g);g.connect(ac.destination);
-  if(idx===0){
-    // Rain — pink noise softened with a lowpass filter
-    filter.type='lowpass';filter.frequency.value=4500;filter.Q.value=0.5;
-    mod.gain.value=0.9;
-  } else if(idx===1){
-    // Ocean — deep brown noise with slow LFO wave swells
-    filter.type='lowpass';filter.frequency.value=500;
-    mod.gain.value=0.6;
-    const lfo=ac.createOscillator(),lg=ac.createGain();
-    lfo.type='sine';lfo.frequency.value=0.11;lg.gain.value=0.45;
-    lfo.connect(lg);lg.connect(mod.gain);lfo.start();
-    relaxAudio.lfo=lfo;
-  } else if(idx===2){
-    // Forest — soft wind + random bird chirps
-    filter.type='lowpass';filter.frequency.value=900;
-    mod.gain.value=0.4;
-    relaxAudio.chirpTimer=setInterval(()=>{if(Math.random()<0.7)birdChirp(ac,g);},2600);
-  } else {
-    // White noise — slightly smoothed for comfort
-    filter.type='lowpass';filter.frequency.value=12000;
-    mod.gain.value=0.6;
+  // Fade out old (overlap with fade in of new — smooth crossfade)
+  if(relaxAudio.master&&relaxAudio.ctx){
+    const m=relaxAudio.master;const stale=[...relaxAudio.nodes];
+    try{m.gain.cancelScheduledValues(ac.currentTime);m.gain.setValueAtTime(m.gain.value,ac.currentTime);m.gain.linearRampToValueAtTime(0,ac.currentTime+1.5);}catch(e){}
+    setTimeout(()=>stale.forEach(n=>{try{n.stop();}catch(e){}}),1600);
   }
-  src.start();
-  relaxAudio.source=src;relaxAudio.gain=g;relaxAudio.playing=idx;
+  relaxAudio.timers.forEach(t=>{clearInterval(t);clearTimeout(t);});
+  relaxAudio.timers=[];relaxAudio.nodes=[];relaxAudio.master=null;
+  // New master with 2s fade in
+  const master=ac.createGain();
+  master.gain.setValueAtTime(0.0001,ac.currentTime);
+  master.gain.linearRampToValueAtTime(vol,ac.currentTime+2);
+  master.connect(ac.destination);
+  relaxAudio.ctx=ac;relaxAudio.master=master;relaxAudio.playing=idx;relaxAudio.targetVol=vol;
+  buildRelaxSound(idx,ac,master);
+}
+
+function buildRelaxSound(idx,ac,master){
+  function addN(n){relaxAudio.nodes.push(n);return n;}
+  function addT(t){relaxAudio.timers.push(t);return t;}
+  if(idx===0){
+    // Rain: pink noise + raindrop spikes + low thunder
+    const src=ac.createBufferSource();src.buffer=makeNoiseBuffer(ac,'pink');src.loop=true;
+    const flt=ac.createBiquadFilter();flt.type='lowpass';flt.frequency.value=3800;flt.Q.value=0.5;
+    src.connect(flt);flt.connect(master);src.start();addN(src);
+    addT(setInterval(()=>{
+      if(relaxAudio.playing!==0)return;
+      try{
+        const d=ac.createBufferSource();d.buffer=makeNoiseBuffer(ac,'white');
+        const df=ac.createBiquadFilter();df.type='bandpass';df.frequency.value=800+Math.random()*4000;df.Q.value=8;
+        const dg=ac.createGain();const t=ac.currentTime;
+        dg.gain.setValueAtTime(0,t);dg.gain.linearRampToValueAtTime(0.04+Math.random()*0.09,t+0.008);
+        dg.gain.exponentialRampToValueAtTime(0.0001,t+0.05+Math.random()*0.09);
+        d.connect(df);df.connect(dg);dg.connect(master);d.start(t);d.stop(t+0.18);
+      }catch(e){}
+    },120));
+    function thunder(){
+      addT(setTimeout(()=>{
+        if(relaxAudio.playing!==0)return;
+        try{
+          const r=ac.createOscillator();r.type='sawtooth';r.frequency.value=35+Math.random()*45;
+          const rg=ac.createGain();const t=ac.currentTime;
+          rg.gain.setValueAtTime(0,t);rg.gain.linearRampToValueAtTime(0.18,t+0.6);
+          rg.gain.setValueAtTime(0.18,t+1.8);rg.gain.linearRampToValueAtTime(0,t+3.2);
+          r.connect(rg);rg.connect(master);r.start(t);r.stop(t+3.5);
+        }catch(e){}
+        thunder();
+      },30000+Math.random()*40000));
+    }
+    thunder();
+  }else if(idx===1){
+    // Ocean: brown noise + 0.08Hz LFO sweeping lowpass 200-800Hz + crashes + seagulls
+    const src=ac.createBufferSource();src.buffer=makeNoiseBuffer(ac,'brown');src.loop=true;
+    const flt=ac.createBiquadFilter();flt.type='lowpass';flt.frequency.value=500;
+    const lfo=ac.createOscillator();const lg=ac.createGain();
+    lfo.type='sine';lfo.frequency.value=0.08;lg.gain.value=300;
+    lfo.connect(lg);lg.connect(flt.frequency);
+    const ng=ac.createGain();ng.gain.value=0.7;
+    src.connect(flt);flt.connect(ng);ng.connect(master);
+    src.start();lfo.start();addN(src);addN(lfo);
+    function crash(){
+      addT(setTimeout(()=>{
+        if(relaxAudio.playing!==1)return;
+        try{
+          const c=ac.createBufferSource();c.buffer=makeNoiseBuffer(ac,'white');
+          const cf=ac.createBiquadFilter();cf.type='lowpass';cf.frequency.value=1400;
+          const cg=ac.createGain();const t=ac.currentTime;
+          cg.gain.setValueAtTime(0,t);cg.gain.linearRampToValueAtTime(0.35,t+0.4);cg.gain.exponentialRampToValueAtTime(0.0001,t+2.8);
+          c.connect(cf);cf.connect(cg);cg.connect(master);c.start(t);c.stop(t+3.2);
+        }catch(e){}
+        crash();
+      },5000+Math.random()*6000));
+    }
+    crash();
+    function seagull(){
+      addT(setTimeout(()=>{
+        if(relaxAudio.playing!==1)return;
+        if(Math.random()<0.35){
+          try{
+            const o=ac.createOscillator();const sg=ac.createGain();
+            const t=ac.currentTime;const f=700+Math.random()*700;
+            o.type='sine';o.frequency.setValueAtTime(f,t);o.frequency.linearRampToValueAtTime(f*1.4,t+0.3);o.frequency.linearRampToValueAtTime(f*0.75,t+0.8);
+            sg.gain.setValueAtTime(0,t);sg.gain.linearRampToValueAtTime(0.06,t+0.12);sg.gain.linearRampToValueAtTime(0,t+1);
+            o.connect(sg);sg.connect(master);o.start(t);o.stop(t+1.1);
+          }catch(e){}
+        }
+        seagull();
+      },18000+Math.random()*55000));
+    }
+    seagull();
+  }else if(idx===2){
+    // Forest: bandpass wind noise + slow swell LFO + 5 bird generators + cricket bursts
+    const src=ac.createBufferSource();src.buffer=makeNoiseBuffer(ac,'white');src.loop=true;
+    const flt=ac.createBiquadFilter();flt.type='bandpass';flt.frequency.value=650;flt.Q.value=0.35;
+    const wg=ac.createGain();wg.gain.value=0.38;
+    src.connect(flt);flt.connect(wg);wg.connect(master);src.start();addN(src);
+    const wlfo=ac.createOscillator();const wlg=ac.createGain();
+    wlfo.type='sine';wlfo.frequency.value=0.12;wlg.gain.value=0.14;
+    wlfo.connect(wlg);wlg.connect(wg.gain);wlfo.start();addN(wlfo);
+    for(let bi=0;bi<5;bi++){
+      const bFn=()=>{
+        if(relaxAudio.playing!==2)return;
+        birdChirp(ac,master);
+        addT(setTimeout(bFn,3000+Math.random()*7000));
+      };
+      addT(setTimeout(bFn,Math.random()*6000));
+    }
+    addT(setInterval(()=>{
+      if(relaxAudio.playing!==2)return;
+      if(Math.random()<0.55){
+        try{
+          const o=ac.createOscillator();const cg=ac.createGain();
+          o.type='square';o.frequency.value=3200+Math.random()*1800;
+          const t=ac.currentTime;
+          cg.gain.setValueAtTime(0,t);cg.gain.linearRampToValueAtTime(0.018,t+0.008);
+          cg.gain.setValueAtTime(0.018,t+0.04);cg.gain.linearRampToValueAtTime(0,t+0.06);
+          o.connect(cg);cg.connect(master);o.start(t);o.stop(t+0.07);
+        }catch(e){}
+      }
+    },300));
+  }else if(idx===3){
+    // White noise with 0.05Hz breathing LFO on gain
+    const src=ac.createBufferSource();src.buffer=makeNoiseBuffer(ac,'white');src.loop=true;
+    const flt=ac.createBiquadFilter();flt.type='lowpass';flt.frequency.value=14000;
+    const ng=ac.createGain();ng.gain.value=0.48;
+    src.connect(flt);flt.connect(ng);ng.connect(master);src.start();addN(src);
+    const lfo=ac.createOscillator();const lg=ac.createGain();
+    lfo.type='sine';lfo.frequency.value=0.05;lg.gain.value=0.14;
+    lfo.connect(lg);lg.connect(ng.gain);lfo.start();addN(lfo);
+  }else if(idx===4){
+    // Deep Focus: 200Hz left ear + 240Hz right ear binaural + quiet pink noise
+    try{
+      const oL=ac.createOscillator();const pL=ac.createStereoPanner();const gL=ac.createGain();
+      oL.type='sine';oL.frequency.value=200;pL.pan.value=-1;gL.gain.value=0.28;
+      oL.connect(gL);gL.connect(pL);pL.connect(master);oL.start();addN(oL);
+      const oR=ac.createOscillator();const pR=ac.createStereoPanner();const gR=ac.createGain();
+      oR.type='sine';oR.frequency.value=240;pR.pan.value=1;gR.gain.value=0.28;
+      oR.connect(gR);gR.connect(pR);pR.connect(master);oR.start();addN(oR);
+    }catch(e){
+      const o=ac.createOscillator();const g=ac.createGain();
+      o.type='sine';o.frequency.value=220;g.gain.value=0.18;
+      o.connect(g);g.connect(master);o.start();addN(o);
+    }
+    const ns=ac.createBufferSource();ns.buffer=makeNoiseBuffer(ac,'pink');ns.loop=true;
+    const nf=ac.createBiquadFilter();nf.type='lowpass';nf.frequency.value=2800;
+    const nsg=ac.createGain();nsg.gain.value=0.1;
+    ns.connect(nf);nf.connect(nsg);nsg.connect(master);ns.start();addN(ns);
+  }
 }
 function renderRelax(){
   const p=$(`<div class="relax-page"></div>`);
@@ -1638,7 +1790,7 @@ function renderRelax(){
   let vol=0.7;
   const volSlider=p.querySelector('#volSlider');
   const volPct=p.querySelector('#volPct');
-  volSlider.oninput=()=>{vol=volSlider.value/100;volPct.textContent=volSlider.value+'%';if(relaxAudio.gain)relaxAudio.gain.gain.value=vol;};
+  volSlider.oninput=()=>{vol=volSlider.value/100;volPct.textContent=volSlider.value+'%';if(relaxAudio.master&&relaxAudio.ctx)relaxAudio.master.gain.setTargetAtTime(vol,relaxAudio.ctx.currentTime,0.02);relaxAudio.targetVol=vol;};
   SOUNDS.forEach((s,i)=>{
     const btn=$(`<button class="sound-btn ${relaxAudio.playing===i?'active':''}">
       <div class="se">${s.emoji}</div>
@@ -2102,6 +2254,37 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     });
   }
   instrEl.querySelector('#ssStart').onclick=()=>{instrEl.remove();startClock&&startClock();nextQ();};
+}
+
+/* ===================== WORKOUT ===================== */
+function getWorkoutGames(){
+  const sk=S('nz_skill_scores');
+  const sorted=[...GAMES].sort((a,b)=>(sk[a.skill]||0)-(sk[b.skill]||0));
+  const seen=new Set();const picks=[];
+  for(const g of sorted){if(picks.length>=3)break;if(!seen.has(g.skill)){seen.add(g.skill);picks.push(g);}}
+  for(const g of sorted){if(picks.length>=3)break;if(!picks.includes(g))picks.push(g);}
+  return picks.slice(0,3);
+}
+function showWorkoutTransition(wkCtx){
+  const {games,idx}=wkCtx;
+  const g=games[idx];
+  const ov=$(`<div class="wo-transition">
+    <div style="font-size:52px;margin-bottom:10px;">${g.icon}</div>
+    <div style="font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--primary);margin-bottom:10px;">GAME ${idx+1} OF ${games.length}</div>
+    <h2 style="margin:0 0 8px;font-size:22px;">${g.name}</h2>
+    <p style="color:var(--text2);font-size:13px;margin:0 0 28px;line-height:1.6;">${g.desc}</p>
+    <button class="btn-primary" style="max-width:240px;" id="woReady">I'm Ready ▶</button>
+    <button style="margin-top:12px;font-size:13px;color:var(--text2);background:none;border:none;cursor:pointer;font-family:inherit;" id="woSkip">Skip this game</button>
+    <button style="margin-top:8px;font-size:12px;color:var(--text2);background:none;border:none;cursor:pointer;font-family:inherit;" id="woQuit">✕ Exit workout</button>
+  </div>`);
+  document.body.appendChild(ov);
+  ov.querySelector('#woReady').onclick=()=>{playSound('tap');ov.remove();openGame(g.id,wkCtx);};
+  ov.querySelector('#woSkip').onclick=()=>{
+    ov.remove();
+    if(idx+1<games.length)showWorkoutTransition({...wkCtx,idx:idx+1});
+    else{toast('🏋️ Workout complete! Great job!');render('home');}
+  };
+  ov.querySelector('#woQuit').onclick=()=>{ov.remove();render('home');};
 }
 
 /* ===================== INIT ===================== */
