@@ -1,0 +1,1 @@
+- [NeuroZen project conventions](neurozen-conventions.md) — vanilla JS PWA; all game logic in js/app.js; function sigs play*(body,setScore,end,wrap,startClock); localStorage prefix nz_

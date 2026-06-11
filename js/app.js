@@ -453,46 +453,72 @@ const SCHULTE_CONFIGS=[
   {size:5,target:80,mult:2.0,label:'5×5'},
   {size:6,target:120,mult:2.5,label:'6×6'},
   {size:7,target:160,mult:3.0,label:'7×7'},
+  {size:8,target:200,mult:3.5,label:'8×8'},
+  {size:9,target:250,mult:4.0,label:'9×9'},
 ];
 function playSchulte(body,setScore,end,wrap,startClock){
-  const lvl=Math.min(4,S('nz_schulte_level')||0);
+  const lvl=Math.min(6,S('nz_schulte_level')||0);
   const cfg=SCHULTE_CONFIGS[lvl];
+  const ghostMode=lvl>=3;
   const total=cfg.size*cfg.size;
   const nums=Array.from({length:total},(_,i)=>i+1).sort(()=>Math.random()-.5);
-  const instrEl=$(`<div class="instr">Tap <strong>1 → ${total}</strong> in order as fast as you can. (${cfg.label} — Level ${lvl+1}/5)<br><button style="margin-top:12px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;font-size:14px;" id="schulteStart">▶ Start</button></div>`);
+  // Personal best leaderboard
+  const bestTimes=S('nz_schulte_best_times')||{};
+  const topTimes=(bestTimes[cfg.size]||[]).slice(0,3);
+  const lbHtml=topTimes.length
+    ?`<div style="margin-top:8px;font-size:11px;color:var(--text2);">🏆 Best (${cfg.label}): ${topTimes.map((t,i)=>['🥇','🥈','🥉'][i]+' '+t+'s').join(' · ')}</div>`:''
+  ;
+  const instrEl=$(`<div class="instr">Tap <strong>1 → ${total}</strong> in order as fast as you can.<br><em>${cfg.label} — Level ${lvl+1}/7${ghostMode?' · <strong style="color:#A78BFA;">👻 Ghost Mode</strong>: numbers vanish in 2s!':''}</em>${lbHtml}<br><button style="margin-top:12px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;font-size:14px;" id="schulteStart">▶ Start</button></div>`);
   body.appendChild(instrEl);
   instrEl.querySelector('#schulteStart').onclick=()=>{instrEl.style.display='none';startClock&&startClock();};
   const timerBar=$(`<div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>`);
   body.appendChild(timerBar);
-  const grid=$(`<div class="schulte-grid" style="grid-template-columns:repeat(${cfg.size},1fr);font-size:${cfg.size<=4?'22px':'16px'};"></div>`);
+  const fs=cfg.size<=4?'22px':cfg.size<=6?'16px':cfg.size<=7?'13px':'11px';
+  const grid=$(`<div class="schulte-grid" style="grid-template-columns:repeat(${cfg.size},1fr);font-size:${fs};"></div>`);
   body.appendChild(grid);
   const status=$(`<div style="text-align:center;font-size:13px;color:var(--text2);margin-top:10px;" id="sStatus">Find: <strong>1</strong></div>`);
   body.appendChild(status);
-  let next=1,startTs=null,barTimer=null;
+  let next=1,startTs=null,barTimer=null,ghostDone=false;
+  const cells=[];
   nums.forEach(n=>{
     const c=$(`<div class="sc-cell">${n}</div>`);
     c.onclick=()=>{
-      if(!startTs){startTs=Date.now();startBar();}
+      if(!startTs){
+        startTs=Date.now();startBar();
+        if(ghostMode){
+          setTimeout(()=>{
+            if(!ghostDone){
+              ghostDone=true;
+              cells.forEach(cell=>{if(!cell.classList.contains('done'))cell.style.color='transparent';});
+            }
+          },2000);
+        }
+      }
       if(n===next){
         playSound('correct');
         c.classList.add('done');
+        c.style.color='';
         setScore(next);next++;
         status.innerHTML=next<=total?`Find: <strong>${next}</strong>`:'';
         if(next>total){
           clearInterval(barTimer);
           const secs=(Date.now()-startTs)/1000;
+          const secsR=Math.round(secs*10)/10;
+          // Save to leaderboard
+          const bt=S('nz_schulte_best_times')||{};
+          const arr=(bt[cfg.size]||[]);
+          arr.push(secsR);arr.sort((a,b)=>a-b);
+          bt[cfg.size]=arr.slice(0,3);
+          setS('nz_schulte_best_times',bt);
           const rawPts=Math.ceil(1000/secs)*cfg.mult;
-          const best=S('nz_best_scores');
-          const bestKey='schulte_'+lvl;
-          if(!best[bestKey]||secs<best[bestKey]){best[bestKey]=Math.round(secs*10)/10;setS('nz_best_scores',best);}
-          const prev=best[bestKey];
-          setS('nz_schulte_level',Math.min(4,lvl+1));
+          setS('nz_schulte_level',Math.min(6,lvl+1));
+          const nlvl=Math.min(6,lvl+1);
           end({
             title:'Grid Clear! 🏆',emoji:'🏆',
-            sub:`${secs.toFixed(1)}s · ${cfg.label} Level ${lvl+1}${prev&&prev!==Math.round(secs*10)/10?` · PB was ${prev}s`:''}`,
+            sub:`${secsR}s · ${cfg.label}${ghostMode?' 👻':''}`,
             value:Math.round(rawPts),points:Math.round(rawPts),
             starThresh:[Math.round(rawPts*0.5),Math.round(rawPts*0.8),rawPts],
-            statsHtml:`<div class="end-stats"><div class="row"><span>Time</span><span class="val">${secs.toFixed(1)}s</span></div><div class="row"><span>Grid</span><span class="val">${cfg.label}</span></div><div class="row"><span>Level Up →</span><span class="val">${SCHULTE_CONFIGS[Math.min(4,lvl+1)].label}</span></div></div>`
+            statsHtml:`<div class="end-stats"><div class="row"><span>Time</span><span class="val">${secsR}s</span></div><div class="row"><span>Grid</span><span class="val">${cfg.label}${ghostMode?' 👻':''}</span></div><div class="row"><span>Next Level</span><span class="val">${SCHULTE_CONFIGS[nlvl].label}</span></div>${arr.length>0?`<div class="row"><span>🥇 Personal Best</span><span class="val">${arr[0]}s</span></div>`:''}</div>`
           });
         }
       } else {
@@ -501,6 +527,7 @@ function playSchulte(body,setScore,end,wrap,startClock){
         setTimeout(()=>c.classList.remove('wrong'),350);
       }
     };
+    cells.push(c);
     grid.appendChild(c);
   });
   function startBar(){
@@ -511,8 +538,8 @@ function playSchulte(body,setScore,end,wrap,startClock){
       const bar=wrap.querySelector('#sBar');
       if(bar){
         bar.style.width=pct+'%';
-        const remaining=(maxMs-elapsed)/1000;
-        bar.className='timer-fill '+(remaining<10?'timer-red':remaining<30?'timer-yellow':'timer-green');
+        const rem=(maxMs-elapsed)/1000;
+        bar.className='timer-fill '+(rem<10?'timer-red':rem<30?'timer-yellow':'timer-green');
       }
     },100);
   }
@@ -520,115 +547,126 @@ function playSchulte(body,setScore,end,wrap,startClock){
 
 /* ===================== MEMORY MATRIX ===================== */
 function playMemory(body,setScore,end,wrap,startClock){
-  const ROUNDS=[{g:3,c:3},{g:4,c:4},{g:4,c:5},{g:5,c:6},{g:5,c:8}];
+  const ROUNDS=[
+    {g:3,c:3},{g:4,c:4},{g:4,c:5},{g:5,c:6},{g:5,c:8},
+    {g:6,c:9},{g:6,c:11},{g:7,c:12}
+  ];
+  const maxScore=ROUNDS.reduce((a,r)=>a+r.c,0);
   let round=0,total=0;
-  const instrBox=$(`<div class="instr" style="margin-bottom:16px;">Highlighted cells yaad karo, phir tap karo!<br>
+  const instrBox=$(`<div class="instr" style="margin-bottom:16px;">Highlighted cells yaad karo, phir tap karo!<br><span style="font-size:11px;color:var(--primary);">Round 5+ mein 👻 interference mode on hoga!</span><br>
     <button style="margin-top:12px;padding:10px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;font-size:14px;" id="memStart">▶ Start</button>
   </div>`);
   body.appendChild(instrBox);
-  instrBox.querySelector('#memStart').onclick=()=>{
-    instrBox.remove();
-    startClock&&startClock();
-    doRound();
-  };
+  instrBox.querySelector('#memStart').onclick=()=>{instrBox.remove();startClock&&startClock();doRound();};
   function doRound(){
     const cfg=ROUNDS[round];
     const cellCount=cfg.g*cfg.g;
-    const cellSize=Math.min(58,Math.floor(300/cfg.g));
+    const cellSize=Math.min(52,Math.floor(280/cfg.g));
+    const interference=round>=4;
     while(body.lastChild)body.removeChild(body.lastChild);
     const info=document.createElement('div');
-    info.style.cssText='text-align:center;font-size:13px;color:var(--text2);font-weight:600;margin-bottom:12px;';
-    info.textContent=`Round ${round+1}/5 — ${cfg.c} cells yaad karo`;
+    info.style.cssText='text-align:center;font-size:13px;color:var(--text2);font-weight:600;margin-bottom:10px;';
+    info.textContent=`Round ${round+1}/8 — ${cfg.c} cells yaad karo${interference?' 👻':''}`;
     info.id='memInfo';
     body.appendChild(info);
     const gridWrap=document.createElement('div');
     gridWrap.style.cssText='position:relative;display:flex;justify-content:center;';
     const grid=document.createElement('div');
     grid.id='memGrid';
-    grid.style.cssText=`display:grid;grid-template-columns:repeat(${cfg.g},${cellSize}px);gap:8px;`;
+    grid.style.cssText=`display:grid;grid-template-columns:repeat(${cfg.g},${cellSize}px);gap:6px;`;
     const cells=[];
     for(let i=0;i<cellCount;i++){
       const c=document.createElement('div');
-      c.style.cssText=`width:${cellSize}px;height:${cellSize}px;background:var(--card);border-radius:12px;box-shadow:var(--shadow);transition:all .2s;cursor:pointer;`;
+      c.style.cssText=`width:${cellSize}px;height:${cellSize}px;background:var(--card);border-radius:10px;box-shadow:var(--shadow);transition:all .2s;cursor:pointer;`;
       c.dataset.i=i;
       grid.appendChild(c);
       cells.push(c);
     }
-    const overlay=document.createElement('div');
-    overlay.id='memOverlay';
-    overlay.style.cssText='position:absolute;inset:0;background:rgba(10,5,30,0.80);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:5;pointer-events:none;';
-    const cdNum=document.createElement('div');
-    cdNum.style.cssText='font-size:80px;font-weight:900;color:#fff;line-height:1;';
-    cdNum.textContent='3';
-    const cdLbl=document.createElement('div');
-    cdLbl.style.cssText='font-size:14px;font-weight:700;color:#A78BFA;letter-spacing:.2em;margin-top:8px;';
-    cdLbl.textContent='MEMORIZE!';
-    overlay.appendChild(cdNum);
-    overlay.appendChild(cdLbl);
     gridWrap.appendChild(grid);
-    gridWrap.appendChild(overlay);
     body.appendChild(gridWrap);
+    // Visual SVG arc countdown
+    const circ=2*Math.PI*24;
+    const cdWrap=document.createElement('div');
+    cdWrap.style.cssText='text-align:center;margin-top:10px;position:relative;';
+    cdWrap.innerHTML=`<svg width="60" height="60" viewBox="0 0 60 60" style="transform:rotate(-90deg);">
+      <circle cx="30" cy="30" r="24" fill="none" stroke="var(--border)" stroke-width="5"/>
+      <circle id="cdArc" cx="30" cy="30" r="24" fill="none" stroke="#7C3AED" stroke-width="5" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="0"/>
+    </svg>
+    <div id="cdNum" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:22px;font-weight:900;color:var(--text);">3</div>`;
+    body.appendChild(cdWrap);
     let count=3;
     const cdInt=setInterval(()=>{
       count--;
-      if(count>0){
-        cdNum.textContent=count;
-      } else {
+      const cdArc=body.querySelector('#cdArc');
+      const cdNum=body.querySelector('#cdNum');
+      if(cdArc)cdArc.style.strokeDashoffset=circ*(1-count/3);
+      if(count>0){if(cdNum)cdNum.textContent=count;}
+      else{
         clearInterval(cdInt);
-        overlay.remove();
-        const pattern=[];
-        while(pattern.length<cfg.c){
-          const r=Math.floor(Math.random()*cellCount);
-          if(!pattern.includes(r))pattern.push(r);
-        }
-        pattern.forEach(i=>{
-          cells[i].style.background='linear-gradient(135deg,#7C3AED,#4F8EF7)';
-          cells[i].style.transform='scale(1.06)';
-          cells[i].style.boxShadow='0 0 20px rgba(124,58,237,.6)';
-        });
-        setTimeout(()=>{
-          cells.forEach(c=>{
-            c.style.background='var(--card)';
-            c.style.transform='';
-            c.style.boxShadow='var(--shadow)';
-          });
-          const infoEl=body.querySelector('#memInfo');
-          if(infoEl)infoEl.textContent=`Round ${round+1}/5 — ${cfg.c} cells tap karo!`;
-          setTimeout(()=>{
-            let picked=[];
-            cells.forEach(c=>{
-              c.onclick=()=>{
-                const idx=+c.dataset.i;
-                if(picked.includes(idx))return;
-                picked.push(idx);
-                if(pattern.includes(idx)){
-                  c.style.background='#34D399';
-                  c.style.transform='scale(0.94)';
-                  total++;setScore(total);
-                  playSound('correct');
-                } else {
-                  c.style.background='#F87171';
-                  playSound('wrong');
-                  gridWrap.style.animation='shake .3s';
-                  setTimeout(()=>gridWrap.style.animation='',300);
-                }
-                if(picked.length>=cfg.c){
-                  const infoEl2=body.querySelector('#memInfo');
-                  if(infoEl2)infoEl2.textContent=`Round ${round+1} done! ${picked.filter(p=>pattern.includes(p)).length===cfg.c?'🎯 Perfect!':''}`;
-                  setTimeout(()=>{
-                    round++;
-                    if(round>=5){
-                      const max=ROUNDS.reduce((a,r)=>a+r.c,0);
-                      end({title:'Memory Complete! 🧠',emoji:'🧠',sub:`${total}/${max} correct`,value:total,points:8+total*3,starThresh:[10,18,26]});
-                    } else doRound();
-                  },900);
-                }
-              };
-            });
-          },500);
-        },1300);
+        if(cdWrap)cdWrap.style.display='none';
+        startPattern();
       }
     },750);
+    function startPattern(){
+      const pattern=[];
+      while(pattern.length<cfg.c){const r=Math.floor(Math.random()*cellCount);if(!pattern.includes(r))pattern.push(r);}
+      if(interference){
+        // Show fake red cells for 0.5s before real pattern
+        const fakeCount=Math.min(3,Math.floor(cfg.c*0.4));
+        const fakePattern=[];
+        while(fakePattern.length<fakeCount){
+          const r=Math.floor(Math.random()*cellCount);
+          if(!fakePattern.includes(r)&&!pattern.includes(r))fakePattern.push(r);
+        }
+        fakePattern.forEach(i=>{cells[i].style.background='#F87171';cells[i].style.transform='scale(1.04)';});
+        setTimeout(()=>{
+          fakePattern.forEach(i=>{cells[i].style.background='var(--card)';cells[i].style.transform='';});
+          showRealPattern(pattern);
+        },500);
+      } else {
+        showRealPattern(pattern);
+      }
+    }
+    function showRealPattern(pattern){
+      pattern.forEach(i=>{
+        cells[i].style.background='linear-gradient(135deg,#7C3AED,#4F8EF7)';
+        cells[i].style.transform='scale(1.06)';
+        cells[i].style.boxShadow='0 0 20px rgba(124,58,237,.6)';
+      });
+      setTimeout(()=>{
+        cells.forEach(c=>{c.style.background='var(--card)';c.style.transform='';c.style.boxShadow='var(--shadow)';});
+        const infoEl=body.querySelector('#memInfo');
+        if(infoEl)infoEl.textContent=`Round ${round+1}/8 — ${cfg.c} cells tap karo!`;
+        setTimeout(()=>{
+          let picked=[];
+          cells.forEach(c=>{
+            c.onclick=()=>{
+              const idx=+c.dataset.i;
+              if(picked.includes(idx))return;
+              picked.push(idx);
+              if(pattern.includes(idx)){
+                c.style.background='#34D399';c.style.transform='scale(0.94)';
+                total++;setScore(total);playSound('correct');
+              } else {
+                c.style.background='#F87171';playSound('wrong');
+                gridWrap.style.animation='shake .3s';
+                setTimeout(()=>gridWrap.style.animation='',300);
+              }
+              if(picked.length>=cfg.c){
+                const infoEl2=body.querySelector('#memInfo');
+                if(infoEl2)infoEl2.textContent=`Round ${round+1} done! ${picked.filter(p=>pattern.includes(p)).length===cfg.c?'🎯 Perfect!':''}`;
+                setTimeout(()=>{
+                  round++;
+                  if(round>=8){
+                    end({title:'Memory Master! 🧠',emoji:'🧠',sub:`${total}/${maxScore} correct`,value:total,points:8+total*3,starThresh:[20,35,50]});
+                  } else doRound();
+                },900);
+              }
+            };
+          });
+        },500);
+      },1300);
+    }
   }
 }
 
@@ -637,20 +675,79 @@ const PAT_COLORS=['#7C3AED','#4F8EF7','#34D399','#F97316','#F472B6','#FBBF24','#
 const PAT_SHAPES=['●','■','▲','◆','★','⬟','⬡','✦'];
 function genNumSeq(){
   const types=[
-    ()=>{const s=Math.floor(Math.random()*5)+1,a=Math.floor(Math.random()*10)+2;return{seq:[s,s+a,s+2*a,s+3*a],ans:s+4*a,rule:'+'+a};},
-    ()=>{const s=Math.floor(Math.random()*3)+2,a=Math.floor(Math.random()*3)+2;return{seq:[s,s*a,s*a*a,s*a*a*a],ans:s*a*a*a*a,rule:'×'+a};},
-    ()=>{const s1=Math.floor(Math.random()*5)+1,s2=Math.floor(Math.random()*5)+3;return{seq:[s1,s2,s1+s2,s1+2*s2],ans:2*s1+3*s2,rule:'fib'};},
-    ()=>{const a=Math.floor(Math.random()*4)+2,b=Math.floor(Math.random()*3)+2;return{seq:[a,b,a+b,b*2],ans:a+b+b*2,rule:'mix'};},
+    ()=>{const s=Math.floor(Math.random()*5)+1,a=Math.floor(Math.random()*10)+2;return{seq:[s,s+a,s+2*a,s+3*a],ans:s+4*a};},
+    ()=>{const s=Math.floor(Math.random()*3)+2,a=Math.floor(Math.random()*3)+2;return{seq:[s,s*a,s*a*a,s*a*a*a],ans:s*a*a*a*a};},
+    ()=>{const s1=Math.floor(Math.random()*5)+1,s2=Math.floor(Math.random()*5)+3;return{seq:[s1,s2,s1+s2,s1+2*s2],ans:2*s1+3*s2};},
+    ()=>{const a=Math.floor(Math.random()*4)+2,b=Math.floor(Math.random()*3)+2;return{seq:[a,b,a+b,b*2],ans:a+b+b*2};},
   ];
   return types[Math.floor(Math.random()*types.length)]();
 }
+function genSpecialSeq(){
+  const type=Math.floor(Math.random()*4);
+  if(type===0){
+    const a=Math.floor(Math.random()*3)+1,b=Math.floor(Math.random()*3)+2;
+    const s=[a,b,a+b,a+2*b,2*a+3*b];
+    return{seq:s.slice(0,4),ans:s[4],label:'Fibonacci-like'};
+  } else if(type===1){
+    const n=Math.floor(Math.random()*4)+1;
+    return{seq:[n*n,(n+1)*(n+1),(n+2)*(n+2),(n+3)*(n+3)],ans:(n+4)*(n+4),label:'Squares'};
+  } else if(type===2){
+    const primes=[2,3,5,7,11,13,17,19,23];
+    const start=Math.floor(Math.random()*5);
+    return{seq:primes.slice(start,start+4),ans:primes[start+4],label:'Primes'};
+  } else {
+    const a=Math.floor(Math.random()*5)+2,b=2;
+    const s=Math.floor(Math.random()*3)+2;
+    const seq=[s,s+a,(s+a)*b,(s+a)*b+a];
+    return{seq,ans:seq[3]*b,label:'Alternating ×/'};
+  }
+}
+function genLetterSeq(){
+  const type=Math.floor(Math.random()*2);
+  if(type===0){
+    const skip=Math.floor(Math.random()*3)+1;
+    const start=Math.floor(Math.random()*8);
+    const seq=Array.from({length:4},(_,i)=>String.fromCharCode(65+start+i*(skip+1)));
+    const ans=String.fromCharCode(65+start+4*(skip+1));
+    if(ans.charCodeAt(0)>90)return genLetterSeq();
+    const dist=[];
+    while(dist.length<3){const c=String.fromCharCode(65+Math.floor(Math.random()*26));if(!dist.includes(c)&&c!==ans)dist.push(c);}
+    const opts=[ans,...dist].sort(()=>Math.random()-.5);
+    return{seq,opts,answerIdx:opts.indexOf(ans)};
+  } else {
+    const startC=Math.floor(Math.random()*6)+16;
+    const skip=Math.floor(Math.random()*2)+1;
+    const seqR=Array.from({length:4},(_,i)=>String.fromCharCode(startC-i*skip));
+    const ansR=String.fromCharCode(startC-4*skip);
+    if(ansR.charCodeAt(0)<65)return genLetterSeq();
+    const dist=[];
+    while(dist.length<3){const c=String.fromCharCode(65+Math.floor(Math.random()*26));if(!dist.includes(c)&&c!==ansR)dist.push(c);}
+    const opts=[ansR,...dist].sort(()=>Math.random()-.5);
+    return{seq:seqR,opts,answerIdx:opts.indexOf(ansR)};
+  }
+}
+function genRomanSeq(){
+  const toRoman=n=>{
+    const vals=[1000,900,500,400,100,90,50,40,10,9,5,4,1];
+    const syms=['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];
+    let r='';vals.forEach((v,i)=>{while(n>=v){r+=syms[i];n-=v;}});return r;
+  };
+  const step=Math.floor(Math.random()*4)+1;
+  const start=Math.floor(Math.random()*8)+1;
+  const nums=[start,start+step,start+2*step,start+3*step];
+  const ans=start+4*step;
+  const dist=new Set([ans]);
+  while(dist.size<4){const d=ans+Math.floor(Math.random()*6)-3;if(d>0)dist.add(d);}
+  const opts=[...dist].sort(()=>Math.random()-.5);
+  return{seq:nums.map(toRoman),opts:opts.map(toRoman),answerIdx:opts.indexOf(ans)};
+}
 function playPattern(body,setScore,end,wrap,startClock){
-  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Pattern dhundo aur sahi answer chunno!<br>
+  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Pattern dhundo aur sahi answer chunno!<br><span style="font-size:11px;color:var(--primary);">⚡ 2 seconds mein jawab = Speed Bonus +1!</span><br>
   <button style="margin-top:10px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="patStart">▶ Start</button>
 </div>`);
   body.appendChild(instrEl);
   const host=$(`<div></div>`);body.appendChild(host);
-  let q=0,score=0,arcTimer=null;
+  let q=0,score=0,bonus=0,arcTimer=null,qStartTs=0;
   function showArc(secs,onDone){
     clearInterval(arcTimer);
     const circ=2*Math.PI*30;
@@ -670,48 +767,40 @@ function playPattern(body,setScore,end,wrap,startClock){
     },100);
   }
   function next(){
-    if(q>=10){
-      end({title:'Pattern Master!',emoji:'💡',sub:`Score: ${score}/10`,value:score,points:score*5,starThresh:[4,7,9],
-        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}/10</span></div><div class="row"><span>Accuracy</span><span class="val">${Math.round(score/10*100)}%</span></div></div>`});
+    if(q>=15){
+      const total=score+bonus;
+      end({title:'Pattern Master!',emoji:'💡',sub:`Score: ${score}/15 + ${bonus} speed bonus`,value:total,points:total*5,starThresh:[6,10,13],
+        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}/15</span></div><div class="row"><span>Speed Bonus</span><span class="val">+${bonus}</span></div><div class="row"><span>Accuracy</span><span class="val">${Math.round(score/15*100)}%</span></div></div>`});
       return;
     }
     clearInterval(arcTimer);
-    const type=q%3;
-    const typeName=['Color','Number','Matrix'][type];
-    let answerIdx=0;
-    let html='';
-    let opts=[];
-    let correctOpt='';
+    const type=q%6;
+    let answerIdx=0,html='';
     if(type===0){
-      // Color pattern
       const shape=PAT_SHAPES[Math.floor(Math.random()*PAT_SHAPES.length)];
       const cidx1=Math.floor(Math.random()*PAT_COLORS.length);
       let cidx2=cidx1;while(cidx2===cidx1)cidx2=Math.floor(Math.random()*PAT_COLORS.length);
       const seq=[cidx1,cidx2,cidx1];const ans=cidx2;
       const allCols=Array.from({length:PAT_COLORS.length},(_,i)=>i).filter(i=>i!==ans);
-      opts=[ans,...allCols.sort(()=>Math.random()-.5).slice(0,3)].sort(()=>Math.random()-.5);
+      const opts=[ans,...allCols.sort(()=>Math.random()-.5).slice(0,3)].sort(()=>Math.random()-.5);
       answerIdx=opts.indexOf(ans);
       html=`<div class="q-type-badge">COLOR</div>
         <div class="pat-seq">${seq.map(c=>`<div class="pat-item" style="background:${PAT_COLORS[c]}">${shape}</div>`).join('')}<div class="pat-item q">?</div></div>
         <div class="pat-opts">${opts.map((c,i)=>`<button class="pat-opt" data-i="${i}" style="background:${PAT_COLORS[c]};color:#fff;">${shape}</button>`).join('')}</div>`;
     } else if(type===1){
-      // Number sequence
       const {seq,ans}=genNumSeq();
       const distractors=new Set([ans]);
       while(distractors.size<4){const d=ans+Math.floor(Math.random()*20)-10;if(d>0)distractors.add(d);}
-      opts=[...distractors].sort(()=>Math.random()-.5);
+      const opts=[...distractors].sort(()=>Math.random()-.5);
       answerIdx=opts.indexOf(ans);
       html=`<div class="q-type-badge">NUMBER</div>
         <div class="pat-seq">${seq.map(n=>`<div class="pat-item" style="background:#7C3AED;font-size:22px;">${n}</div>`).join('')}<div class="pat-item q" style="font-size:22px;">?</div></div>
         <div class="pat-opts">${opts.map((v,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:24px;font-weight:800;">${v}</button>`).join('')}</div>`;
-    } else {
-      // Shape matrix — 3×3 grid, find missing bottom-right
+    } else if(type===2){
       const rowShapes=[0,1,2].map(()=>Math.floor(Math.random()*PAT_SHAPES.length));
       const rowCols=[0,1,2].map(()=>Math.floor(Math.random()*PAT_COLORS.length));
-      // Pattern: each row has same shape, each column has same color
       const grid=[];
       for(let r=0;r<3;r++)for(let c=0;c<3;c++)grid.push({s:rowShapes[r],c:rowCols[c]});
-      // Remove bottom-right
       const missingS=rowShapes[2],missingC=rowCols[2];
       const correct=`${missingS}_${missingC}`;
       const wrongOpts=[];
@@ -721,15 +810,34 @@ function playPattern(body,setScore,end,wrap,startClock){
         const k=`${ws}_${wc}`;
         if(!wrongOpts.includes(k)&&k!==correct)wrongOpts.push(k);
       }
-      opts=[correct,...wrongOpts].sort(()=>Math.random()-.5);
+      const opts=[correct,...wrongOpts].sort(()=>Math.random()-.5);
       answerIdx=opts.indexOf(correct);
-      const cellHTML=grid.map((cell,i)=>
-        i===8?`<div class="pm-cell missing">?</div>`
-        :`<div class="pm-cell" style="background:${PAT_COLORS[cell.c]};color:#fff;">${PAT_SHAPES[cell.s]}</div>`
-      ).join('');
+      const cellHTML=grid.map((cell,i)=>i===8?`<div class="pm-cell missing">?</div>`:`<div class="pm-cell" style="background:${PAT_COLORS[cell.c]};color:#fff;">${PAT_SHAPES[cell.s]}</div>`).join('');
       html=`<div class="q-type-badge">MATRIX</div>
         <div class="pat-matrix">${cellHTML}</div>
-        <div class="pat-opts">${opts.map((k,i)=>{const[s,c]=k.split('_').map(Number);return`<button class="pat-opt" data-i="${i}" style="background:${PAT_COLORS[c]};color:#fff;">${PAT_SHAPES[s]}</button>`}).join('')}</div>`;
+        <div class="pat-opts">${opts.map((k,i)=>{const[s,c]=k.split('_').map(Number);return`<button class="pat-opt" data-i="${i}" style="background:${PAT_COLORS[c]};color:#fff;">${PAT_SHAPES[s]}</button>`;}).join('')}</div>`;
+    } else if(type===3){
+      const res=genLetterSeq();
+      answerIdx=res.answerIdx;
+      html=`<div class="q-type-badge">LETTER</div>
+        <div class="pat-seq">${res.seq.map(l=>`<div class="pat-item" style="background:#F472B6;font-size:22px;font-weight:900;">${l}</div>`).join('')}<div class="pat-item q" style="font-size:22px;">?</div></div>
+        <div class="pat-opts">${res.opts.map((l,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:24px;font-weight:900;">${l}</button>`).join('')}</div>`;
+    } else if(type===4){
+      const res=genSpecialSeq();
+      const dist=new Set([res.ans]);
+      while(dist.size<4){const d=res.ans+Math.floor(Math.random()*20)-10;if(d>0)dist.add(d);}
+      const opts=[...dist].sort(()=>Math.random()-.5);
+      answerIdx=opts.indexOf(res.ans);
+      html=`<div class="q-type-badge">SEQUENCE</div>
+        <div style="font-size:10px;color:var(--text2);text-align:center;margin-bottom:4px;">${res.label}</div>
+        <div class="pat-seq">${res.seq.map(n=>`<div class="pat-item" style="background:#34D399;font-size:20px;">${n}</div>`).join('')}<div class="pat-item q" style="font-size:20px;">?</div></div>
+        <div class="pat-opts">${opts.map((v,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:22px;font-weight:800;">${v}</button>`).join('')}</div>`;
+    } else {
+      const res=genRomanSeq();
+      answerIdx=res.answerIdx;
+      html=`<div class="q-type-badge">ROMAN</div>
+        <div class="pat-seq">${res.seq.map(r=>`<div class="pat-item" style="background:#F97316;font-size:16px;font-weight:900;">${r}</div>`).join('')}<div class="pat-item q" style="font-size:16px;">?</div></div>
+        <div class="pat-opts">${res.opts.map((r,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:15px;font-weight:900;">${r}</button>`).join('')}</div>`;
     }
     const arcHtml=`<div class="arc-wrap">
       <svg id="arcSvg" width="70" height="70" viewBox="0 0 70 70">
@@ -738,15 +846,24 @@ function playPattern(body,setScore,end,wrap,startClock){
       </svg>
       <div class="arc-num" id="arcNum">4</div>
     </div>`;
-    host.innerHTML=arcHtml+html+`<div style="text-align:center;margin-top:12px;color:var(--text2);font-size:12px;">Q${q+1}/10</div>`;
+    host.innerHTML=arcHtml+html+`<div style="text-align:center;margin-top:8px;color:var(--text2);font-size:12px;">Q${q+1}/15</div>`;
+    qStartTs=Date.now();
     showArc(4,()=>{playSound('wrong');q++;next();});
     host.querySelectorAll('.pat-opt').forEach(btn=>{
       btn.onclick=()=>{
         clearInterval(arcTimer);
         const chosen=+btn.dataset.i;
+        const elapsed=Date.now()-qStartTs;
         if(chosen===answerIdx){
           playSound('correct');score++;setScore(score);
           btn.classList.add('correct-ans');
+          if(elapsed<2000){
+            bonus++;
+            const bEl=document.createElement('div');
+            bEl.style.cssText='text-align:center;font-size:12px;font-weight:700;color:#F59E0B;margin-top:4px;';
+            bEl.textContent='⚡ Speed Bonus! +1';
+            host.appendChild(bEl);
+          }
         } else {
           playSound('wrong');
           btn.classList.add('wrong-ans');
@@ -930,72 +1047,98 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
 
 /* ===================== QUICK MATH ===================== */
 const TIERS=[
-  {label:'TIER 1',ops:['+','-'],maxA:9,maxB:9},
-  {label:'TIER 2',ops:['+','-'],maxA:99,maxB:9},
-  {label:'TIER 3',ops:['×','+'],maxA:25,maxB:9},
-  {label:'TIER 4',ops:['×','-'],maxA:20,maxB:12},
-  {label:'TIER 5',ops:['×','+'],maxA:15,maxB:15,brackets:true},
+  {label:'TIER 1',ops:['+','-'],maxA:9,maxB:9,timeMs:4000},
+  {label:'TIER 2',ops:['+','-'],maxA:99,maxB:9,timeMs:4000},
+  {label:'TIER 3',ops:['×','+'],maxA:25,maxB:9,timeMs:3500},
+  {label:'TIER 4',ops:['×','-'],maxA:20,maxB:12,timeMs:3000},
+  {label:'TIER 5',ops:['×','+'],maxA:15,maxB:15,brackets:true,timeMs:2500},
+  {label:'TIER 6',ops:['÷'],maxA:12,maxB:12,timeMs:2500},
+  {label:'TIER 7',ops:['alg'],maxA:10,maxB:20,timeMs:2000},
+  {label:'TIER 8',ops:['word'],maxA:0,maxB:0,timeMs:2000},
 ];
 function playMath(body,setScore,end,wrap,startClock){
-  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Jaldi solve karo! 4 seconds each. Combos se bonus milta hai!<br>
+  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Jaldi solve karo! Combos se bonus. 5 correct in a row = 💀 Sudden Death!<br>
   <button style="margin-top:10px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="mathStart">▶ Start</button>
 </div>`);
   body.appendChild(instrEl);
   const host=$(`<div style="position:relative;"></div>`);body.appendChild(host);
-  let q=0,score=0,tier=0,combo=0,consecutive=0,wrong2=0;
+  let q=0,score=0,tier=0,combo=0,consecutive=0,wrong2=0,sdMode=false,sdBonus=0,maxTier=0;
   let barTimer=null;
+  function genWordProblem(){
+    const t=Math.floor(Math.random()*5);
+    if(t===0){const n=(Math.floor(Math.random()*5)+2),m=(Math.floor(Math.random()*8)+3);return{q:`${n} boxes × ${m} items = ? items`,ans:n*m};}
+    if(t===1){const sp=(Math.floor(Math.random()*4)+2)*10,hr=(Math.floor(Math.random()*3)+1);return{q:`${sp}km/h × ${hr}h = ? km`,ans:sp*hr};}
+    if(t===2){const p=(Math.floor(Math.random()*5)+2)*10;return{q:`₹${p}, 10% off. Final = ?`,ans:p-p/10};}
+    if(t===3){const a=(Math.floor(Math.random()*5)+3),b=(Math.floor(Math.random()*5)+3);return{q:`A = B + ${a}. A+B = ${a+2*b}. A = ?`,ans:a+b};}
+    const n=(Math.floor(Math.random()*6)+2),pp=(Math.floor(Math.random()*9)+4);return{q:`${n} students, ${pp} pencils each. Total?`,ans:n*pp};
+  }
+  function genQuestion(){
+    const tc=TIERS[tier];
+    if(tc.ops[0]==='alg'){
+      const a=Math.floor(Math.random()*4)+2,b=Math.floor(Math.random()*10)+1,x=Math.floor(Math.random()*8)+1;
+      return{display:`${a}x + ${b} = ${a*x+b}`,correct:x};
+    } else if(tc.ops[0]==='word'){
+      const wp=genWordProblem();return{display:wp.q,correct:wp.ans,isWord:true};
+    } else if(tc.ops[0]==='÷'){
+      const a=Math.floor(Math.random()*tc.maxB)+2,b=Math.floor(Math.random()*tc.maxA)+1;
+      return{display:`${a*b} ÷ ${a}`,correct:b};
+    } else {
+      const a=Math.floor(Math.random()*tc.maxA)+1,b=Math.floor(Math.random()*tc.maxB)+1;
+      const op=tc.ops[Math.floor(Math.random()*tc.ops.length)];
+      let correct=op==='+'?a+b:op==='-'?a-b:a*b;
+      let display=`${a} ${op} ${b}`;
+      if(tc.brackets&&Math.random()>0.5){
+        const c=Math.floor(Math.random()*6)+2,op2=['+','-'][Math.floor(Math.random()*2)];
+        const inner=op2==='+'?b+c:Math.max(1,b-c);
+        correct=a*inner;display=`${a} × (${b} ${op2} ${c})`;
+      }
+      return{display,correct};
+    }
+  }
+  function endRun(opts){
+    const total=score+sdBonus;
+    end({...opts,value:total,points:total*3,statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}/20</span></div><div class="row"><span>Max Tier</span><span class="val">${maxTier+1}</span></div><div class="row"><span>SD Bonus</span><span class="val">+${sdBonus}</span></div></div>`});
+  }
   function next(){
     if(q>=20){
-      end({title:'Math Ninja! 🔢',emoji:'🔢',sub:`Score: ${score}/20 · Max Tier ${tier+1}`,value:score,points:score*3,starThresh:[8,14,18],
-        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}/20</span></div><div class="row"><span>Max Tier</span><span class="val">${tier+1}</span></div><div class="row"><span>Combo Bonus</span><span class="val">${Math.max(0,score-q)}</span></div></div>`});
+      endRun({title:'Math Ninja! 🔢',emoji:'🔢',sub:`Score: ${score}/20${sdBonus?` + ${sdBonus} SD bonus`:''}`});
       return;
     }
     clearInterval(barTimer);
+    const {display,correct,isWord}=genQuestion();
     const tc=TIERS[tier];
-    const a=Math.floor(Math.random()*tc.maxA)+1;
-    const b=Math.floor(Math.random()*tc.maxB)+1;
-    const op=tc.ops[Math.floor(Math.random()*tc.ops.length)];
-    let correct=op==='+'?a+b:op==='-'?a-b:a*b;
-    let display=`${a} ${op} ${b}`;
-    if(tc.brackets&&Math.random()>0.5){
-      const c=Math.floor(Math.random()*6)+2;
-      const op2=['+','-'][Math.floor(Math.random()*2)];
-      const inner=op2==='+'?b+c:Math.max(1,b-c);
-      correct=op==='×'?a*inner:inner+a;
-      display=tc.ops[0]==='×'?`${a} × (${b} ${op2} ${c})`:`(${a} ${op2} ${b}) × ${c}`;
-      if(tc.ops[0]!=='×'){const tmp=a;correct=(tmp+(op2==='+'?b:-b))*c||a*inner;}
-    }
-    // Distractors within ±15%
+    if(tier>maxTier)maxTier=tier;
+    const mult=combo>=3?1.5:1;
+    const timeMs=tc.timeMs;
     const range=Math.max(Math.ceil(Math.abs(correct)*0.15),3);
     const used=new Set([correct]);
     const distract=[];
     let tries=0;
-    while(distract.length<3&&tries<50){
+    while(distract.length<3&&tries<80){
       tries++;
       const d=correct+Math.floor(Math.random()*range*2+1)-range;
-      if(d>0&&d!==correct&&!used.has(d)){used.add(d);distract.push(d);}
+      if(d>=0&&d!==correct&&!used.has(d)){used.add(d);distract.push(d);}
     }
     while(distract.length<3)distract.push(correct+(distract.length+1)*2);
     const opts=[correct,...distract].sort(()=>Math.random()-.5);
-    const mult=combo>=3?1.5:1;
     host.innerHTML=`
       <div class="timer-bar"><div class="timer-fill timer-green" id="mBar" style="width:100%"></div></div>
-      <div class="math-q">${display}<span class="tier-badge-abs">${tc.label}</span></div>
-      ${combo>=3?`<div style="text-align:center;font-size:11px;font-weight:700;color:#7C3AED;margin-bottom:6px;">🔥 ${combo}x Combo! ×1.5</div>`:''}
-      <div class="math-opts">${opts.map(v=>`<button class="math-opt" data-v="${v}">${v}</button>`).join('')}</div>
-      <div style="text-align:center;margin-top:10px;font-size:12px;color:var(--text2);">Q${q+1}/20</div>
-    `;
+      <div style="text-align:center;font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;">${tc.label}${sdMode?'  <span style="color:#EF4444;">💀 SUDDEN DEATH</span>':''}${combo>=3?`  🔥×${Math.round(mult)}`:''}  Q${q+1}/20</div>
+      <div style="text-align:center;font-size:${isWord?'14px':'32px'};font-weight:${isWord?'600':'900'};margin:${isWord?'8px':'10px'} 0;line-height:${isWord?'1.4':'1'};min-height:${isWord?'56px':'auto'};">${display}</div>
+      <div class="math-opts">${opts.map(v=>`<button class="math-opt" data-v="${v}">${v}</button>`).join('')}</div>`;
     let elapsed=0;
     barTimer=setInterval(()=>{
       elapsed+=100;
-      const pct=Math.max(0,100-elapsed/40);
+      const pct=Math.max(0,100-elapsed/timeMs*100);
       const bar=wrap.querySelector('#mBar');
       if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
-      if(elapsed>=4000){clearInterval(barTimer);host.querySelector('#mBar').style.width='0%';
-        wrong2++;combo=0;consecutive=0;
-        if(wrong2>=2){wrong2=0;tier=Math.max(0,tier-1);}
-        host.innerHTML+=`<div style="text-align:center;font-size:13px;color:#EF4444;margin-top:8px;">⏱ Time's up! Answer: <strong>${correct}</strong></div>`;
-        setTimeout(()=>{q++;next();},1000);
+      if(elapsed>=timeMs){
+        clearInterval(barTimer);combo=0;consecutive=0;
+        host.querySelectorAll('.math-opt').forEach(b=>{if(+b.dataset.v===correct)b.classList.add('correct-ans');b.disabled=true;});
+        host.innerHTML+=`<div style="text-align:center;font-size:12px;color:#EF4444;margin-top:6px;">⏱ ${display} = ${correct}</div>`;
+        if(sdMode){setTimeout(()=>endRun({title:'Sudden Death!',emoji:'💀',sub:`SD Run ended! +${sdBonus} bonus`}),700);return;}
+        wrong2++;if(wrong2>=2){wrong2=0;tier=Math.max(0,tier-1);}
+        setTimeout(()=>{q++;next();},900);
       }
     },100);
     host.querySelectorAll('.math-opt').forEach(btn=>{
@@ -1004,16 +1147,22 @@ function playMath(body,setScore,end,wrap,startClock){
         const chosen=+btn.dataset.v;
         if(chosen===correct){
           playSound('correct');
-          const pts=Math.round(mult);
-          score+=pts;setScore(score);
+          score+=Math.round(mult);setScore(score);
           btn.classList.add('correct-ans');
           consecutive++;wrong2=0;
-          if(consecutive>=3){combo=consecutive;showCombo(`🔥 ${combo}× COMBO!`);}
-          if(consecutive>=4&&consecutive%4===0)tier=Math.min(4,tier+1);
+          if(consecutive>=5&&!sdMode){sdMode=true;sdBonus+=10;showCombo('💀 SUDDEN DEATH!');}
+          else if(consecutive>=3){combo=consecutive;showCombo(`🔥 ${combo}× COMBO!`);}
+          if(consecutive>=4&&consecutive%4===0)tier=Math.min(7,tier+1);
         } else {
           playSound('wrong');
           btn.classList.add('wrong-ans');
           host.querySelectorAll('.math-opt').forEach(b=>{if(+b.dataset.v===correct)b.classList.add('correct-ans');});
+          if(sdMode){
+            host.querySelectorAll('.math-opt').forEach(b=>b.disabled=true);
+            host.innerHTML+=`<div style="text-align:center;font-size:13px;color:#EF4444;margin-top:8px;">💀 Sudden Death ended! +${sdBonus} bonus earned</div>`;
+            setTimeout(()=>endRun({title:'Sudden Death!',emoji:'💀',sub:`Score: ${score} + ${sdBonus} SD bonus`}),900);
+            return;
+          }
           combo=0;consecutive=0;wrong2++;
           if(wrong2>=2){wrong2=0;tier=Math.max(0,tier-1);}
           host.innerHTML+=`<div style="text-align:center;font-size:12px;color:var(--text2);margin-top:6px;">${display} = ${correct} ✓</div>`;
@@ -1029,125 +1178,247 @@ function playMath(body,setScore,end,wrap,startClock){
 /* ===================== STROOP X ===================== */
 function playStroopX(body,setScore,end,wrap,startClock){
   const COLORS=[{name:'Red',hex:'#EF4444'},{name:'Blue',hex:'#3B82F6'},{name:'Green',hex:'#22C55E'},{name:'Yellow',hex:'#EAB308'},{name:'Purple',hex:'#A855F7'}];
-  let round=0,score=0,combo=0;
+  const SHAPES=[{name:'Circle',sym:'●'},{name:'Square',sym:'■'},{name:'Triangle',sym:'▲'},{name:'Star',sym:'★'}];
+  let round=0,score=0,combo=0,maxCombo=0;
   const host=$(`<div style="text-align:center;padding:12px 0;"></div>`);
   body.appendChild(host);
-  const btn=$(`<button class="start-btn">Tap to Start</button>`);
+  const btn=$(`<button class="start-btn">Tap to Start (30 rounds)</button>`);
   body.appendChild(btn);
   btn.onclick=()=>{btn.remove();startClock&&startClock();nextRound();};
-  function nextRound(){
-    if(round>=20){
-      end({title:'Stroop Master! 🎨',emoji:'🎨',sub:`Score: ${score} pts`,value:score,points:score*4,starThresh:[30,50,65],
-        statsHtml:`<div class="end-stats"><div class="row"><span>Rounds</span><span class="val">20</span></div><div class="row"><span>Score</span><span class="val">${score}</span></div><div class="row"><span>Max Combo</span><span class="val">${combo}</span></div></div>`});
-      return;
-    }
-    const word=COLORS[Math.floor(Math.random()*COLORS.length)];
-    const ink=COLORS[Math.floor(Math.random()*COLORS.length)];
-    const ts=Date.now();
-    let barT=null;
-    const choices=[...COLORS].sort(()=>Math.random()-.5).slice(0,4);
-    if(!choices.find(c=>c.name===ink.name))choices[0]=ink;
-    choices.sort(()=>Math.random()-.5);
-    host.innerHTML=`
-      <div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>
-      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Round ${round+1}/20 — INK ka rang tap karo (word nahi!)</div>
-      ${combo>=3?`<div style="font-size:11px;font-weight:700;color:#7C3AED;margin-bottom:4px;">🔥 Combo ×${combo>=3?1.5:1}</div>`:''}
-      <div style="font-size:52px;font-weight:900;color:${ink.hex};margin:14px 0;">${word.name}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:280px;margin:0 auto;">
-        ${choices.map(c=>`<button class="math-opt stroop-opt" style="background:${c.hex};color:#fff;font-weight:700;border:none;" data-name="${c.name}">${c.name}</button>`).join('')}
-      </div>`;
+  function startBar(limit,onTimeout){
     let elapsed=0;
-    barT=setInterval(()=>{
+    const barT=setInterval(()=>{
       elapsed+=100;
-      const pct=Math.max(0,100-elapsed/30);
+      const pct=Math.max(0,100-elapsed/limit*100);
       const bar=wrap.querySelector('#sBar');
       if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
-      if(elapsed>=3000){clearInterval(barT);combo=0;round++;
-        host.innerHTML+=`<div style="font-size:12px;color:#EF4444;margin-top:8px;">⏱ Too slow! Ink: <strong style="color:${ink.hex}">${ink.name}</strong></div>`;
-        setTimeout(nextRound,900);}
+      if(elapsed>=limit){clearInterval(barT);onTimeout();}
     },100);
-    host.querySelectorAll('.stroop-opt').forEach(b=>{
-      b.onclick=()=>{
-        clearInterval(barT);
-        const ms=Date.now()-ts;
-        if(b.dataset.name===ink.name){
-          playSound('correct');
-          const bonus=ms<1000?3:ms<2000?2:1;
-          combo++;score+=bonus;setScore(score);
-          b.style.outline='3px solid #fff';
-          host.innerHTML+=`<div style="font-size:11px;color:#22C55E;margin-top:4px;">+${bonus}${combo>=3?' 🔥':''}</div>`;
-        } else {
-          playSound('wrong');combo=0;
-          b.style.background='#EF4444';
-          host.innerHTML+=`<div style="font-size:11px;color:#EF4444;margin-top:4px;">Ink was <strong style="color:${ink.hex}">${ink.name}</strong></div>`;
-        }
-        host.querySelectorAll('.stroop-opt').forEach(x=>x.disabled=true);
-        round++;setTimeout(nextRound,700);
-      };
-    });
+    return barT;
+  }
+  function nextRound(){
+    if(round>=30){
+      end({title:'Stroop Master! 🎨',emoji:'🎨',sub:`Score: ${score} pts · 30 rounds`,value:score,points:score*4,starThresh:[40,65,90],
+        statsHtml:`<div class="end-stats"><div class="row"><span>Score</span><span class="val">${score}</span></div><div class="row"><span>Max Combo</span><span class="val">${maxCombo}</span></div><div class="row"><span>Phase</span><span class="val">${round>25?'3':round>10?'2':'1'}</span></div></div>`});
+      return;
+    }
+    const phase=round<11?1:round<16?2:3;
+    const ts=Date.now();
+    let barT=null;
+    if(phase===1){
+      // Phase 1: Classic color stroop (rounds 1-10)
+      const word=COLORS[Math.floor(Math.random()*COLORS.length)];
+      const ink=COLORS[Math.floor(Math.random()*COLORS.length)];
+      const choices=[...COLORS].sort(()=>Math.random()-.5).slice(0,4);
+      if(!choices.find(c=>c.name===ink.name))choices[0]=ink;
+      choices.sort(()=>Math.random()-.5);
+      host.innerHTML=`
+        <div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Round ${round+1}/30 · Phase 1 — INK ka rang tap karo!</div>
+        ${combo>=3?`<div style="font-size:11px;font-weight:700;color:#7C3AED;margin-bottom:4px;">🔥 Combo ×1.5</div>`:''}
+        <div style="font-size:52px;font-weight:900;color:${ink.hex};margin:14px 0;">${word.name}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:280px;margin:0 auto;">
+          ${choices.map(c=>`<button class="math-opt stroop-opt" style="background:${c.hex};color:#fff;font-weight:700;border:none;" data-name="${c.name}">${c.name}</button>`).join('')}
+        </div>`;
+      barT=startBar(3000,()=>{
+        combo=0;round++;
+        host.innerHTML+=`<div style="font-size:12px;color:#EF4444;margin-top:8px;">⏱ Too slow! Ink: <strong style="color:${ink.hex}">${ink.name}</strong></div>`;
+        setTimeout(nextRound,900);
+      });
+      host.querySelectorAll('.stroop-opt').forEach(b=>{
+        b.onclick=()=>{
+          clearInterval(barT);const ms=Date.now()-ts;
+          if(b.dataset.name===ink.name){
+            playSound('correct');const pts=ms<1000?3:ms<2000?2:1;
+            combo++;if(combo>maxCombo)maxCombo=combo;score+=pts;setScore(score);
+            b.style.outline='3px solid #fff';
+            host.innerHTML+=`<div style="font-size:11px;color:#22C55E;margin-top:4px;">+${pts}${combo>=3?' 🔥':''}</div>`;
+          } else {
+            playSound('wrong');combo=0;b.style.background='#EF4444';
+            host.innerHTML+=`<div style="font-size:11px;color:#EF4444;margin-top:4px;">Ink: <strong style="color:${ink.hex}">${ink.name}</strong></div>`;
+          }
+          host.querySelectorAll('.stroop-opt').forEach(x=>x.disabled=true);
+          round++;setTimeout(nextRound,700);
+        };
+      });
+    } else if(phase===2){
+      // Phase 2: Shape stroop (rounds 11-15) — symbol shown, name is different; tap SYMBOL shape
+      const wordShape=SHAPES[Math.floor(Math.random()*SHAPES.length)];
+      let dispShape=wordShape;while(dispShape===wordShape)dispShape=SHAPES[Math.floor(Math.random()*SHAPES.length)];
+      const inkColor=COLORS[Math.floor(Math.random()*COLORS.length)];
+      const choices=[...SHAPES].sort(()=>Math.random()-.5);
+      host.innerHTML=`
+        <div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Round ${round+1}/30 · Phase 2 — Jo SHAPE dikhti hai, usse tap karo!</div>
+        <div style="font-size:64px;font-weight:900;color:${inkColor.hex};margin:10px 0;">${dispShape.sym}</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:8px;">(Word: "${wordShape.name}" — IGNORE karo)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:280px;margin:0 auto;">
+          ${choices.map(s=>`<button class="math-opt stroop-opt" style="font-size:20px;font-weight:700;border:2px solid var(--border);" data-name="${s.name}">${s.sym} ${s.name}</button>`).join('')}
+        </div>`;
+      barT=startBar(2500,()=>{
+        combo=0;round++;
+        host.innerHTML+=`<div style="font-size:12px;color:#EF4444;margin-top:8px;">⏱ It was ${dispShape.sym} ${dispShape.name}!</div>`;
+        setTimeout(nextRound,900);
+      });
+      host.querySelectorAll('.stroop-opt').forEach(b=>{
+        b.onclick=()=>{
+          clearInterval(barT);const ms=Date.now()-ts;
+          if(b.dataset.name===dispShape.name){
+            playSound('correct');const pts=ms<1000?3:ms<1500?2:1;
+            combo++;if(combo>maxCombo)maxCombo=combo;score+=pts;setScore(score);
+            b.style.background='#22C55E';b.style.color='#fff';
+            host.innerHTML+=`<div style="font-size:11px;color:#22C55E;margin-top:4px;">+${pts} Correct Shape!</div>`;
+          } else {
+            playSound('wrong');combo=0;b.style.background='#EF4444';b.style.color='#fff';
+            host.innerHTML+=`<div style="font-size:11px;color:#EF4444;margin-top:4px;">Was: ${dispShape.sym} ${dispShape.name}</div>`;
+          }
+          host.querySelectorAll('.stroop-opt').forEach(x=>x.disabled=true);
+          round++;setTimeout(nextRound,700);
+        };
+      });
+    } else {
+      // Phase 3: Mixed (rounds 16-30) — 3 choices, asks COLOR or SHAPE randomly
+      const askColor=Math.random()>0.5;
+      const inkColor=COLORS[Math.floor(Math.random()*COLORS.length)];
+      const dispShape=SHAPES[Math.floor(Math.random()*SHAPES.length)];
+      const decoyWord=askColor?SHAPES[Math.floor(Math.random()*SHAPES.length)].name:COLORS[Math.floor(Math.random()*COLORS.length)].name;
+      const target=askColor?inkColor.name:dispShape.name;
+      let choices3;
+      if(askColor){
+        choices3=[...COLORS].sort(()=>Math.random()-.5).slice(0,3);
+        if(!choices3.find(c=>c.name===inkColor.name))choices3[0]=inkColor;
+        choices3.sort(()=>Math.random()-.5);
+      } else {
+        choices3=[...SHAPES].sort(()=>Math.random()-.5).slice(0,3);
+        if(!choices3.find(s=>s.name===dispShape.name))choices3[0]=dispShape;
+        choices3.sort(()=>Math.random()-.5);
+      }
+      host.innerHTML=`
+        <div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Round ${round+1}/30 · Phase 3</div>
+        <div style="font-size:13px;font-weight:700;color:${askColor?'#A78BFA':'#34D399'};margin-bottom:6px;">${askColor?'🎨 INK COLOR kya hai?':'🔷 SHAPE kya dikhti hai?'}</div>
+        <div style="font-size:58px;font-weight:900;color:${inkColor.hex};margin:6px 0;">${dispShape.sym}</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:8px;">(Text: "${decoyWord}")</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;max-width:290px;margin:0 auto;">
+          ${askColor
+            ?choices3.map(c=>`<button class="math-opt stroop-opt" style="background:${c.hex};color:#fff;font-size:12px;padding:8px 4px;font-weight:700;border:none;" data-name="${c.name}">${c.name}</button>`).join('')
+            :choices3.map(s=>`<button class="math-opt stroop-opt" style="font-size:22px;font-weight:700;border:2px solid var(--border);" data-name="${s.name}">${s.sym}</button>`).join('')
+          }
+        </div>`;
+      barT=startBar(2000,()=>{
+        combo=0;round++;
+        host.innerHTML+=`<div style="font-size:12px;color:#EF4444;margin-top:8px;">⏱ Answer: ${target}</div>`;
+        setTimeout(nextRound,900);
+      });
+      host.querySelectorAll('.stroop-opt').forEach(b=>{
+        b.onclick=()=>{
+          clearInterval(barT);const ms=Date.now()-ts;
+          if(b.dataset.name===target){
+            playSound('correct');const pts=ms<800?3:ms<1500?2:1;
+            combo++;if(combo>maxCombo)maxCombo=combo;score+=pts;setScore(score);
+            b.style.outline='3px solid #22C55E';
+            host.innerHTML+=`<div style="font-size:11px;color:#22C55E;margin-top:4px;">+${pts}${combo>=3?' 🔥':''}</div>`;
+          } else {
+            playSound('wrong');combo=0;b.style.background='#EF4444';b.style.color='#fff';
+            host.innerHTML+=`<div style="font-size:11px;color:#EF4444;margin-top:4px;">Answer: ${target}</div>`;
+          }
+          host.querySelectorAll('.stroop-opt').forEach(x=>x.disabled=true);
+          round++;setTimeout(nextRound,700);
+        };
+      });
+    }
   }
 }
 
 /* ===================== IQ TEST ===================== */
 function playIQTest(body,setScore,end,wrap,startClock){
-  const QS=[
-    {q:'Ek sequence hai: 2, 4, 8, 16, __. Agla number kya hai?',opts:['24','32','20','28'],ans:1},
-    {q:'Agar MANGO = 13+1+14+7+15 = 50 ho, toh APPLE ka code kya hoga?',opts:['50','51','52','53'],ans:1},
-    {q:'5 logon mein Rahul 3rd hai. Uske baad kitne log hain?',opts:['1','2','3','4'],ans:1},
-    {q:'Ek ghadi mein 3:15 baje hain. Minute aur hour hand ke beech angle kya hai?',opts:['0°','7.5°','15°','30°'],ans:1},
-    {q:'Odd one out: Cat, Dog, Rose, Lion',opts:['Cat','Dog','Rose','Lion'],ans:2},
-    {q:'Agar 6 × 4 = 24 aur 5 × 3 = 15, toh 7 × 5 = ?',opts:['30','35','40','45'],ans:1},
-    {q:'Ek square ka perimeter 40cm hai. Uska area kya hoga?',opts:['80cm²','100cm²','160cm²','40cm²'],ans:1},
-    {q:'Sequence: A, C, E, G, __',opts:['H','I','J','K'],ans:1},
-    {q:'Neha, Priya se 3 saal badi hai. 5 saal baad Priya 20 hogi. Abhi Neha ki umar?',opts:['18','23','22','20'],ans:0},
-    {q:'3 cats 3 mice ko 3 minutes mein pakad leti hain. 100 mice ke liye kitni cats chahiye?',opts:['100','33','3','10'],ans:2},
-    {q:'Ek train 60 km/h ki speed se 2 ghante chalti hai. Kitni doori?',opts:['60km','100km','120km','180km'],ans:2},
-    {q:'Kaunsa number dono 4 aur 6 se divisible hai?',opts:['10','14','12','16'],ans:2},
-    {q:'Mirror image mein "REPLIT" kaisa dikhega?',opts:['TILPER','TILEPR','TILEPR','TIЛPER'],ans:0},
-    {q:'Ek triangle ke angles 60°, 70° hain. Teesra angle?',opts:['40°','50°','60°','70°'],ans:1},
-    {q:'2, 6, 12, 20, 30, __',opts:['40','42','44','38'],ans:1},
+  const ALL_QS=[
+    {q:'Sequence: 2, 4, 8, 16, __. Agla number kya hai?',opts:['24','32','20','28'],ans:1,diff:'easy',exp:'Geometric series ×2: 16×2 = 32.'},
+    {q:'Agar M=13, A=1, N=14, G=7, O=15 → MANGO=50. APPLE ka code? (A=1, B=2...)',opts:['50','51','52','53'],ans:0,diff:'easy',exp:'A(1)+P(16)+P(16)+L(12)+E(5) = 50.'},
+    {q:'5 logon ki line mein Rahul 3rd hai. Uske baad kitne log hain?',opts:['1','2','3','4'],ans:1,diff:'easy',exp:'5 − 3 = 2 log Rahul ke baad hain.'},
+    {q:'Ghadi mein 3:15 hain. Minute aur hour hand ke beech angle?',opts:['0°','7.5°','15°','30°'],ans:1,diff:'medium',exp:'Hour hand = 97.5°. Minute hand = 90°. Difference = 7.5°.'},
+    {q:'Odd one out: Cat, Dog, Rose, Lion',opts:['Cat','Dog','Rose','Lion'],ans:2,diff:'easy',exp:'Rose ek plant hai, baaki teen animals hain.'},
+    {q:'6×4=24 aur 5×3=15, toh 7×5=?',opts:['30','35','40','45'],ans:1,diff:'easy',exp:'Simple multiplication: 7×5 = 35.'},
+    {q:'Ek square ka perimeter 40cm hai. Area?',opts:['80cm²','100cm²','160cm²','40cm²'],ans:1,diff:'easy',exp:'Side = 40÷4 = 10cm. Area = 10×10 = 100cm².'},
+    {q:'Letter sequence: A, C, E, G, __',opts:['H','I','J','K'],ans:1,diff:'easy',exp:'Har step +2 (odd letters): A→C→E→G→I.'},
+    {q:'Neha, Priya se 3 saal badi. 5 saal baad Priya 20 hogi. Abhi Neha ki umar?',opts:['18','23','22','20'],ans:0,diff:'medium',exp:'Priya abhi = 20−5 = 15. Neha = 15+3 = 18.'},
+    {q:'3 cats 3 mice ko 3 minutes mein pakadti hain. 100 mice ke liye kitni cats?',opts:['100','33','3','10'],ans:2,diff:'medium',exp:'Ek cat 1 mouse ko 3 min mein pakadti hai. 3 cats kaafi hain.'},
+    {q:'Ek train 60km/h se 2 ghante chalti hai. Kitni doori?',opts:['60km','100km','120km','180km'],ans:2,diff:'easy',exp:'Distance = Speed × Time = 60 × 2 = 120km.'},
+    {q:'Kaunsa number 4 aur 6 dono se divisible hai?',opts:['10','14','12','16'],ans:2,diff:'easy',exp:'LCM(4,6) = 12. 12÷4=3 ✓, 12÷6=2 ✓.'},
+    {q:'Mirror image mein "REPLIT" kaisa dikhega?',opts:['TILPER','TILEPR','TIRPLE','TIPREL'],ans:0,diff:'medium',exp:'Mirror = reverse: R-E-P-L-I-T → T-I-L-P-E-R = TILPER.'},
+    {q:'Ek triangle ke angles 60° aur 70° hain. Teesra angle?',opts:['40°','50°','60°','70°'],ans:1,diff:'easy',exp:'180° − 60° − 70° = 50°.'},
+    {q:'Sequence: 2, 6, 12, 20, 30, __',opts:['40','42','44','38'],ans:1,diff:'medium',exp:'Differences: 4,6,8,10,12. Next = 30+12 = 42.'},
+    {q:'Fibonacci: 1, 1, 2, 3, 5, 8, __. Agla kya hai?',opts:['11','13','12','14'],ans:1,diff:'easy',exp:'Fibonacci: pichle 2 ka sum. 5+8 = 13.'},
+    {q:'450 ka 10% kitna hai?',opts:['40','45','50','55'],ans:1,diff:'easy',exp:'10% = 450÷10 = 45.'},
+    {q:'Ek cube ki kitni faces hoti hain?',opts:['4','8','6','12'],ans:2,diff:'easy',exp:'Cube ki 6 faces: top, bottom, front, back, left, right.'},
+    {q:'Koi 90km 1.5 ghante mein tay karta hai. Speed?',opts:['45km/h','60km/h','90km/h','30km/h'],ans:1,diff:'medium',exp:'Speed = 90÷1.5 = 60km/h.'},
+    {q:'A ki umar B se double hai. Dono ka sum 36. B ki umar?',opts:['9','10','12','14'],ans:2,diff:'medium',exp:'A = 2B. 2B+B = 36 → 3B = 36 → B = 12.'},
+    {q:'3 hafte mein kitne din?',opts:['18','21','24','28'],ans:1,diff:'easy',exp:'3 × 7 = 21 din.'},
+    {q:'Letter sequence: Z, X, V, T, __',opts:['P','Q','R','S'],ans:2,diff:'medium',exp:'Har step −2: Z→X→V→T→R.'},
+    {q:'100 − 17 − 23 − 15 = ?',opts:['45','50','55','42'],ans:0,diff:'easy',exp:'100−17=83, 83−23=60, 60−15 = 45.'},
+    {q:'Aaj Wednesday hai. 10 din baad kaunsa din?',opts:['Monday','Friday','Saturday','Sunday'],ans:2,diff:'medium',exp:'Wed + 7 = Wed. Wed + 3 more = Saturday.'},
+    {q:'Algebra: 3x − 7 = 14. x = ?',opts:['5','6','7','8'],ans:2,diff:'hard',exp:'3x = 14+7 = 21. x = 21÷3 = 7.'},
   ];
+  const TIMER={easy:30000,medium:20000,hard:12000};
+  // Shuffle questions each session
+  const QS=[...ALL_QS].sort(()=>Math.random()-.5);
   let qi=0,correct=0;
   const host=$(`<div style="padding:0 4px;"></div>`);
   body.appendChild(host);
-  const btn=$(`<button class="start-btn">Start IQ Test (15 Qs)</button>`);
+  const btn=$(`<button class="start-btn">Start IQ Test (25 Qs)</button>`);
   body.appendChild(btn);
   btn.onclick=()=>{btn.remove();startClock&&startClock();showQ();};
   function showQ(){
     if(qi>=QS.length){
-      const iq=Math.round(70+(correct/15)*70);
-      end({title:`IQ Score: ${iq} 🧩`,emoji:'🧩',sub:`${correct}/15 correct`,value:iq,points:correct*6,starThresh:[7,11,14],
-        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${correct}/15</span></div><div class="row"><span>Estimated IQ</span><span class="val">${iq}</span></div><div class="row"><span>Rating</span><span class="val">${iq>=130?'Genius':iq>=115?'Above Avg':iq>=100?'Average':'Below Avg'}</span></div></div>`});
+      const iq=Math.round(70+(correct/25)*70);
+      end({title:`IQ Score: ${iq} 🧩`,emoji:'🧩',sub:`${correct}/25 correct`,value:iq,points:correct*5,starThresh:[10,16,22],
+        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${correct}/25</span></div><div class="row"><span>Estimated IQ</span><span class="val">${iq}</span></div><div class="row"><span>Rating</span><span class="val">${iq>=130?'Genius':iq>=115?'Above Avg':iq>=100?'Average':'Below Avg'}</span></div></div>`});
       return;
     }
-    const {q,opts,ans}=QS[qi];
-    const lvl=qi<5?{label:'🟢 Easy',color:'#22C55E'}:qi<10?{label:'🟡 Medium',color:'#EAB308'}:{label:'🔴 Hard',color:'#EF4444'};
-    let barT=null,elapsed=0;
+    const {q,opts,ans,diff,exp}=QS[qi];
+    const timeMs=TIMER[diff]||20000;
+    const lvl=diff==='easy'?{label:'🟢 Easy',color:'#22C55E'}:diff==='medium'?{label:'🟡 Medium',color:'#EAB308'}:{label:'🔴 Hard',color:'#EF4444'};
+    let barT=null,elapsed=0,answered=false;
     host.innerHTML=`
       <div class="timer-bar"><div class="timer-fill timer-green" id="iqBar" style="width:100%"></div></div>
-      <div style="text-align:center;margin-bottom:8px;font-size:12px;font-weight:700;color:${lvl.color}">${lvl.label} • Q${qi+1}/15</div>
-      <div style="font-size:14px;font-weight:600;margin-bottom:14px;line-height:1.5;">${q}</div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
+      <div style="text-align:center;margin-bottom:6px;font-size:12px;font-weight:700;color:${lvl.color}">${lvl.label} · Q${qi+1}/25 · ${timeMs/1000}s</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px;line-height:1.5;">${q}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;" id="iqOpts">
         ${opts.map((o,i)=>`<button class="math-opt iq-opt" style="text-align:left;padding:10px 14px;font-size:13px;" data-i="${i}">${String.fromCharCode(65+i)}. ${o}</button>`).join('')}
       </div>`;
     barT=setInterval(()=>{
       elapsed+=100;
-      const pct=Math.max(0,100-elapsed/200);
+      const pct=Math.max(0,100-elapsed/timeMs*100);
       const bar=wrap.querySelector('#iqBar');
       if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
-      if(elapsed>=20000){clearInterval(barT);
+      if(elapsed>=timeMs&&!answered){
+        clearInterval(barT);answered=true;
         host.querySelectorAll('.iq-opt').forEach((b,i)=>{if(i===ans)b.classList.add('correct-ans');b.disabled=true;});
-        host.innerHTML+=`<div style="font-size:12px;color:#EF4444;margin-top:8px;">⏱ Time's up!</div>`;
-        qi++;setTimeout(showQ,900);}
+        showExp('⏱ Time\'s up!','#EF4444');
+        qi++;setTimeout(showQ,1800);
+      }
     },100);
+    function showExp(msg,color){
+      const el=document.createElement('div');
+      el.style.cssText='margin-top:10px;padding:8px 12px;background:var(--card);border-radius:10px;font-size:12px;line-height:1.5;border-left:3px solid '+color+';';
+      el.innerHTML=`<span style="color:${color};font-weight:700;">${msg}</span><br><span style="color:var(--text2);">💡 ${exp}</span>`;
+      host.appendChild(el);
+    }
     host.querySelectorAll('.iq-opt').forEach(b=>{
       b.onclick=()=>{
-        clearInterval(barT);
+        if(answered)return;
+        clearInterval(barT);answered=true;
         const chosen=+b.dataset.i;
-        if(chosen===ans){playSound('correct');correct++;setScore(correct);b.classList.add('correct-ans');}
-        else{playSound('wrong');b.classList.add('wrong-ans');host.querySelectorAll('.iq-opt').forEach((x,i)=>{if(i===ans)x.classList.add('correct-ans');});}
+        if(chosen===ans){
+          playSound('correct');correct++;setScore(correct);
+          b.classList.add('correct-ans');showExp('✅ Correct!','#22C55E');
+        } else {
+          playSound('wrong');b.classList.add('wrong-ans');
+          host.querySelectorAll('.iq-opt').forEach((x,i)=>{if(i===ans)x.classList.add('correct-ans');});
+          showExp('❌ Wrong!','#EF4444');
+        }
         host.querySelectorAll('.iq-opt').forEach(x=>x.disabled=true);
-        qi++;setTimeout(showQ,700);
+        qi++;setTimeout(showQ,1800);
       };
     });
   }
