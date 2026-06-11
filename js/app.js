@@ -1,0 +1,1545 @@
+/* ===================== STATE ===================== */
+const LS={
+  get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch{return d}},
+  set(k,v){localStorage.setItem(k,JSON.stringify(v))},
+  clear(prefix){Object.keys(localStorage).filter(k=>k.startsWith(prefix)).forEach(k=>localStorage.removeItem(k))}
+};
+const FRESH={
+  nz_brain_score:0,nz_streak:0,nz_games_played:0,nz_today_goal:3,
+  nz_dark_mode:false,nz_score_history:[0,0,0,0,0,0,0],
+  nz_achievements:[],nz_skill_scores:{memory:0,focus:0,logic:0,speed:0},
+  nz_skill_scores_prev:{memory:0,focus:0,logic:0,speed:0},
+  nz_best_scores:{},nz_last_played:null,
+  nz_settings:{reminders:true,sfx:true,notifications:true},
+  nz_onboarded:false,nz_username:'Player',
+  nz_schulte_level:0,nz_today_games:0
+};
+function S(k){return LS.get(k,FRESH[k])}
+function setS(k,v){LS.set(k,v)}
+function applyDark(){document.body.classList.toggle('dark',!!S('nz_dark_mode'));}
+applyDark();
+
+/* ===================== AUDIO ===================== */
+let _ac=null;
+function getAC(){
+  if(!_ac)try{_ac=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}
+  return _ac;
+}
+function tone(freq,dur,type='sine',vol=0.28,ac=null){
+  const a=ac||getAC();if(!a)return;
+  try{
+    const o=a.createOscillator(),g=a.createGain();
+    o.connect(g);g.connect(a.destination);
+    o.type=type;o.frequency.setValueAtTime(freq,a.currentTime);
+    g.gain.setValueAtTime(vol,a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+dur);
+    o.start(a.currentTime);o.stop(a.currentTime+dur+0.01);
+  }catch(e){}
+}
+function playSound(type){
+  if(!S('nz_settings').sfx)return;
+  const ac=getAC();if(!ac)return;
+  try{
+    if(type==='correct'){
+      const o=ac.createOscillator(),g=ac.createGain();
+      o.connect(g);g.connect(ac.destination);
+      o.frequency.setValueAtTime(220,ac.currentTime);
+      o.frequency.linearRampToValueAtTime(440,ac.currentTime+0.08);
+      g.gain.setValueAtTime(0.3,ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.12);
+      o.start();o.stop(ac.currentTime+0.13);
+    } else if(type==='wrong'){
+      tone(180,0.12,'sawtooth',0.2);
+    } else if(type==='complete'){
+      [261.6,329.6,392].forEach((f,i)=>setTimeout(()=>tone(f,0.5,'sine',0.14),i*60));
+    } else if(type==='achievement'){
+      [440,550,660,880,1100].forEach((f,i)=>setTimeout(()=>tone(f,0.1,'sine',0.18),i*70));
+    } else if(type==='tap'){
+      tone(900,0.03,'sine',0.08);
+    }
+  }catch(e){}
+}
+
+/* ===================== UTILS ===================== */
+function $(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstElementChild;}
+let _toastT=null;
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(_toastT);_toastT=setTimeout(()=>el.classList.remove('show'),2800);
+}
+function todayKey(){return new Date().toISOString().slice(0,10);}
+function isPlayedToday(){return S('nz_last_played')===todayKey();}
+function brainLevel(s){if(s<=100)return'BEGINNER';if(s<=300)return'DEVELOPING';if(s<=500)return'SHARP';if(s<=750)return'EXPERT';return'MASTER';}
+function greet(){
+  const h=new Date().getHours();
+  if(h>=6&&h<12)return'Good morning 👋';
+  if(h>=12&&h<17)return'Good afternoon ☀️';
+  if(h>=17&&h<21)return'Good evening 🌆';
+  return'Hey, night owl 🦉';
+}
+function confetti(count=60){
+  const colors=['#7C3AED','#4F8EF7','#34D399','#F97316','#F472B6','#FBBF24'];
+  for(let i=0;i<count;i++){
+    const c=document.createElement('div');
+    c.className='confetti-piece';
+    c.style.cssText=`left:${Math.random()*100}vw;background:${colors[i%colors.length]};
+      animation:confettiFall ${1.5+Math.random()*2}s ease ${Math.random()*0.8}s forwards;
+      transform:rotate(${Math.random()*360}deg);`;
+    document.body.appendChild(c);
+    setTimeout(()=>c.remove(),4000);
+  }
+}
+let _comboT=null;
+function showCombo(text){
+  const el=document.getElementById('comboBadge');
+  el.textContent=text;
+  el.classList.remove('combo-out');
+  void el.offsetWidth;
+  el.classList.add('combo-in');
+  clearTimeout(_comboT);
+  _comboT=setTimeout(()=>{el.classList.remove('combo-in');el.classList.add('combo-out');setTimeout(()=>el.classList.remove('combo-out'),400);},1200);
+}
+function showAchToast(msg){
+  const el=document.getElementById('achToast');
+  el.innerHTML=msg;el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),3200);
+}
+
+/* ===================== ACHIEVEMENTS ===================== */
+const ACHIEVEMENTS=[
+  {id:'first_game',emoji:'🎮',title:'First Steps',check:()=>S('nz_games_played')>=1},
+  {id:'streak_3',emoji:'🔥',title:'On Fire',check:()=>S('nz_streak')>=3},
+  {id:'streak_7',emoji:'⚡',title:'Dedicated',check:()=>S('nz_streak')>=7},
+  {id:'score_200',emoji:'🧠',title:'Brain Boost',check:()=>S('nz_brain_score')>=200},
+  {id:'score_500',emoji:'💎',title:'Half Way',check:()=>S('nz_brain_score')>=500},
+  {id:'score_1000',emoji:'👑',title:'Master Mind',check:()=>S('nz_brain_score')>=1000},
+  {id:'games_10',emoji:'🏃',title:'Regular',check:()=>S('nz_games_played')>=10},
+  {id:'games_25',emoji:'🏅',title:'Veteran',check:()=>S('nz_games_played')>=25},
+  {id:'speed_king',emoji:'⚡',title:'Speed King',check:(gId,sc)=>gId==='math'&&sc>=15},
+  {id:'memory_pro',emoji:'💡',title:'Memory Pro',check:(gId,sc)=>gId==='memory'&&sc>=12},
+  {id:'wordsmith',emoji:'📝',title:'Wordsmith',check:(gId,sc)=>gId==='wordflash'&&sc>=12},
+  {id:'nback_pro',emoji:'🔵',title:'N-Back Pro',check:(gId,sc)=>gId==='dualnback'&&sc>=14},
+  {id:'pattern_lord',emoji:'🔷',title:'Pattern Lord',check:(gId,sc)=>gId==='pattern'&&sc>=8},
+  {id:'math_wizard',emoji:'🔢',title:'Math Wizard',check:(gId,sc)=>gId==='math'&&sc>=18},
+  {id:'schulte_flash',emoji:'▦',title:'Flash Focus',check:(gId,sc)=>gId==='schulte'&&sc>=60},
+];
+function checkAchievements(gameId,score){
+  const unlocked=S('nz_achievements');
+  ACHIEVEMENTS.forEach(a=>{
+    if(!unlocked.includes(a.id)){
+      let pass=false;
+      try{pass=a.check(gameId,score);}catch(e){}
+      if(pass){
+        unlocked.push(a.id);setS('nz_achievements',unlocked);
+        playSound('achievement');
+        showAchToast(`${a.emoji} Achievement unlocked! <strong>${a.title}</strong>`);
+        confetti(40);
+      }
+    }
+  });
+}
+
+/* ===================== SCORE SYSTEM ===================== */
+function awardScore(rawPts,skillKey,gameId,gameScore){
+  const skillLvl=(S('nz_skill_scores')[skillKey]||0);
+  const mult=skillLvl<30?1.5:skillLvl<60?1.0:0.8;
+  const pts=Math.round(rawPts*mult);
+  const cur=S('nz_brain_score');
+  const next=Math.max(0,Math.min(1000,cur+pts));
+  setS('nz_brain_score',next);
+  setS('nz_games_played',S('nz_games_played')+1);
+  // streak
+  const prevLast=S('nz_last_played');
+  const today=todayKey();
+  if(prevLast!==today){
+    const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+    const newStreak=prevLast===yesterday?S('nz_streak')+1:1;
+    setS('nz_streak',newStreak);
+    setS('nz_last_played',today);
+    setS('nz_today_games',1);
+  } else {
+    toast('🔥 Streak saved! Come back tomorrow!');
+    setS('nz_today_games',S('nz_today_games')+1);
+  }
+  // score history
+  const h=S('nz_score_history');
+  h.push(next);if(h.length>7)h.shift();
+  setS('nz_score_history',h);
+  // skill
+  if(skillKey){
+    const prev=S('nz_skill_scores');
+    const prevPrev=S('nz_skill_scores_prev');
+    prevPrev[skillKey]=prev[skillKey]||0;
+    prev[skillKey]=Math.min(100,Math.max(0,(prev[skillKey]||0)+Math.round(pts*0.12)));
+    setS('nz_skill_scores',prev);setS('nz_skill_scores_prev',prevPrev);
+  }
+  checkAchievements(gameId,gameScore);
+  return pts;
+}
+
+/* ===================== NAV / RENDER ===================== */
+let currentTab='home';
+const tabs=['home','games','progress','relax','profile'];
+function render(tab,dir){
+  if(!dir)dir=tabs.indexOf(tab)>tabs.indexOf(currentTab)?'fwd':'back';
+  currentTab=tab;
+  const app=document.getElementById('app');
+  app.innerHTML='';
+  let page;
+  if(tab==='home')page=renderHome();
+  else if(tab==='games')page=renderGames();
+  else if(tab==='progress')page=renderProgress();
+  else if(tab==='relax')page=renderRelax();
+  else if(tab==='profile')page=renderProfile();
+  page.classList.add('page','dir-'+dir);
+  app.appendChild(page);
+  app.appendChild(renderNav());
+}
+function renderNav(){
+  const nav=$(`<div class="nav"><div class="nav-inner"></div></div>`);
+  const inner=nav.querySelector('.nav-inner');
+  const items=[
+    {k:'home',l:'Home',svg:'<path d="M3 12L12 4l9 8M5 10v10h4v-6h6v6h4V10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>'},
+    {k:'games',l:'Games',svg:'<rect x="3" y="8" width="18" height="12" rx="4" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="8" cy="14" r="1.5" fill="currentColor"/><circle cx="16" cy="14" r="1.5" fill="currentColor"/>'},
+    {k:'progress',l:'Stats',svg:'<path d="M3 17l5-5 4 4 8-8" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M14 8h6v6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>'},
+    {k:'relax',l:'Relax',svg:'<path d="M12 3c2 3 2 6 0 9-2 3-2 6 0 9M6 6c1 2 1 4 0 6M18 6c-1 2-1 4 0 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>'},
+    {k:'profile',l:'Profile',svg:'<circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/><path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>'},
+  ];
+  items.forEach(it=>{
+    const b=$(`<button class="nav-btn ${currentTab===it.k?'active':''}"><svg viewBox="0 0 24 24">${it.svg}</svg><span>${it.l}</span></button>`);
+    b.onclick=()=>{
+      if(currentTab===it.k)return;
+      playSound('tap');
+      const dir=tabs.indexOf(it.k)>tabs.indexOf(currentTab)?'fwd':'back';
+      render(it.k,dir);
+      setTimeout(()=>{const all=document.querySelectorAll('.nav-btn');all[items.findIndex(x=>x.k===it.k)]?.classList.add('bounced');setTimeout(()=>all[items.findIndex(x=>x.k===it.k)]?.classList.remove('bounced'),400)},10);
+    };
+    inner.appendChild(b);
+  });
+  return nav;
+}
+
+/* ===================== HOME ===================== */
+function renderHome(){
+  const name=S('nz_username');
+  const score=S('nz_brain_score');
+  const streak=S('nz_streak');
+  const goal=S('nz_today_goal');
+  const todayCount=isPlayedToday()?S('nz_today_games'):0;
+  const todayGame=GAMES[new Date().getDay()%GAMES.length];
+  const p=$(`<div></div>`);
+  p.innerHTML=`
+    <div class="hdr">
+      <div><div class="greet" id="greetTxt"></div><h1>${name}</h1></div>
+      <div class="hdr-right">
+        <button class="icon-btn" id="darkToggle">${S('nz_dark_mode')?'☀️':'🌙'}</button>
+        <div class="avatar">${name.charAt(0).toUpperCase()}</div>
+      </div>
+    </div>
+    <div class="card score-card">
+      <div class="ring-wrap">
+        <svg width="230" height="230" viewBox="0 0 230 230">
+          <defs><linearGradient id="ringG" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#A78BFA"/><stop offset="50%" stop-color="#60A5FA"/><stop offset="100%" stop-color="#34D399"/>
+          </linearGradient></defs>
+          <circle cx="115" cy="115" r="100" stroke="rgba(167,139,250,0.12)" stroke-width="16" fill="none"/>
+          <circle id="ringFg" cx="115" cy="115" r="100" stroke="url(#ringG)" stroke-width="16" fill="none" stroke-linecap="round" stroke-dasharray="${2*Math.PI*100}" stroke-dashoffset="${2*Math.PI*100}"/>
+        </svg>
+        <div class="ring-inner">
+          <div class="ring-label">BRAIN SCORE</div>
+          <div class="ring-num" id="ringNum">0</div>
+          <div class="ring-delta">🧠 ${brainLevel(score)}</div>
+        </div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-mini">
+          <div class="ico flame flame-pulse">🔥</div>
+          <div><div class="v">${streak}</div><div class="l">Day Streak</div></div>
+        </div>
+        <div class="stat-mini">
+          <div class="ico target">🎯</div>
+          <div><div class="v">${Math.min(todayCount,goal)}/${goal}</div><div class="l">Today's Goal</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="sec-title"><h2>Your Skills</h2><a href="#" onclick="render('progress');return false;">Details ›</a></div>
+    <div class="card skills-card"><div id="skillBars"></div></div>
+    <div class="sec-title"><h2>Today's Challenge</h2></div>
+    <div class="cta" id="featuredCard" style="cursor:pointer;">
+      <div>
+        <div class="lbl">FEATURED TODAY</div>
+        <div class="ttl">${todayGame.icon} ${todayGame.name}</div>
+        <div class="sub">${todayGame.desc}</div>
+      </div>
+      <div class="play">▶</div>
+    </div>
+    <div class="sec-title"><h2>Quick Play</h2><a href="#" onclick="render('games');return false;">See all ›</a></div>
+    <div class="hscroll" id="qpRow"></div>
+  `;
+  p.querySelector('#greetTxt').textContent=greet();
+  p.querySelector('#darkToggle').onclick=()=>{setS('nz_dark_mode',!S('nz_dark_mode'));applyDark();render('home');};
+  p.querySelector('#featuredCard').onclick=()=>openGame(todayGame.id);
+  const qp=p.querySelector('#qpRow');
+  GAMES.forEach(g=>{
+    const best=S('nz_best_scores')[g.id];
+    const c=$(`<div class="qp-card" style="background:${g.bg}">
+      <div class="qico" style="background:${g.iconBg}">${g.icon}</div>
+      <div><div class="qn">${g.name}</div><div class="qlv">${best?'Best: '+best:'New!'}</div></div>
+    </div>`);
+    c.onclick=()=>{playSound('tap');openGame(g.id);};
+    qp.appendChild(c);
+  });
+  const skillBars=p.querySelector('#skillBars');
+  const sk=S('nz_skill_scores');
+  Object.entries({Memory:'memory',Focus:'focus',Logic:'logic',Speed:'speed'}).forEach(([label,key])=>{
+    const val=sk[key]||0;
+    const row=$(`<div class="skill-bar-row">
+      <div class="skill-bar-label">${label}</div>
+      <div class="skill-bar-bg"><div class="skill-bar-fill" style="width:0%"></div></div>
+      <div class="skill-bar-val">${val}</div>
+    </div>`);
+    skillBars.appendChild(row);
+    setTimeout(()=>{row.querySelector('.skill-bar-fill').style.width=val+'%';},50);
+  });
+  setTimeout(()=>{
+    const circ=2*Math.PI*100;const pct=Math.min(1,score/1000);
+    const fg=p.querySelector('#ringFg');
+    fg.style.transition='stroke-dashoffset 1.8s cubic-bezier(.22,1,.36,1)';
+    fg.style.strokeDashoffset=circ*(1-pct);
+    const num=p.querySelector('#ringNum');
+    const start=performance.now();
+    function tick(t){const k=Math.min(1,(t-start)/1800);const e=1-Math.pow(1-k,3);num.textContent=Math.round(score*e);if(k<1)requestAnimationFrame(tick);}
+    requestAnimationFrame(tick);
+  },40);
+  return p;
+}
+
+/* ===================== GAMES DATA ===================== */
+const GAMES=[
+  {id:'schulte',name:'Schulte Table',cat:'Focus',skill:'focus',bg:'#EEF2FF',iconBg:'linear-gradient(135deg,#7C3AED,#4F8EF7)',icon:'▦',desc:'Tap numbers in order, as fast as you can'},
+  {id:'memory',name:'Memory Matrix',cat:'Memory',skill:'memory',bg:'#F3E8FF',iconBg:'linear-gradient(135deg,#4F8EF7,#60A5FA)',icon:'🧠',desc:'Memorize the pattern, then recall it'},
+  {id:'pattern',name:'Pattern IQ',cat:'Logic',skill:'logic',bg:'#FFF0F3',iconBg:'linear-gradient(135deg,#F472B6,#EC4899)',icon:'💡',desc:'Find the pattern in color, number & matrix sequences'},
+  {id:'wordflash',name:'Word Flash',cat:'Memory',skill:'memory',bg:'#ECFDF5',iconBg:'linear-gradient(135deg,#34D399,#10B981)',icon:'📝',desc:'Remember the flashed word under time pressure'},
+  {id:'dualnback',name:'Word Chain',cat:'Memory',skill:'memory',bg:'#EFF6FF',iconBg:'linear-gradient(135deg,#3B82F6,#1D4ED8)',icon:'🔗',desc:'Remember the chain of words — test your verbal memory'},
+  {id:'math',name:'Quick Math',cat:'Speed',skill:'speed',bg:'#FFFBEB',iconBg:'linear-gradient(135deg,#FBBF24,#F59E0B)',icon:'🔢',desc:'Solve math problems at speed'},
+  {id:'stroopx',name:'Color Stroop Xtreme',cat:'Focus',skill:'focus',bg:'#FFF0F3',iconBg:'linear-gradient(135deg,#F472B6,#EC4899)',icon:'🎨',desc:'Name the ink color, not the word — as fast as you can'},
+  {id:'iqtest',name:'IQ Test',cat:'Reasoning',skill:'logic',bg:'#F0FDF4',iconBg:'linear-gradient(135deg,#34D399,#059669)',icon:'🧩',desc:'15 Hinglish reasoning questions — find your IQ score'},
+];
+const CATS=['All','Memory','Focus','Logic','Speed','Reasoning'];
+let gamesFilter='All';
+
+function renderGames(){
+  const p=$(`<div></div>`);
+  p.innerHTML=`
+    <div class="hdr"><div><div class="greet">Train your brain</div><h1>All Games</h1></div></div>
+    <div class="chip-row" id="chips"></div>
+    <div class="game-grid" id="ggrid"></div>
+  `;
+  const chips=p.querySelector('#chips');
+  CATS.forEach(c=>{
+    const ch=$(`<button class="chip ${c===gamesFilter?'active':''}">${c}</button>`);
+    ch.onclick=()=>{playSound('tap');gamesFilter=c;fill();chips.querySelectorAll('.chip').forEach((el,i)=>el.classList.toggle('active',CATS[i]===c));};
+    chips.appendChild(ch);
+  });
+  const grid=p.querySelector('#ggrid');
+  function fill(){
+    grid.innerHTML='';
+    GAMES.filter(g=>gamesFilter==='All'||g.cat===gamesFilter).forEach(g=>{
+      const best=S('nz_best_scores')[g.id];
+      const isNew=!best;
+      const todayFeatured=GAMES[new Date().getDay()%GAMES.length].id===g.id;
+      const c=$(`<div class="gcard" style="background:${g.bg}">
+        ${isNew?'<div class="new-badge">NEW</div>':''}
+        ${todayFeatured?'<div class="featured-badge">★ TODAY</div>':''}
+        <div class="gico" style="background:${g.iconBg}">${g.icon}</div>
+        <div class="gn">${g.name}</div>
+        <div class="gbest">${best?'Best: '+best:'Play to set record!'}</div>
+        <div class="grow"><span class="gtag">${g.cat}</span></div>
+      </div>`);
+      c.onclick=()=>{playSound('tap');openGame(g.id);};
+      grid.appendChild(c);
+    });
+  }
+  fill();
+  return p;
+}
+
+/* ===================== GAME SCREEN FRAMEWORK ===================== */
+function openGame(id){
+  const g=GAMES.find(x=>x.id===id);
+  const wrap=$(`<div class="game-screen"></div>`);
+  document.body.appendChild(wrap);
+  let state={score:0,timer:null,startTs:Date.now()};
+  function hdr(){
+    return `<div class="gs-hdr">
+      <button class="gs-back">←</button>
+      <div class="gs-title">${g.name}</div>
+      <span class="gs-tag">${g.cat}</span>
+    </div>
+    <div class="gs-stats">
+      <div class="gs-stat"><div class="v" id="gsTime">0.0s</div><div class="l">Time</div></div>
+      <div class="gs-stat"><div class="v" id="gsScore">0</div><div class="l">Score</div></div>
+    </div>`;
+  }
+  function closeGame(){
+    clearInterval(state.timer);
+    wrap.style.animation='slideUp .25s reverse';
+    setTimeout(()=>{wrap.remove();},230);
+  }
+  function startClock(){
+    state.timer=setInterval(()=>{
+      const el=wrap.querySelector('#gsTime');
+      if(el)el.textContent=((Date.now()-state.startTs)/1000).toFixed(1)+'s';
+    },100);
+  }
+  function setScore(s){state.score=s;const el=wrap.querySelector('#gsScore');if(el)el.textContent=s;}
+  function endGame(opts){
+    clearInterval(state.timer);
+    const secs=((Date.now()-state.startTs)/1000).toFixed(1);
+    const best=S('nz_best_scores');
+    const isRec=opts.bestVal!==undefined?(!best[id]||opts.bestVal>best[id]):(!best[id]||opts.value>best[id]);
+    const recVal=opts.bestVal!==undefined?opts.bestVal:opts.value;
+    if(isRec){best[id]=recVal;setS('nz_best_scores',best);}
+    const pts=awardScore(Math.max(5,opts.points||10),g.skill,id,opts.value);
+    playSound('complete');
+    const starThresh=opts.starThresh||[5,10,15];
+    const stars=opts.value>=starThresh[2]?3:opts.value>=starThresh[1]?2:opts.value>=starThresh[0]?1:0;
+    if(stars===3)confetti(50);
+    wrap.innerHTML=`${hdr()}
+      <div class="end">
+        <div class="em">${opts.emoji||'🎉'}</div>
+        <h2>${opts.title||'Well done!'}</h2>
+        <div style="color:var(--text2);font-size:13px;margin-bottom:8px;">${opts.sub||''}</div>
+        <div class="stars">
+          <span class="star ${stars>=1?'lit':''}">⭐</span>
+          <span class="star ${stars>=2?'lit':''}">⭐</span>
+          <span class="star ${stars>=3?'lit':''}">⭐</span>
+        </div>
+        <div class="gain">+${pts} Brain Score</div>
+        ${isRec?'<div class="rec">✨ New Personal Record!</div>':''}
+        ${opts.statsHtml||''}
+        <div class="btns">
+          <button class="btn-primary" id="again">Play Again</button>
+          <button class="btn-share">📋 Share Score</button>
+          <button class="btn-ghost" id="back">Back to Games</button>
+        </div>
+      </div>`;
+    wrap.querySelector('#again').onclick=()=>{wrap.remove();openGame(id);};
+    wrap.querySelector('#back').onclick=()=>{closeGame();setTimeout(()=>render('games'),240);};
+    wrap.querySelector('.gs-back').onclick=()=>{closeGame();setTimeout(()=>render('games'),240);};
+    wrap.querySelector('.btn-share').onclick=()=>{
+      const txt=`I scored ${opts.value} in ${g.name} on NeuroZen! 🧠 Can you beat it?`;
+      navigator.clipboard?.writeText(txt).then(()=>toast('📋 Copied to clipboard!')).catch(()=>toast(txt));
+    };
+  }
+  wrap.innerHTML=hdr()+`<div class="gs-body" id="gsBody"></div>`;
+  wrap.querySelector('.gs-back').onclick=closeGame;
+  const body=wrap.querySelector('#gsBody');
+  if(id==='schulte')playSchulte(body,setScore,endGame,wrap,startClock);
+  else if(id==='memory')playMemory(body,setScore,endGame,wrap,startClock);
+  else if(id==='pattern')playPattern(body,setScore,endGame,wrap,startClock);
+  else if(id==='wordflash')playWordFlash(body,setScore,endGame,wrap,startClock);
+  else if(id==='dualnback')playNeuralChain(body,setScore,endGame,wrap,startClock);
+  else if(id==='math')playMath(body,setScore,endGame,wrap,startClock);
+  else if(id==='stroopx')playStroopX(body,setScore,endGame,wrap,startClock);
+  else if(id==='iqtest')playIQTest(body,setScore,endGame,wrap,startClock);
+}
+
+/* ===================== SCHULTE TABLE ===================== */
+const SCHULTE_CONFIGS=[
+  {size:3,target:20,mult:1.0,label:'3×3'},
+  {size:4,target:45,mult:1.5,label:'4×4'},
+  {size:5,target:80,mult:2.0,label:'5×5'},
+  {size:6,target:120,mult:2.5,label:'6×6'},
+  {size:7,target:160,mult:3.0,label:'7×7'},
+];
+function playSchulte(body,setScore,end,wrap,startClock){
+  const lvl=Math.min(4,S('nz_schulte_level')||0);
+  const cfg=SCHULTE_CONFIGS[lvl];
+  const total=cfg.size*cfg.size;
+  const nums=Array.from({length:total},(_,i)=>i+1).sort(()=>Math.random()-.5);
+  const instrEl=$(`<div class="instr">Tap <strong>1 → ${total}</strong> in order as fast as you can. (${cfg.label} — Level ${lvl+1}/5)<br><button style="margin-top:12px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;font-size:14px;" id="schulteStart">▶ Start</button></div>`);
+  body.appendChild(instrEl);
+  instrEl.querySelector('#schulteStart').onclick=()=>{instrEl.style.display='none';startClock&&startClock();};
+  const timerBar=$(`<div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>`);
+  body.appendChild(timerBar);
+  const grid=$(`<div class="schulte-grid" style="grid-template-columns:repeat(${cfg.size},1fr);font-size:${cfg.size<=4?'22px':'16px'};"></div>`);
+  body.appendChild(grid);
+  const status=$(`<div style="text-align:center;font-size:13px;color:var(--text2);margin-top:10px;" id="sStatus">Find: <strong>1</strong></div>`);
+  body.appendChild(status);
+  let next=1,startTs=null,barTimer=null;
+  nums.forEach(n=>{
+    const c=$(`<div class="sc-cell">${n}</div>`);
+    c.onclick=()=>{
+      if(!startTs){startTs=Date.now();startBar();}
+      if(n===next){
+        playSound('correct');
+        c.classList.add('done');
+        setScore(next);next++;
+        status.innerHTML=next<=total?`Find: <strong>${next}</strong>`:'';
+        if(next>total){
+          clearInterval(barTimer);
+          const secs=(Date.now()-startTs)/1000;
+          const rawPts=Math.ceil(1000/secs)*cfg.mult;
+          const best=S('nz_best_scores');
+          const bestKey='schulte_'+lvl;
+          if(!best[bestKey]||secs<best[bestKey]){best[bestKey]=Math.round(secs*10)/10;setS('nz_best_scores',best);}
+          const prev=best[bestKey];
+          setS('nz_schulte_level',Math.min(4,lvl+1));
+          end({
+            title:'Grid Clear! 🏆',emoji:'🏆',
+            sub:`${secs.toFixed(1)}s · ${cfg.label} Level ${lvl+1}${prev&&prev!==Math.round(secs*10)/10?` · PB was ${prev}s`:''}`,
+            value:Math.round(rawPts),points:Math.round(rawPts),
+            starThresh:[Math.round(rawPts*0.5),Math.round(rawPts*0.8),rawPts],
+            statsHtml:`<div class="end-stats"><div class="row"><span>Time</span><span class="val">${secs.toFixed(1)}s</span></div><div class="row"><span>Grid</span><span class="val">${cfg.label}</span></div><div class="row"><span>Level Up →</span><span class="val">${SCHULTE_CONFIGS[Math.min(4,lvl+1)].label}</span></div></div>`
+          });
+        }
+      } else {
+        playSound('wrong');
+        c.classList.add('wrong');
+        setTimeout(()=>c.classList.remove('wrong'),350);
+      }
+    };
+    grid.appendChild(c);
+  });
+  function startBar(){
+    const maxMs=cfg.target*1000;
+    barTimer=setInterval(()=>{
+      const elapsed=Date.now()-startTs;
+      const pct=Math.max(0,100-(elapsed/maxMs*100));
+      const bar=wrap.querySelector('#sBar');
+      if(bar){
+        bar.style.width=pct+'%';
+        const remaining=(maxMs-elapsed)/1000;
+        bar.className='timer-fill '+(remaining<10?'timer-red':remaining<30?'timer-yellow':'timer-green');
+      }
+    },100);
+  }
+}
+
+/* ===================== MEMORY MATRIX ===================== */
+function playMemory(body,setScore,end,wrap,startClock){
+  const ROUNDS=[{g:3,c:3},{g:4,c:4},{g:4,c:5},{g:5,c:6},{g:5,c:8}];
+  let round=0,total=0;
+  const instrBox=$(`<div class="instr" style="margin-bottom:16px;">Highlighted cells yaad karo, phir tap karo!<br>
+    <button style="margin-top:12px;padding:10px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;font-size:14px;" id="memStart">▶ Start</button>
+  </div>`);
+  body.appendChild(instrBox);
+  instrBox.querySelector('#memStart').onclick=()=>{
+    instrBox.remove();
+    startClock&&startClock();
+    doRound();
+  };
+  function doRound(){
+    const cfg=ROUNDS[round];
+    const cellCount=cfg.g*cfg.g;
+    const cellSize=Math.min(58,Math.floor(300/cfg.g));
+    while(body.lastChild)body.removeChild(body.lastChild);
+    const info=document.createElement('div');
+    info.style.cssText='text-align:center;font-size:13px;color:var(--text2);font-weight:600;margin-bottom:12px;';
+    info.textContent=`Round ${round+1}/5 — ${cfg.c} cells yaad karo`;
+    info.id='memInfo';
+    body.appendChild(info);
+    const gridWrap=document.createElement('div');
+    gridWrap.style.cssText='position:relative;display:flex;justify-content:center;';
+    const grid=document.createElement('div');
+    grid.id='memGrid';
+    grid.style.cssText=`display:grid;grid-template-columns:repeat(${cfg.g},${cellSize}px);gap:8px;`;
+    const cells=[];
+    for(let i=0;i<cellCount;i++){
+      const c=document.createElement('div');
+      c.style.cssText=`width:${cellSize}px;height:${cellSize}px;background:var(--card);border-radius:12px;box-shadow:var(--shadow);transition:all .2s;cursor:pointer;`;
+      c.dataset.i=i;
+      grid.appendChild(c);
+      cells.push(c);
+    }
+    const overlay=document.createElement('div');
+    overlay.id='memOverlay';
+    overlay.style.cssText='position:absolute;inset:0;background:rgba(10,5,30,0.80);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:5;pointer-events:none;';
+    const cdNum=document.createElement('div');
+    cdNum.style.cssText='font-size:80px;font-weight:900;color:#fff;line-height:1;';
+    cdNum.textContent='3';
+    const cdLbl=document.createElement('div');
+    cdLbl.style.cssText='font-size:14px;font-weight:700;color:#A78BFA;letter-spacing:.2em;margin-top:8px;';
+    cdLbl.textContent='MEMORIZE!';
+    overlay.appendChild(cdNum);
+    overlay.appendChild(cdLbl);
+    gridWrap.appendChild(grid);
+    gridWrap.appendChild(overlay);
+    body.appendChild(gridWrap);
+    let count=3;
+    const cdInt=setInterval(()=>{
+      count--;
+      if(count>0){
+        cdNum.textContent=count;
+      } else {
+        clearInterval(cdInt);
+        overlay.remove();
+        const pattern=[];
+        while(pattern.length<cfg.c){
+          const r=Math.floor(Math.random()*cellCount);
+          if(!pattern.includes(r))pattern.push(r);
+        }
+        pattern.forEach(i=>{
+          cells[i].style.background='linear-gradient(135deg,#7C3AED,#4F8EF7)';
+          cells[i].style.transform='scale(1.06)';
+          cells[i].style.boxShadow='0 0 20px rgba(124,58,237,.6)';
+        });
+        setTimeout(()=>{
+          cells.forEach(c=>{
+            c.style.background='var(--card)';
+            c.style.transform='';
+            c.style.boxShadow='var(--shadow)';
+          });
+          const infoEl=body.querySelector('#memInfo');
+          if(infoEl)infoEl.textContent=`Round ${round+1}/5 — ${cfg.c} cells tap karo!`;
+          setTimeout(()=>{
+            let picked=[];
+            cells.forEach(c=>{
+              c.onclick=()=>{
+                const idx=+c.dataset.i;
+                if(picked.includes(idx))return;
+                picked.push(idx);
+                if(pattern.includes(idx)){
+                  c.style.background='#34D399';
+                  c.style.transform='scale(0.94)';
+                  total++;setScore(total);
+                  playSound('correct');
+                } else {
+                  c.style.background='#F87171';
+                  playSound('wrong');
+                  gridWrap.style.animation='shake .3s';
+                  setTimeout(()=>gridWrap.style.animation='',300);
+                }
+                if(picked.length>=cfg.c){
+                  const infoEl2=body.querySelector('#memInfo');
+                  if(infoEl2)infoEl2.textContent=`Round ${round+1} done! ${picked.filter(p=>pattern.includes(p)).length===cfg.c?'🎯 Perfect!':''}`;
+                  setTimeout(()=>{
+                    round++;
+                    if(round>=5){
+                      const max=ROUNDS.reduce((a,r)=>a+r.c,0);
+                      end({title:'Memory Complete! 🧠',emoji:'🧠',sub:`${total}/${max} correct`,value:total,points:8+total*3,starThresh:[10,18,26]});
+                    } else doRound();
+                  },900);
+                }
+              };
+            });
+          },500);
+        },1300);
+      }
+    },750);
+  }
+}
+
+/* ===================== PATTERN IQ ===================== */
+const PAT_COLORS=['#7C3AED','#4F8EF7','#34D399','#F97316','#F472B6','#FBBF24','#EF4444','#06B6D4'];
+const PAT_SHAPES=['●','■','▲','◆','★','⬟','⬡','✦'];
+function genNumSeq(){
+  const types=[
+    ()=>{const s=Math.floor(Math.random()*5)+1,a=Math.floor(Math.random()*10)+2;return{seq:[s,s+a,s+2*a,s+3*a],ans:s+4*a,rule:'+'+a};},
+    ()=>{const s=Math.floor(Math.random()*3)+2,a=Math.floor(Math.random()*3)+2;return{seq:[s,s*a,s*a*a,s*a*a*a],ans:s*a*a*a*a,rule:'×'+a};},
+    ()=>{const s1=Math.floor(Math.random()*5)+1,s2=Math.floor(Math.random()*5)+3;return{seq:[s1,s2,s1+s2,s1+2*s2],ans:2*s1+3*s2,rule:'fib'};},
+    ()=>{const a=Math.floor(Math.random()*4)+2,b=Math.floor(Math.random()*3)+2;return{seq:[a,b,a+b,b*2],ans:a+b+b*2,rule:'mix'};},
+  ];
+  return types[Math.floor(Math.random()*types.length)]();
+}
+function playPattern(body,setScore,end,wrap,startClock){
+  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Pattern dhundo aur sahi answer chunno!<br>
+  <button style="margin-top:10px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="patStart">▶ Start</button>
+</div>`);
+  body.appendChild(instrEl);
+  const host=$(`<div></div>`);body.appendChild(host);
+  let q=0,score=0,arcTimer=null;
+  function showArc(secs,onDone){
+    clearInterval(arcTimer);
+    const circ=2*Math.PI*30;
+    const arcEl=host.querySelector('#arcSvg');
+    if(!arcEl)return;
+    let remaining=secs*10;
+    arcTimer=setInterval(()=>{
+      remaining--;
+      const fg=host.querySelector('#arcFg');
+      const num=host.querySelector('#arcNum');
+      if(!fg||!num){clearInterval(arcTimer);return;}
+      const pct=remaining/(secs*10);
+      fg.style.strokeDashoffset=circ*(1-pct);
+      fg.setAttribute('stroke',remaining<15?'#EF4444':remaining<30?'#F59E0B':'#7C3AED');
+      num.textContent=Math.ceil(remaining/10);
+      if(remaining<=0){clearInterval(arcTimer);onDone();}
+    },100);
+  }
+  function next(){
+    if(q>=10){
+      end({title:'Pattern Master!',emoji:'💡',sub:`Score: ${score}/10`,value:score,points:score*5,starThresh:[4,7,9],
+        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}/10</span></div><div class="row"><span>Accuracy</span><span class="val">${Math.round(score/10*100)}%</span></div></div>`});
+      return;
+    }
+    clearInterval(arcTimer);
+    const type=q%3;
+    const typeName=['Color','Number','Matrix'][type];
+    let answerIdx=0;
+    let html='';
+    let opts=[];
+    let correctOpt='';
+    if(type===0){
+      // Color pattern
+      const shape=PAT_SHAPES[Math.floor(Math.random()*PAT_SHAPES.length)];
+      const cidx1=Math.floor(Math.random()*PAT_COLORS.length);
+      let cidx2=cidx1;while(cidx2===cidx1)cidx2=Math.floor(Math.random()*PAT_COLORS.length);
+      const seq=[cidx1,cidx2,cidx1];const ans=cidx2;
+      const allCols=Array.from({length:PAT_COLORS.length},(_,i)=>i).filter(i=>i!==ans);
+      opts=[ans,...allCols.sort(()=>Math.random()-.5).slice(0,3)].sort(()=>Math.random()-.5);
+      answerIdx=opts.indexOf(ans);
+      html=`<div class="q-type-badge">COLOR</div>
+        <div class="pat-seq">${seq.map(c=>`<div class="pat-item" style="background:${PAT_COLORS[c]}">${shape}</div>`).join('')}<div class="pat-item q">?</div></div>
+        <div class="pat-opts">${opts.map((c,i)=>`<button class="pat-opt" data-i="${i}" style="background:${PAT_COLORS[c]};color:#fff;">${shape}</button>`).join('')}</div>`;
+    } else if(type===1){
+      // Number sequence
+      const {seq,ans}=genNumSeq();
+      const distractors=new Set([ans]);
+      while(distractors.size<4){const d=ans+Math.floor(Math.random()*20)-10;if(d>0)distractors.add(d);}
+      opts=[...distractors].sort(()=>Math.random()-.5);
+      answerIdx=opts.indexOf(ans);
+      html=`<div class="q-type-badge">NUMBER</div>
+        <div class="pat-seq">${seq.map(n=>`<div class="pat-item" style="background:#7C3AED;font-size:22px;">${n}</div>`).join('')}<div class="pat-item q" style="font-size:22px;">?</div></div>
+        <div class="pat-opts">${opts.map((v,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:24px;font-weight:800;">${v}</button>`).join('')}</div>`;
+    } else {
+      // Shape matrix — 3×3 grid, find missing bottom-right
+      const rowShapes=[0,1,2].map(()=>Math.floor(Math.random()*PAT_SHAPES.length));
+      const rowCols=[0,1,2].map(()=>Math.floor(Math.random()*PAT_COLORS.length));
+      // Pattern: each row has same shape, each column has same color
+      const grid=[];
+      for(let r=0;r<3;r++)for(let c=0;c<3;c++)grid.push({s:rowShapes[r],c:rowCols[c]});
+      // Remove bottom-right
+      const missingS=rowShapes[2],missingC=rowCols[2];
+      const correct=`${missingS}_${missingC}`;
+      const wrongOpts=[];
+      while(wrongOpts.length<3){
+        const ws=(missingS+(Math.floor(Math.random()*4)+1))%PAT_SHAPES.length;
+        const wc=(missingC+(Math.floor(Math.random()*4)+1))%PAT_COLORS.length;
+        const k=`${ws}_${wc}`;
+        if(!wrongOpts.includes(k)&&k!==correct)wrongOpts.push(k);
+      }
+      opts=[correct,...wrongOpts].sort(()=>Math.random()-.5);
+      answerIdx=opts.indexOf(correct);
+      const cellHTML=grid.map((cell,i)=>
+        i===8?`<div class="pm-cell missing">?</div>`
+        :`<div class="pm-cell" style="background:${PAT_COLORS[cell.c]};color:#fff;">${PAT_SHAPES[cell.s]}</div>`
+      ).join('');
+      html=`<div class="q-type-badge">MATRIX</div>
+        <div class="pat-matrix">${cellHTML}</div>
+        <div class="pat-opts">${opts.map((k,i)=>{const[s,c]=k.split('_').map(Number);return`<button class="pat-opt" data-i="${i}" style="background:${PAT_COLORS[c]};color:#fff;">${PAT_SHAPES[s]}</button>`}).join('')}</div>`;
+    }
+    const arcHtml=`<div class="arc-wrap">
+      <svg id="arcSvg" width="70" height="70" viewBox="0 0 70 70">
+        <circle cx="35" cy="35" r="30" fill="none" stroke="var(--border)" stroke-width="5"/>
+        <circle id="arcFg" cx="35" cy="35" r="30" fill="none" stroke="#7C3AED" stroke-width="5" stroke-linecap="round" transform="rotate(-90 35 35)" stroke-dasharray="${2*Math.PI*30}" stroke-dashoffset="0"/>
+      </svg>
+      <div class="arc-num" id="arcNum">4</div>
+    </div>`;
+    host.innerHTML=arcHtml+html+`<div style="text-align:center;margin-top:12px;color:var(--text2);font-size:12px;">Q${q+1}/10</div>`;
+    showArc(4,()=>{playSound('wrong');q++;next();});
+    host.querySelectorAll('.pat-opt').forEach(btn=>{
+      btn.onclick=()=>{
+        clearInterval(arcTimer);
+        const chosen=+btn.dataset.i;
+        if(chosen===answerIdx){
+          playSound('correct');score++;setScore(score);
+          btn.classList.add('correct-ans');
+        } else {
+          playSound('wrong');
+          btn.classList.add('wrong-ans');
+          host.querySelectorAll('.pat-opt')[answerIdx].classList.add('correct-ans');
+        }
+        setTimeout(()=>{q++;next();},500);
+      };
+    });
+  }
+  instrEl.querySelector('#patStart').onclick=()=>{instrEl.remove();startClock&&startClock();next();};
+}
+
+/* ===================== WORD FLASH ===================== */
+const WORD_GROUPS=[
+  ['BRAIN','TRAIN','GRAIN','DRAIN'],['FLAME','FLARE','BLAME','BLADE'],
+  ['SPADE','SPACE','SPARE','SPARK'],['PLANE','PLACE','PLAIN','PLANK'],
+  ['STONE','STORE','STOVE','STOKE'],['CRANE','CRATE','GRACE','GRADE'],
+  ['BREAD','DREAD','TREAD','BRAID'],['SWIFT','SHIFT','SWIRL','SNIFF'],
+  ['FROST','FRONT','FROTH','FROWN'],['SHARP','SHARE','SHARD','CHARM'],
+  ['LIGHT','NIGHT','TIGHT','SIGHT'],['FORCE','FORGE','FORTE','FORTS'],
+  ['PRIDE','PRICE','PRISM','PRISE'],['CLOCK','BLOCK','FLOCK','KNOCK'],
+  ['CLOUD','CLOUT','FLOUR','FLOAT'],
+];
+function playWordFlash(body,setScore,end,wrap,startClock){
+  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Word flash hoga — yaad karo, phir dhundo!<br>
+  <button style="margin-top:10px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="wfStart">▶ Start</button>
+</div>`);
+  body.appendChild(instrEl);
+  const host=$(`<div></div>`);body.appendChild(host);
+  const roundBar=$(`<div class="round-bar" id="wRBar"></div>`);
+  body.appendChild(roundBar);
+  for(let i=0;i<15;i++)roundBar.appendChild($(`<div class="round-dot ${i===0?'current':''}"></div>`));
+  let q=0,score=0,shuffled=[...WORD_GROUPS].sort(()=>Math.random()-.5);
+  function updateBar(){const dots=wrap.querySelectorAll('.round-dot');dots.forEach((d,i)=>{d.className='round-dot'+(i<q?' done':i===q?' current':'');});}
+  function next(){
+    if(q>=15){
+      end({title:'Word Flash Done!',emoji:'📝',sub:`Score: ${score}/15`,value:score,points:score*4,starThresh:[6,10,13],
+        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}/15</span></div><div class="row"><span>Accuracy</span><span class="val">${Math.round(score/15*100)}%</span></div></div>`});
+      return;
+    }
+    updateBar();
+    const group=shuffled[q%shuffled.length];
+    const correctWord=group[0];
+    const displayMs=Math.max(400,800-q*26);
+    const opts=[...group].sort(()=>Math.random()-.5);
+    host.innerHTML=`<div class="word-display" id="wDisplay">${correctWord}</div><div class="word-opts" id="wOpts" style="opacity:0"></div>
+      <div style="text-align:center;font-size:12px;color:var(--text2);margin-top:8px;">Q${q+1}/15 · ${displayMs}ms flash</div>`;
+    const optsEl=host.querySelector('#wOpts');
+    opts.forEach(w=>{
+      const b=$(`<button class="word-opt" data-w="${w}">${w}</button>`);
+      optsEl.appendChild(b);
+    });
+    setTimeout(()=>{
+      host.querySelector('#wDisplay').style.opacity='0';
+      host.querySelector('#wDisplay').style.transition='opacity 0.2s';
+      setTimeout(()=>{
+        host.querySelector('#wDisplay').textContent='?';
+        host.querySelector('#wDisplay').style.opacity='1';
+        optsEl.style.opacity='1';
+        optsEl.style.transition='opacity 0.2s';
+        optsEl.querySelectorAll('.word-opt').forEach(b=>{
+          b.onclick=()=>{
+            const chosen=b.dataset.w;
+            if(chosen===correctWord){playSound('correct');score++;setScore(score);b.classList.add('correct-ans');}
+            else{playSound('wrong');b.classList.add('wrong-ans');optsEl.querySelectorAll('.word-opt').forEach(bb=>{if(bb.dataset.w===correctWord)bb.classList.add('correct-ans');});}
+            optsEl.querySelectorAll('.word-opt').forEach(bb=>bb.disabled=true);
+            setTimeout(()=>{q++;next();},500);
+          };
+        });
+      },150);
+    },displayMs);
+  }
+  instrEl.querySelector('#wfStart').onclick=()=>{instrEl.remove();startClock&&startClock();next();};
+}
+
+/* ===================== WORD CHAIN ===================== */
+function playNeuralChain(body,setScore,end,wrap,startClock){
+  const WORD_SETS=[
+    ['Apple','Chair','River','Cloud','Music'],
+    ['Tiger','Bread','Stone','Light','Phone'],
+    ['Dream','Water','House','Paper','Green'],
+    ['Earth','Smile','Train','Dance','Maple'],
+    ['Ocean','Clock','Flame','Brain','Sugar'],
+    ['Grass','Pilot','Queen','Frost','Arrow'],
+    ['Lemon','Storm','Movie','Brush','Radio'],
+    ['Pearl','Eagle','Comet','Prize','Unity'],
+  ];
+  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">
+    <strong>Word Chain</strong><br>
+    Ek ke baad ek words dikhenge — <em>saare yaad karo!</em><br>
+    End mein sab words sahi order mein tap karo.<br>
+    <span style="font-size:11px;color:var(--primary);">Chain lambi hoti jayegi — kitni yaad rakh sakte ho?</span><br>
+    <button style="margin-top:12px;padding:10px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="wcStart">▶ Start</button>
+  </div>`);
+  body.appendChild(instrEl);
+  const host=$(`<div style="text-align:center;"></div>`);
+  body.appendChild(host);
+  instrEl.querySelector('#wcStart').onclick=()=>{
+    instrEl.remove();
+    startClock&&startClock();
+    startRound(0,[]);
+  };
+  function startRound(chainLen,existing){
+    const allWords=WORD_SETS.flat();
+    const usedSet=new Set(existing);
+    const available=allWords.filter(w=>!usedSet.has(w));
+    const newWord=available[Math.floor(Math.random()*available.length)];
+    const chain=[...existing,newWord];
+    host.innerHTML='';
+    const chainLen2=chain.length;
+    let idx=0;
+    function showNextWord(){
+      host.innerHTML=`
+        <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">Chain ${chainLen2} — Word ${idx+1}/${chainLen2}</div>
+        <div style="font-size:42px;font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding:24px;background-color:var(--card);border-radius:20px;box-shadow:var(--shadow);margin:0 auto;display:inline-block;min-width:180px;">
+          ${chain[idx]}
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:var(--text2);">yaad karo...</div>
+      `;
+      idx++;
+      if(idx<chainLen2){
+        setTimeout(showNextWord,1200);
+      } else {
+        setTimeout(()=>showRecall(chain),600);
+      }
+    }
+    showNextWord();
+    function showRecall(chain){
+      const shuffled=[...chain].sort(()=>Math.random()-.5);
+      let tapped=[];
+      host.innerHTML=`
+        <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">Sahi order mein tap karo!</div>
+        <div style="min-height:48px;background:var(--card);border-radius:14px;padding:10px;margin-bottom:14px;box-shadow:var(--shadow);font-size:14px;font-weight:600;color:var(--primary);" id="wcAnswer">
+          ${chain.map((_,i)=>`<span id="wcSlot${i}" style="opacity:.3;">_____</span>`).join(' → ')}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;" id="wcBtns">
+          ${shuffled.map(w=>`<button class="wc-btn" data-w="${w}" style="padding:10px 16px;background:var(--card);border-radius:12px;font-weight:600;font-size:14px;box-shadow:var(--shadow);border:2px solid var(--border);">${w}</button>`).join('')}
+        </div>
+        <div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text2);">${tapped.length}/${chain.length} tapped</div>
+      `;
+      host.querySelectorAll('.wc-btn').forEach(btn=>{
+        btn.onclick=()=>{
+          if(btn.disabled)return;
+          btn.disabled=true;
+          btn.style.opacity='.4';
+          tapped.push(btn.dataset.w);
+          const slot=host.querySelector(`#wcSlot${tapped.length-1}`);
+          if(slot){
+            const correct=chain[tapped.length-1]===btn.dataset.w;
+            slot.textContent=btn.dataset.w;
+            slot.style.opacity='1';
+            slot.style.color=correct?'#34D399':'#EF4444';
+            playSound(correct?'correct':'wrong');
+          }
+          if(tapped.length>=chain.length){
+            const correctCount=tapped.filter((w,i)=>w===chain[i]).length;
+            const allCorrect=correctCount===chain.length;
+            setTimeout(()=>{
+              if(allCorrect){
+                setScore(chain.length);
+                host.innerHTML+=`<div style="text-align:center;margin-top:12px;font-size:16px;font-weight:700;color:#34D399;">✅ Perfect! Next chain...</div>`;
+                setTimeout(()=>startRound(chainLen2,chain),1200);
+              } else {
+                const finalScore=chain.length-1;
+                end({
+                  title:'Word Chain Complete! 🔗',
+                  emoji:'🔗',
+                  sub:`Longest chain: ${finalScore} words`,
+                  value:finalScore,
+                  points:Math.max(5,finalScore*4),
+                  starThresh:[4,7,10]
+                });
+              }
+            },800);
+          }
+        };
+      });
+    }
+  }
+}
+
+/* ===================== QUICK MATH ===================== */
+const TIERS=[
+  {label:'TIER 1',ops:['+','-'],maxA:9,maxB:9},
+  {label:'TIER 2',ops:['+','-'],maxA:99,maxB:9},
+  {label:'TIER 3',ops:['×','+'],maxA:25,maxB:9},
+  {label:'TIER 4',ops:['×','-'],maxA:20,maxB:12},
+  {label:'TIER 5',ops:['×','+'],maxA:15,maxB:15,brackets:true},
+];
+function playMath(body,setScore,end,wrap,startClock){
+  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Jaldi solve karo! 4 seconds each. Combos se bonus milta hai!<br>
+  <button style="margin-top:10px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="mathStart">▶ Start</button>
+</div>`);
+  body.appendChild(instrEl);
+  const host=$(`<div style="position:relative;"></div>`);body.appendChild(host);
+  let q=0,score=0,tier=0,combo=0,consecutive=0,wrong2=0;
+  let barTimer=null;
+  function next(){
+    if(q>=20){
+      end({title:'Math Ninja! 🔢',emoji:'🔢',sub:`Score: ${score}/20 · Max Tier ${tier+1}`,value:score,points:score*3,starThresh:[8,14,18],
+        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}/20</span></div><div class="row"><span>Max Tier</span><span class="val">${tier+1}</span></div><div class="row"><span>Combo Bonus</span><span class="val">${Math.max(0,score-q)}</span></div></div>`});
+      return;
+    }
+    clearInterval(barTimer);
+    const tc=TIERS[tier];
+    const a=Math.floor(Math.random()*tc.maxA)+1;
+    const b=Math.floor(Math.random()*tc.maxB)+1;
+    const op=tc.ops[Math.floor(Math.random()*tc.ops.length)];
+    let correct=op==='+'?a+b:op==='-'?a-b:a*b;
+    let display=`${a} ${op} ${b}`;
+    if(tc.brackets&&Math.random()>0.5){
+      const c=Math.floor(Math.random()*6)+2;
+      const op2=['+','-'][Math.floor(Math.random()*2)];
+      const inner=op2==='+'?b+c:Math.max(1,b-c);
+      correct=op==='×'?a*inner:inner+a;
+      display=tc.ops[0]==='×'?`${a} × (${b} ${op2} ${c})`:`(${a} ${op2} ${b}) × ${c}`;
+      if(tc.ops[0]!=='×'){const tmp=a;correct=(tmp+(op2==='+'?b:-b))*c||a*inner;}
+    }
+    // Distractors within ±15%
+    const range=Math.max(Math.ceil(Math.abs(correct)*0.15),3);
+    const used=new Set([correct]);
+    const distract=[];
+    let tries=0;
+    while(distract.length<3&&tries<50){
+      tries++;
+      const d=correct+Math.floor(Math.random()*range*2+1)-range;
+      if(d>0&&d!==correct&&!used.has(d)){used.add(d);distract.push(d);}
+    }
+    while(distract.length<3)distract.push(correct+(distract.length+1)*2);
+    const opts=[correct,...distract].sort(()=>Math.random()-.5);
+    const mult=combo>=3?1.5:1;
+    host.innerHTML=`
+      <div class="timer-bar"><div class="timer-fill timer-green" id="mBar" style="width:100%"></div></div>
+      <div class="math-q">${display}<span class="tier-badge-abs">${tc.label}</span></div>
+      ${combo>=3?`<div style="text-align:center;font-size:11px;font-weight:700;color:#7C3AED;margin-bottom:6px;">🔥 ${combo}x Combo! ×1.5</div>`:''}
+      <div class="math-opts">${opts.map(v=>`<button class="math-opt" data-v="${v}">${v}</button>`).join('')}</div>
+      <div style="text-align:center;margin-top:10px;font-size:12px;color:var(--text2);">Q${q+1}/20</div>
+    `;
+    let elapsed=0;
+    barTimer=setInterval(()=>{
+      elapsed+=100;
+      const pct=Math.max(0,100-elapsed/40);
+      const bar=wrap.querySelector('#mBar');
+      if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
+      if(elapsed>=4000){clearInterval(barTimer);host.querySelector('#mBar').style.width='0%';
+        wrong2++;combo=0;consecutive=0;
+        if(wrong2>=2){wrong2=0;tier=Math.max(0,tier-1);}
+        host.innerHTML+=`<div style="text-align:center;font-size:13px;color:#EF4444;margin-top:8px;">⏱ Time's up! Answer: <strong>${correct}</strong></div>`;
+        setTimeout(()=>{q++;next();},1000);
+      }
+    },100);
+    host.querySelectorAll('.math-opt').forEach(btn=>{
+      btn.onclick=()=>{
+        clearInterval(barTimer);
+        const chosen=+btn.dataset.v;
+        if(chosen===correct){
+          playSound('correct');
+          const pts=Math.round(mult);
+          score+=pts;setScore(score);
+          btn.classList.add('correct-ans');
+          consecutive++;wrong2=0;
+          if(consecutive>=3){combo=consecutive;showCombo(`🔥 ${combo}× COMBO!`);}
+          if(consecutive>=4&&consecutive%4===0)tier=Math.min(4,tier+1);
+        } else {
+          playSound('wrong');
+          btn.classList.add('wrong-ans');
+          host.querySelectorAll('.math-opt').forEach(b=>{if(+b.dataset.v===correct)b.classList.add('correct-ans');});
+          combo=0;consecutive=0;wrong2++;
+          if(wrong2>=2){wrong2=0;tier=Math.max(0,tier-1);}
+          host.innerHTML+=`<div style="text-align:center;font-size:12px;color:var(--text2);margin-top:6px;">${display} = ${correct} ✓</div>`;
+        }
+        host.querySelectorAll('.math-opt').forEach(b=>b.disabled=true);
+        setTimeout(()=>{q++;next();},600);
+      };
+    });
+  }
+  instrEl.querySelector('#mathStart').onclick=()=>{instrEl.remove();startClock&&startClock();next();};
+}
+
+/* ===================== STROOP X ===================== */
+function playStroopX(body,setScore,end,wrap,startClock){
+  const COLORS=[{name:'Red',hex:'#EF4444'},{name:'Blue',hex:'#3B82F6'},{name:'Green',hex:'#22C55E'},{name:'Yellow',hex:'#EAB308'},{name:'Purple',hex:'#A855F7'}];
+  let round=0,score=0,combo=0;
+  const host=$(`<div style="text-align:center;padding:12px 0;"></div>`);
+  body.appendChild(host);
+  const btn=$(`<button class="start-btn">Tap to Start</button>`);
+  body.appendChild(btn);
+  btn.onclick=()=>{btn.remove();startClock&&startClock();nextRound();};
+  function nextRound(){
+    if(round>=20){
+      end({title:'Stroop Master! 🎨',emoji:'🎨',sub:`Score: ${score} pts`,value:score,points:score*4,starThresh:[30,50,65],
+        statsHtml:`<div class="end-stats"><div class="row"><span>Rounds</span><span class="val">20</span></div><div class="row"><span>Score</span><span class="val">${score}</span></div><div class="row"><span>Max Combo</span><span class="val">${combo}</span></div></div>`});
+      return;
+    }
+    const word=COLORS[Math.floor(Math.random()*COLORS.length)];
+    const ink=COLORS[Math.floor(Math.random()*COLORS.length)];
+    const ts=Date.now();
+    let barT=null;
+    const choices=[...COLORS].sort(()=>Math.random()-.5).slice(0,4);
+    if(!choices.find(c=>c.name===ink.name))choices[0]=ink;
+    choices.sort(()=>Math.random()-.5);
+    host.innerHTML=`
+      <div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Round ${round+1}/20 — INK ka rang tap karo (word nahi!)</div>
+      ${combo>=3?`<div style="font-size:11px;font-weight:700;color:#7C3AED;margin-bottom:4px;">🔥 Combo ×${combo>=3?1.5:1}</div>`:''}
+      <div style="font-size:52px;font-weight:900;color:${ink.hex};margin:14px 0;">${word.name}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:280px;margin:0 auto;">
+        ${choices.map(c=>`<button class="math-opt stroop-opt" style="background:${c.hex};color:#fff;font-weight:700;border:none;" data-name="${c.name}">${c.name}</button>`).join('')}
+      </div>`;
+    let elapsed=0;
+    barT=setInterval(()=>{
+      elapsed+=100;
+      const pct=Math.max(0,100-elapsed/30);
+      const bar=wrap.querySelector('#sBar');
+      if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
+      if(elapsed>=3000){clearInterval(barT);combo=0;round++;
+        host.innerHTML+=`<div style="font-size:12px;color:#EF4444;margin-top:8px;">⏱ Too slow! Ink: <strong style="color:${ink.hex}">${ink.name}</strong></div>`;
+        setTimeout(nextRound,900);}
+    },100);
+    host.querySelectorAll('.stroop-opt').forEach(b=>{
+      b.onclick=()=>{
+        clearInterval(barT);
+        const ms=Date.now()-ts;
+        if(b.dataset.name===ink.name){
+          playSound('correct');
+          const bonus=ms<1000?3:ms<2000?2:1;
+          combo++;score+=bonus;setScore(score);
+          b.style.outline='3px solid #fff';
+          host.innerHTML+=`<div style="font-size:11px;color:#22C55E;margin-top:4px;">+${bonus}${combo>=3?' 🔥':''}</div>`;
+        } else {
+          playSound('wrong');combo=0;
+          b.style.background='#EF4444';
+          host.innerHTML+=`<div style="font-size:11px;color:#EF4444;margin-top:4px;">Ink was <strong style="color:${ink.hex}">${ink.name}</strong></div>`;
+        }
+        host.querySelectorAll('.stroop-opt').forEach(x=>x.disabled=true);
+        round++;setTimeout(nextRound,700);
+      };
+    });
+  }
+}
+
+/* ===================== IQ TEST ===================== */
+function playIQTest(body,setScore,end,wrap,startClock){
+  const QS=[
+    {q:'Ek sequence hai: 2, 4, 8, 16, __. Agla number kya hai?',opts:['24','32','20','28'],ans:1},
+    {q:'Agar MANGO = 13+1+14+7+15 = 50 ho, toh APPLE ka code kya hoga?',opts:['50','51','52','53'],ans:1},
+    {q:'5 logon mein Rahul 3rd hai. Uske baad kitne log hain?',opts:['1','2','3','4'],ans:1},
+    {q:'Ek ghadi mein 3:15 baje hain. Minute aur hour hand ke beech angle kya hai?',opts:['0°','7.5°','15°','30°'],ans:1},
+    {q:'Odd one out: Cat, Dog, Rose, Lion',opts:['Cat','Dog','Rose','Lion'],ans:2},
+    {q:'Agar 6 × 4 = 24 aur 5 × 3 = 15, toh 7 × 5 = ?',opts:['30','35','40','45'],ans:1},
+    {q:'Ek square ka perimeter 40cm hai. Uska area kya hoga?',opts:['80cm²','100cm²','160cm²','40cm²'],ans:1},
+    {q:'Sequence: A, C, E, G, __',opts:['H','I','J','K'],ans:1},
+    {q:'Neha, Priya se 3 saal badi hai. 5 saal baad Priya 20 hogi. Abhi Neha ki umar?',opts:['18','23','22','20'],ans:0},
+    {q:'3 cats 3 mice ko 3 minutes mein pakad leti hain. 100 mice ke liye kitni cats chahiye?',opts:['100','33','3','10'],ans:2},
+    {q:'Ek train 60 km/h ki speed se 2 ghante chalti hai. Kitni doori?',opts:['60km','100km','120km','180km'],ans:2},
+    {q:'Kaunsa number dono 4 aur 6 se divisible hai?',opts:['10','14','12','16'],ans:2},
+    {q:'Mirror image mein "REPLIT" kaisa dikhega?',opts:['TILPER','TILEPR','TILEPR','TIЛPER'],ans:0},
+    {q:'Ek triangle ke angles 60°, 70° hain. Teesra angle?',opts:['40°','50°','60°','70°'],ans:1},
+    {q:'2, 6, 12, 20, 30, __',opts:['40','42','44','38'],ans:1},
+  ];
+  let qi=0,correct=0;
+  const host=$(`<div style="padding:0 4px;"></div>`);
+  body.appendChild(host);
+  const btn=$(`<button class="start-btn">Start IQ Test (15 Qs)</button>`);
+  body.appendChild(btn);
+  btn.onclick=()=>{btn.remove();startClock&&startClock();showQ();};
+  function showQ(){
+    if(qi>=QS.length){
+      const iq=Math.round(70+(correct/15)*70);
+      end({title:`IQ Score: ${iq} 🧩`,emoji:'🧩',sub:`${correct}/15 correct`,value:iq,points:correct*6,starThresh:[7,11,14],
+        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${correct}/15</span></div><div class="row"><span>Estimated IQ</span><span class="val">${iq}</span></div><div class="row"><span>Rating</span><span class="val">${iq>=130?'Genius':iq>=115?'Above Avg':iq>=100?'Average':'Below Avg'}</span></div></div>`});
+      return;
+    }
+    const {q,opts,ans}=QS[qi];
+    const lvl=qi<5?{label:'🟢 Easy',color:'#22C55E'}:qi<10?{label:'🟡 Medium',color:'#EAB308'}:{label:'🔴 Hard',color:'#EF4444'};
+    let barT=null,elapsed=0;
+    host.innerHTML=`
+      <div class="timer-bar"><div class="timer-fill timer-green" id="iqBar" style="width:100%"></div></div>
+      <div style="text-align:center;margin-bottom:8px;font-size:12px;font-weight:700;color:${lvl.color}">${lvl.label} • Q${qi+1}/15</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:14px;line-height:1.5;">${q}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${opts.map((o,i)=>`<button class="math-opt iq-opt" style="text-align:left;padding:10px 14px;font-size:13px;" data-i="${i}">${String.fromCharCode(65+i)}. ${o}</button>`).join('')}
+      </div>`;
+    barT=setInterval(()=>{
+      elapsed+=100;
+      const pct=Math.max(0,100-elapsed/200);
+      const bar=wrap.querySelector('#iqBar');
+      if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
+      if(elapsed>=20000){clearInterval(barT);
+        host.querySelectorAll('.iq-opt').forEach((b,i)=>{if(i===ans)b.classList.add('correct-ans');b.disabled=true;});
+        host.innerHTML+=`<div style="font-size:12px;color:#EF4444;margin-top:8px;">⏱ Time's up!</div>`;
+        qi++;setTimeout(showQ,900);}
+    },100);
+    host.querySelectorAll('.iq-opt').forEach(b=>{
+      b.onclick=()=>{
+        clearInterval(barT);
+        const chosen=+b.dataset.i;
+        if(chosen===ans){playSound('correct');correct++;setScore(correct);b.classList.add('correct-ans');}
+        else{playSound('wrong');b.classList.add('wrong-ans');host.querySelectorAll('.iq-opt').forEach((x,i)=>{if(i===ans)x.classList.add('correct-ans');});}
+        host.querySelectorAll('.iq-opt').forEach(x=>x.disabled=true);
+        qi++;setTimeout(showQ,700);
+      };
+    });
+  }
+}
+
+/* ===================== PROGRESS ===================== */
+function renderProgress(){
+  const p=$(`<div></div>`);
+  const h=S('nz_score_history');
+  const delta=h[h.length-1]-(h[h.length-2]||0);
+  p.innerHTML=`
+    <div class="hdr"><div><div class="greet">Track your gains</div><h1>Your Progress</h1></div></div>
+    <div class="card line-chart-wrap">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+        <strong style="font-size:14px;">Brain Score · 7 days</strong>
+        <span style="font-size:12px;color:${delta>=0?'var(--mint)':'#EF4444'};font-weight:600;">${delta>=0?'↗':'-'} ${Math.abs(delta)}</span>
+      </div>
+      <div id="lineChart"></div>
+    </div>
+    <div class="sec-title"><h2>Skills Breakdown</h2></div>
+    <div class="card" style="padding:18px;">
+      <div id="skillBarsP"></div>
+    </div>
+    <div class="cmp-card" style="margin-top:16px;">
+      <h3>🏆 Brain Score: ${S('nz_brain_score')}/1000</h3>
+      <div style="font-size:12px;opacity:.85;">Keep training to reach 1000!</div>
+      <div class="pbar"><div id="pbarFill" style="width:0%"></div></div>
+    </div>
+    <div class="sec-title"><h2>All Time</h2></div>
+    <div class="pill-row">
+      <div class="pill"><div class="v">${S('nz_games_played')}</div><div class="l">Games</div></div>
+      <div class="pill"><div class="v">${S('nz_streak')}</div><div class="l">Day Streak</div></div>
+      <div class="pill"><div class="v">${S('nz_achievements').length}</div><div class="l">Achievements</div></div>
+    </div>
+    <div class="sec-title"><h2>Achievements</h2></div>
+    <div class="card"><div class="ach-grid" id="achGrid"></div></div>
+  `;
+  const sk=S('nz_skill_scores');const skPrev=S('nz_skill_scores_prev');
+  const skBars=p.querySelector('#skillBarsP');
+  Object.entries({Memory:'memory',Focus:'focus',Logic:'logic',Speed:'speed'}).forEach(([label,key])=>{
+    const val=sk[key]||0;const prev=skPrev[key]||0;const diff=val-prev;
+    const row=$(`<div class="skill-bar-row">
+      <div class="skill-bar-label">${label}</div>
+      <div class="skill-bar-bg"><div class="skill-bar-fill" style="width:0%"></div></div>
+      <div class="skill-bar-val">${val}${diff>0?`<span style="font-size:10px;color:var(--mint)"> +${diff}</span>`:''}</div>
+    </div>`);
+    skBars.appendChild(row);
+    setTimeout(()=>{row.querySelector('.skill-bar-fill').style.width=val+'%';},80);
+  });
+  const unlocked=S('nz_achievements');
+  const achGrid=p.querySelector('#achGrid');
+  ACHIEVEMENTS.forEach(a=>{
+    const isUnlocked=unlocked.includes(a.id);
+    const el=$(`<div class="ach ${isUnlocked?'unlocked':'locked'}">
+      <div class="ach-em">${a.emoji}</div>
+      <div class="ach-lbl">${a.title}</div>
+    </div>`);
+    achGrid.appendChild(el);
+  });
+  setTimeout(()=>{
+    drawLineChart(p.querySelector('#lineChart'),h);
+    const pct=Math.min(100,S('nz_brain_score')/10);
+    p.querySelector('#pbarFill').style.width=pct+'%';
+  },40);
+  return p;
+}
+function drawLineChart(host,data){
+  const W=320,H=150,pad=20;
+  const filled=data.filter(v=>v>0);
+  if(filled.length<2){host.innerHTML='<div style="text-align:center;padding:20px;color:var(--text2);font-size:13px;">Play games to see your progress chart!</div>';return;}
+  const min=Math.max(0,Math.min(...filled)-20),max=Math.max(...filled)+20;
+  const xs=data.map((_,i)=>pad+i*((W-pad*2)/(data.length-1)));
+  const ys=data.map(v=>H-pad-((v-min)/(max-min||1))*(H-pad*2));
+  let path=`M ${xs[0]} ${ys[0]}`;
+  for(let i=0;i<xs.length-1;i++){const cx=(xs[i]+xs[i+1])/2;path+=` Q ${xs[i]} ${ys[i]} ${cx} ${(ys[i]+ys[i+1])/2}`;}
+  path+=` T ${xs[xs.length-1]} ${ys[ys.length-1]}`;
+  const area=path+` L ${xs[xs.length-1]} ${H-pad} L ${xs[0]} ${H-pad} Z`;
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%">
+    <defs><linearGradient id="lcG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7C3AED" stop-opacity=".35"/><stop offset="1" stop-color="#7C3AED" stop-opacity="0"/></linearGradient></defs>
+    <path d="${area}" fill="url(#lcG)"/>
+    <path d="${path}" stroke="#7C3AED" stroke-width="2.5" fill="none" stroke-linecap="round"/>`;
+  xs.forEach((x,i)=>{
+    svg+=`<circle cx="${x}" cy="${ys[i]}" r="4" fill="#7C3AED"/>`;
+    svg+=`<text x="${x}" y="${H-4}" text-anchor="middle" font-size="9" fill="currentColor" opacity=".6">${days[i]}</text>`;
+    if(i===data.length-1)svg+=`<text x="${x}" y="${ys[i]-9}" text-anchor="middle" font-size="10" font-weight="700" fill="#7C3AED">${data[i]}</text>`;
+  });
+  svg+='</svg>';
+  host.innerHTML=svg;
+}
+
+/* ===================== RELAX ===================== */
+const SOUNDS=[
+  {name:'Rain',emoji:'🌧',desc:'Gentle rainfall'},
+  {name:'Ocean',emoji:'🌊',desc:'Rolling waves'},
+  {name:'Forest',emoji:'🌲',desc:'Wind & birdsong'},
+  {name:'White Noise',emoji:'💨',desc:'Pure white noise'},
+];
+let relaxAudio={ctx:null,source:null,gain:null,lfo:null,chirpTimer:null,playing:-1};
+function stopRelaxAudio(){
+  if(relaxAudio.source)try{relaxAudio.source.stop();}catch(e){}
+  if(relaxAudio.lfo)try{relaxAudio.lfo.stop();}catch(e){}
+  clearInterval(relaxAudio.chirpTimer);
+  relaxAudio.source=null;relaxAudio.lfo=null;relaxAudio.chirpTimer=null;relaxAudio.playing=-1;
+}
+function makeNoiseBuffer(ac,type){
+  const len=ac.sampleRate*4;
+  const buf=ac.createBuffer(1,len,ac.sampleRate);
+  const d=buf.getChannelData(0);
+  if(type==='brown'){
+    // Deep, smooth noise — great for ocean & wind
+    let last=0;
+    for(let i=0;i<len;i++){const w=Math.random()*2-1;last=(last+0.02*w)/1.02;d[i]=last*3.5;}
+  } else if(type==='pink'){
+    // Natural, rain-like noise (Paul Kellet approximation)
+    let b0=0,b1=0,b2=0;
+    for(let i=0;i<len;i++){
+      const w=Math.random()*2-1;
+      b0=0.99765*b0+w*0.099046;
+      b1=0.96300*b1+w*0.2965164;
+      b2=0.57000*b2+w*1.0526913;
+      d[i]=(b0+b1+b2+w*0.1848)*0.18;
+    }
+  } else {
+    for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*0.5;
+  }
+  return buf;
+}
+function birdChirp(ac,dest){
+  try{
+    const o=ac.createOscillator(),g=ac.createGain();
+    const f=2200+Math.random()*1800;
+    o.type='sine';
+    o.frequency.setValueAtTime(f,ac.currentTime);
+    o.frequency.exponentialRampToValueAtTime(f*1.4,ac.currentTime+0.08);
+    o.frequency.exponentialRampToValueAtTime(f*0.9,ac.currentTime+0.16);
+    g.gain.setValueAtTime(0.0001,ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.07,ac.currentTime+0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+0.28);
+    o.connect(g);g.connect(dest);
+    o.start();o.stop(ac.currentTime+0.3);
+  }catch(e){}
+}
+function playRelaxSound(idx,vol){
+  stopRelaxAudio();
+  const ac=getAC();if(!ac)return;
+  if(ac.state==='suspended')ac.resume();
+  relaxAudio.ctx=ac;
+  const noiseType=idx===0?'pink':idx===3?'white':'brown';
+  const src=ac.createBufferSource();
+  src.buffer=makeNoiseBuffer(ac,noiseType);src.loop=true;
+  const filter=ac.createBiquadFilter();
+  const mod=ac.createGain();mod.gain.value=1;
+  const g=ac.createGain();g.gain.value=vol;
+  src.connect(filter);filter.connect(mod);mod.connect(g);g.connect(ac.destination);
+  if(idx===0){
+    // Rain — pink noise softened with a lowpass filter
+    filter.type='lowpass';filter.frequency.value=4500;filter.Q.value=0.5;
+    mod.gain.value=0.9;
+  } else if(idx===1){
+    // Ocean — deep brown noise with slow LFO wave swells
+    filter.type='lowpass';filter.frequency.value=500;
+    mod.gain.value=0.6;
+    const lfo=ac.createOscillator(),lg=ac.createGain();
+    lfo.type='sine';lfo.frequency.value=0.11;lg.gain.value=0.45;
+    lfo.connect(lg);lg.connect(mod.gain);lfo.start();
+    relaxAudio.lfo=lfo;
+  } else if(idx===2){
+    // Forest — soft wind + random bird chirps
+    filter.type='lowpass';filter.frequency.value=900;
+    mod.gain.value=0.4;
+    relaxAudio.chirpTimer=setInterval(()=>{if(Math.random()<0.7)birdChirp(ac,g);},2600);
+  } else {
+    // White noise — slightly smoothed for comfort
+    filter.type='lowpass';filter.frequency.value=12000;
+    mod.gain.value=0.6;
+  }
+  src.start();
+  relaxAudio.source=src;relaxAudio.gain=g;relaxAudio.playing=idx;
+}
+function renderRelax(){
+  const p=$(`<div class="relax-page"></div>`);
+  p.innerHTML=`<div class="relax-bg"></div>
+    <div class="hdr"><div><div class="greet">Rest your mind</div><h1>Relax</h1></div></div>
+    <div class="card">
+      <div class="now-playing">
+        <div class="np-disk"><div class="np-icon" id="npIcon">🎵</div></div>
+        <div class="np-lbl">NOW PLAYING</div>
+        <div class="np-name" id="npName">Choose a sound</div>
+      </div>
+      <div class="player-row">
+        <div class="pl-btn">⏮</div>
+        <button class="pl-play" id="playBtn">▶</button>
+        <div class="pl-btn">⏭</div>
+      </div>
+      <div class="vol-row">
+        <span style="font-size:16px;">🔈</span>
+        <input type="range" min="0" max="100" value="70" id="volSlider"/>
+        <span class="vol-pct" id="volPct">70%</span>
+      </div>
+    </div>
+    <div class="sec-title"><h2>Soundscapes</h2></div>
+    <div class="sound-grid" id="soundGrid"></div>
+    <div class="sec-title"><h2>Breathing Guide</h2></div>
+    <div class="card" style="text-align:center;padding:24px;">
+      <div id="breathCircle" style="width:100px;height:100px;border-radius:50%;background:var(--grad);margin:0 auto 14px;transition:transform 4s ease,opacity 4s ease;"></div>
+      <div id="breathTxt" style="font-size:15px;font-weight:600;color:var(--text2);">Box Breathing</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:6px;">4s in · 4s hold · 4s out · 4s hold</div>
+      <button class="btn-primary" id="breathBtn" style="margin-top:16px;max-width:200px;">Start Breathing</button>
+    </div>
+  `;
+  const sg=p.querySelector('#soundGrid');
+  let vol=0.7;
+  const volSlider=p.querySelector('#volSlider');
+  const volPct=p.querySelector('#volPct');
+  volSlider.oninput=()=>{vol=volSlider.value/100;volPct.textContent=volSlider.value+'%';if(relaxAudio.gain)relaxAudio.gain.gain.value=vol;};
+  SOUNDS.forEach((s,i)=>{
+    const btn=$(`<button class="sound-btn ${relaxAudio.playing===i?'active':''}">
+      <div class="se">${s.emoji}</div>
+      <div class="sn">${s.name}</div>
+      <div style="font-size:10px;color:var(--text2);">${s.desc}</div>
+    </button>`);
+    btn.onclick=()=>{
+      if(relaxAudio.playing===i){stopRelaxAudio();p.querySelector('#npName').textContent='Choose a sound';p.querySelector('#npIcon').textContent='🎵';}
+      else{playRelaxSound(i,vol);p.querySelector('#npName').textContent=s.name;p.querySelector('#npIcon').textContent=s.emoji;}
+      sg.querySelectorAll('.sound-btn').forEach((b,j)=>b.classList.toggle('active',relaxAudio.playing===j));
+    };
+    sg.appendChild(btn);
+  });
+  // Breathing
+  let breathRunning=false,breathPhase=0,breathTimer=null;
+  const phases=['Breathe In 🫁','Hold ⏸','Breathe Out 💨','Hold ⏸'];
+  p.querySelector('#breathBtn').onclick=()=>{
+    breathRunning=!breathRunning;
+    p.querySelector('#breathBtn').textContent=breathRunning?'Stop':'Start Breathing';
+    if(breathRunning)runBreath();else{clearTimeout(breathTimer);p.querySelector('#breathCircle').style.transform='scale(1)';p.querySelector('#breathTxt').textContent='Box Breathing';}
+  };
+  function runBreath(){
+    if(!breathRunning)return;
+    const circle=p.querySelector('#breathCircle');const txt=p.querySelector('#breathTxt');
+    if(!circle)return;
+    txt.textContent=phases[breathPhase];
+    if(breathPhase===0){circle.style.transform='scale(1.4)';circle.style.opacity='1';}
+    else if(breathPhase===1){circle.style.transform='scale(1.4)';}
+    else if(breathPhase===2){circle.style.transform='scale(1)';circle.style.opacity='0.7';}
+    else{circle.style.transform='scale(1)';circle.style.opacity='1';}
+    breathPhase=(breathPhase+1)%4;
+    breathTimer=setTimeout(runBreath,4000);
+  }
+  return p;
+}
+
+/* ===================== PROFILE ===================== */
+function renderProfile(){
+  const name=S('nz_username');
+  const sett=S('nz_settings');
+  const p=$(`<div></div>`);
+  p.innerHTML=`
+    <div class="hdr"><div><div class="greet">Your account</div><h1>Profile</h1></div></div>
+    <div class="prof-card">
+      <div class="prof-top">
+        <div class="prof-avatar">${name.charAt(0).toUpperCase()}</div>
+        <div><div class="prof-name">${name}</div><div class="prof-email">NeuroZen Player</div></div>
+      </div>
+      <div class="prof-stats">
+        <div class="prof-stat"><div class="v">${S('nz_brain_score')}</div><div class="l">Brain Score</div></div>
+        <div class="prof-stat"><div class="v">${S('nz_streak')}</div><div class="l">Streak</div></div>
+        <div class="prof-stat"><div class="v">${S('nz_games_played')}</div><div class="l">Games</div></div>
+      </div>
+    </div>
+    <div class="sec-title"><h2>Settings</h2></div>
+    <div id="settList"></div>
+    <div class="sec-title"><h2>App Info</h2></div>
+    <div class="card" style="padding:16px;"><div style="font-size:13px;color:var(--text2);line-height:1.8;">
+      <strong style="color:var(--text);">NeuroZen v2.0</strong><br>
+      8 brain-training games · Scientifically inspired · Progress tracking
+    </div></div>
+  `;
+  const settList=p.querySelector('#settList');
+  function mkSetting(ico,title,sub,right,onClick){
+    const el=$(`<div class="setting"><div class="sic">${ico}</div><div style="flex:1;"><div class="sttl">${title}</div>${sub?`<div class="ssub">${sub}</div>`:''}</div><div class="sright">${right}</div></div>`);
+    el.onclick=onClick;settList.appendChild(el);return el;
+  }
+  function mkToggle(key,ico,title,sub){
+    const tgl=$(`<div class="tgl ${sett[key]?'on':''}" id="tgl_${key}"></div>`);
+    const el=$(`<div class="setting"><div class="sic">${ico}</div><div style="flex:1;"><div class="sttl">${title}</div>${sub?`<div class="ssub">${sub}</div>`:''}</div></div>`);
+    el.appendChild(tgl);settList.appendChild(el);
+    el.onclick=()=>{
+      const s=S('nz_settings');s[key]=!s[key];setS('nz_settings',s);
+      tgl.classList.toggle('on',!!s[key]);
+      toast(s[key]?`${title} enabled`:`${title} disabled`);
+    };
+  }
+  const dmEl=$(`<div class="setting"><div class="sic">🌙</div><div style="flex:1;"><div class="sttl">Dark Mode</div></div><div class="tgl ${S('nz_dark_mode')?'on':''}" id="dmTgl"></div></div>`);
+  dmEl.onclick=()=>{const v=!S('nz_dark_mode');setS('nz_dark_mode',v);applyDark();dmEl.querySelector('#dmTgl').classList.toggle('on',v);};
+  settList.appendChild(dmEl);
+  mkToggle('reminders','⏰','Daily Reminders','Practice at your peak time');
+  mkToggle('sfx','🔊','Sound Effects','In-game audio feedback');
+  mkSetting('🔔','Notifications','App alerts','›',()=>{
+    const s=S('nz_settings');s.notifications=!s.notifications;setS('nz_settings',s);
+    toast(s.notifications?'🔔 Notifications enabled':'🔕 Notifications disabled');
+  });
+  mkSetting('🔒','Privacy','Your data','›',()=>showModal('privacy'));
+  mkSetting('❓','Help & Support','FAQ','›',()=>showModal('help'));
+  mkSetting('🚪','Log Out','Reset all progress','',()=>showModal('logout')).classList.add('danger');
+  return p;
+}
+
+/* ===================== MODALS ===================== */
+function showModal(type){
+  const bg=$(`<div class="modal-bg"></div>`);
+  let content='';
+  if(type==='privacy'){
+    content=`<h3>🔒 Privacy</h3>
+      <p>Your data is stored <strong>locally on this device only</strong>. NeuroZen never sends your data to any server. No account required. All progress, scores, and achievements live in your browser's localStorage.</p>
+      <button class="modal-btn primary">Got it</button>`;
+  } else if(type==='help'){
+    content=`<h3>❓ Help & FAQ</h3>
+      <div class="faq-item"><div class="fq">How is Brain Score calculated?</div><div class="fa">Each game awards 5–50 points based on your performance. Higher skill levels get slightly fewer points to keep things fair.</div></div>
+      <div class="faq-item"><div class="fq">How do streaks work?</div><div class="fa">Complete at least 1 game per day to maintain your streak. A new day starts at midnight.</div></div>
+      <div class="faq-item"><div class="fq">How to reset progress?</div><div class="fa">Go to Profile → Log Out, then confirm. This clears all data including your brain score and achievements.</div></div>
+      <button class="modal-btn primary">Got it</button>`;
+  } else if(type==='logout'){
+    content=`<h3>🚪 Reset All Progress?</h3>
+      <p>This will permanently delete your brain score, streak, all achievements, and game history. <strong>This cannot be undone.</strong></p>
+      <button class="modal-btn danger" id="confirmLogout">Yes, Reset Everything</button>
+      <button class="modal-btn ghost" id="cancelLogout">Cancel</button>`;
+  }
+  const box=$(`<div class="modal-box">${content}</div>`);
+  bg.appendChild(box);
+  document.body.appendChild(bg);
+  bg.onclick=e=>{if(e.target===bg)bg.remove();};
+  box.querySelector('.modal-btn.primary,#cancelLogout')?.addEventListener('click',()=>bg.remove());
+  box.querySelector('#confirmLogout')?.addEventListener('click',()=>{
+    LS.clear('nz_');
+    bg.remove();
+    toast('Progress reset. Starting fresh!');
+    setTimeout(()=>init(),300);
+  });
+}
+
+/* ===================== ONBOARDING ===================== */
+function showOnboarding(){
+  const onb=$(`<div class="onb" id="onbScreen"></div>`);
+  document.body.appendChild(onb);
+  let step=0,userName='',goal=3;
+  const steps=[
+    ()=>{onb.innerHTML=`<div class="onb-em">🧠</div><h1>Welcome to NeuroZen</h1><p>Train your brain with 8 science-inspired games. Build focus, memory, speed & more.</p>
+      <div class="dots"><div class="dot active"></div><div class="dot"></div><div class="dot"></div></div>
+      <button class="btn-primary next">Let's Start →</button>`;
+      onb.querySelector('.next').onclick=()=>{step=1;steps[step]();};
+    },
+    ()=>{onb.innerHTML=`<div class="onb-em">👤</div><h1>What's your name?</h1><p>We'll personalize your experience.</p>
+      <input type="text" id="nameIn" placeholder="Your name" maxlength="20" value="${userName}"/>
+      <div class="dots"><div class="dot"></div><div class="dot active"></div><div class="dot"></div></div>
+      <button class="btn-primary next" style="margin-top:20px;">Continue →</button>`;
+      const inp=onb.querySelector('#nameIn');inp.focus();
+      onb.querySelector('.next').onclick=()=>{
+        const v=inp.value.trim();if(!v){inp.style.borderColor='#EF4444';return;}
+        userName=v;step=2;steps[step]();
+      };
+    },
+    ()=>{onb.innerHTML=`<div class="onb-em">🎯</div><h1>Set your daily goal</h1><p>How many games per day?</p>
+      <div class="opts">
+        <button class="opt ${goal===1?'sel':''}" data-v="1">1 game &nbsp; <span style="color:var(--text2);">~3 min</span></button>
+        <button class="opt ${goal===3?'sel':''}" data-v="3">3 games &nbsp; <span style="color:var(--text2);">~10 min</span></button>
+        <button class="opt ${goal===5?'sel':''}" data-v="5">5 games &nbsp; <span style="color:var(--text2);">~18 min</span></button>
+      </div>
+      <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot active"></div></div>
+      <button class="btn-primary next">Start Training 🚀</button>`;
+      onb.querySelectorAll('.opt').forEach(b=>{b.onclick=()=>{goal=+b.dataset.v;onb.querySelectorAll('.opt').forEach(o=>o.classList.toggle('sel',+o.dataset.v===goal));};});
+      onb.querySelector('.next').onclick=()=>{
+        // Set fresh defaults
+        setS('nz_username',userName||'Player');
+        setS('nz_brain_score',0);setS('nz_streak',0);setS('nz_games_played',0);
+        setS('nz_today_goal',goal);setS('nz_score_history',[0,0,0,0,0,0,0]);
+        setS('nz_achievements',[]);setS('nz_skill_scores',{memory:0,focus:0,logic:0,speed:0});
+        setS('nz_skill_scores_prev',{memory:0,focus:0,logic:0,speed:0});
+        setS('nz_best_scores',{});setS('nz_last_played',null);
+        setS('nz_settings',{reminders:true,sfx:true,notifications:true});
+        setS('nz_onboarded',true);setS('nz_schulte_level',0);setS('nz_today_games',0);
+        onb.style.animation='fadeUp .35s reverse';
+        setTimeout(()=>{onb.remove();render('home');toast('Welcome, '+userName+'! 🧠');},300);
+      };
+    },
+  ];
+  steps[0]();
+}
+
+/* ===================== INIT ===================== */
+function init(){
+  if(!S('nz_onboarded')){showOnboarding();}
+  else{render('home');}
+}
+init();
