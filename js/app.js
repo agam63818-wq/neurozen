@@ -595,7 +595,7 @@ function playMemory(body,setScore,end,wrap,startClock){
     <button style="margin-top:12px;padding:10px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;font-size:14px;" id="memStart">▶ Start</button>
   </div>`);
   body.appendChild(instrBox);
-  instrBox.querySelector('#memStart').onclick=()=>{instrBox.remove();startClock&&startClock();doRound();};
+  instrBox.querySelector('#memStart').onclick=()=>{instrBox.remove();doRound();};
   function doRound(){
     const cfg=ROUNDS[round];
     const cellCount=cfg.g*cfg.g;
@@ -642,6 +642,7 @@ function playMemory(body,setScore,end,wrap,startClock){
       else{
         clearInterval(cdInt);
         if(cdWrap)cdWrap.style.display='none';
+        startClock&&startClock();
         startPattern();
       }
     },750);
