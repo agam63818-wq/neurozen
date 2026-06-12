@@ -1,3 +1,7 @@
+window._allTimers=[];
+const _st=(fn,ms)=>{const id=setTimeout(fn,ms);window._allTimers.push({type:'to',id});return id;};
+const _si=(fn,ms)=>{const id=setInterval(fn,ms);window._allTimers.push({type:'iv',id});return id;};
+const _noiseCache={};
 /* ===================== STATE ===================== */
 const LS={
   get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch{return d}},
@@ -12,7 +16,9 @@ const FRESH={
   nz_best_scores:{},nz_last_played:null,
   nz_settings:{reminders:true,sfx:true,notifications:true},
   nz_onboarded:false,nz_username:'Player',
-  nz_schulte_level:0,nz_today_games:0
+  nz_schulte_level:0,nz_today_games:0,
+  nz_xp:0,nz_daily_challenge_date:null,nz_daily_challenge_done:false,nz_daily_challenge_xp:0,
+  nz_game_plays:{}
 };
 function S(k){return LS.get(k,FRESH[k])}
 function setS(k,v){LS.set(k,v)}
@@ -112,6 +118,52 @@ function showAchToast(msg){
   setTimeout(()=>el.classList.remove('show'),3200);
 }
 
+/* ===================== XP / LEVELS ===================== */
+const LEVELS=[
+  {lv:1,name:'Novice',xp:0},{lv:2,name:'Apprentice',xp:500},{lv:3,name:'Thinker',xp:1200},
+  {lv:4,name:'Scholar',xp:2500},{lv:5,name:'Expert',xp:4500},{lv:6,name:'Genius',xp:7000},
+  {lv:7,name:'Prodigy',xp:10000},{lv:8,name:'Mastermind',xp:14000},{lv:9,name:'Sage',xp:19000},
+  {lv:10,name:'Legend',xp:25000},
+];
+function xpLevel(xp){
+  let cur=LEVELS[0];
+  for(const l of LEVELS){if(xp>=l.xp)cur=l;}
+  const next=cur.lv<10?LEVELS[cur.lv]:null;
+  return{cur,next};
+}
+function showLevelUp(lv){
+  playSound('achievement');confetti(80);
+  const ov=$(`<div class="lvlup-ov">
+    <div class="lvlup-card">
+      <div style="font-size:54px;">⬆️</div>
+      <div class="lvlup-title">LEVEL UP!</div>
+      <div class="lvlup-name">Lv ${lv.lv} · ${lv.name}</div>
+      <button class="btn-primary" style="margin-top:18px;min-width:180px;">Awesome! 🎉</button>
+    </div>
+  </div>`);
+  document.body.appendChild(ov);
+  ov.querySelector('button').onclick=()=>{ov.style.opacity='0';ov.style.transition='opacity .2s';setTimeout(()=>ov.remove(),200);};
+}
+/* ===================== DAILY CHALLENGE ===================== */
+const DAILY_DEFS=[
+  {game:'math',label:'Score 15+ in Quick Math',check:v=>v>=15},
+  {game:'wordflash',label:'Score 12+ in Word Flash',check:v=>v>=12},
+  {game:'dualnback',label:'Score 20+ in Word Chain',check:v=>v>=20},
+  {game:'memory',label:'Score 25+ in Memory Matrix',check:v=>v>=25},
+  {game:'pattern',label:'Score 8+ in Pattern IQ',check:v=>v>=8},
+  {game:'stroopx',label:'Score 30+ in Color Stroop',check:v=>v>=30},
+  {game:'schulte',label:'Score 40+ in Schulte Table',check:v=>v>=40},
+  {game:'reactionlab',label:'Score 25+ in Reaction Lab',check:v=>v>=25},
+  {game:'spatialspin',label:'Score 8+ in Spatial Spin',check:v=>v>=8},
+];
+function todayChallenge(){
+  const dayN=Math.floor(Date.now()/86400000);
+  return DAILY_DEFS[dayN%DAILY_DEFS.length];
+}
+function dailyDoneToday(){
+  return S('nz_daily_challenge_date')===todayKey()&&!!S('nz_daily_challenge_done');
+}
+
 /* ===================== ACHIEVEMENTS ===================== */
 const ACHIEVEMENTS=[
   {id:'first_game',emoji:'🎮',title:'First Steps',check:()=>S('nz_games_played')>=1},
@@ -155,6 +207,7 @@ function awardScore(rawPts,skillKey,gameId,gameScore){
   const next=Math.max(0,Math.min(1000,cur+pts));
   setS('nz_brain_score',next);
   setS('nz_games_played',S('nz_games_played')+1);
+  const gPlays=S('nz_game_plays');gPlays[gameId]=(gPlays[gameId]||0)+1;setS('nz_game_plays',gPlays);
   // streak
   const prevLast=S('nz_last_played');
   const today=todayKey();
@@ -181,6 +234,22 @@ function awardScore(rawPts,skillKey,gameId,gameScore){
     setS('nz_skill_scores',prev);setS('nz_skill_scores_prev',prevPrev);
   }
   checkAchievements(gameId,gameScore);
+  // XP + level system
+  let xpGain=Math.max(0,Math.round((gameScore||0)*10));
+  const dch=todayChallenge();
+  if(dch&&gameId===dch.game&&!dailyDoneToday()&&dch.check(gameScore)){
+    xpGain*=2;
+    setS('nz_daily_challenge_date',todayKey());
+    setS('nz_daily_challenge_done',true);
+    setS('nz_daily_challenge_xp',xpGain);
+    setTimeout(()=>toast('🎯 Daily Challenge complete! 2x XP earned!'),600);
+  }
+  const oldXp=S('nz_xp');
+  const newXp=oldXp+xpGain;
+  setS('nz_xp',newXp);
+  const prevLv=xpLevel(oldXp).cur.lv;
+  const newLv=xpLevel(newXp).cur;
+  if(newLv.lv>prevLv)setTimeout(()=>showLevelUp(newLv),900);
   return pts;
 }
 
@@ -234,6 +303,9 @@ function renderHome(){
   const goal=S('nz_today_goal');
   const todayCount=isPlayedToday()?S('nz_today_games'):0;
   const todayGame=GAMES[new Date().getDay()%GAMES.length];
+  const xp=S('nz_xp');
+  const {cur:lvCur,next:lvNext}=xpLevel(xp);
+  const xpPct=lvNext?Math.min(100,Math.round((xp-lvCur.xp)/(lvNext.xp-lvCur.xp)*100)):100;
   const p=$(`<div></div>`);
   p.innerHTML=`
     <div class="hdr">
@@ -258,6 +330,10 @@ function renderHome(){
           <div class="ring-delta">🧠 ${brainLevel(score)}</div>
         </div>
       </div>
+      <div class="xp-row">
+        <div class="xp-top"><span>⬆️ Lv ${lvCur.lv} · ${lvCur.name}</span><span>${lvNext?`${xp-lvCur.xp}/${lvNext.xp-lvCur.xp} XP to Lv ${lvNext.lv}`:'MAX LEVEL 👑'}</span></div>
+        <div class="xp-bar"><div class="xp-fill" id="xpFill" style="width:0%"></div></div>
+      </div>
       <div class="stats-row">
         <div class="stat-mini">
           <div class="ico flame flame-pulse">🔥</div>
@@ -269,6 +345,7 @@ function renderHome(){
         </div>
       </div>
     </div>
+    <div id="dailyCh"></div>
     <div class="sec-title"><h2>Your Skills</h2><a href="#" onclick="render('progress');return false;">Details ›</a></div>
     <div class="card skills-card"><div id="skillBars"></div></div>
     <div class="sec-title"><h2>Today's Challenge</h2></div>
@@ -288,6 +365,25 @@ function renderHome(){
   p.querySelector('#greetTxt').textContent=greet();
   p.querySelector('#darkToggle').onclick=()=>{setS('nz_dark_mode',!S('nz_dark_mode'));applyDark();render('home');};
   p.querySelector('#featuredCard').onclick=()=>openGame(todayGame.id);
+  // Daily challenge card
+  const dch=todayChallenge();
+  const dchGame=GAMES.find(g=>g.id===dch.game);
+  const dchDone=dailyDoneToday();
+  const dEl=p.querySelector('#dailyCh');
+  dEl.innerHTML=`<div class="sec-title"><h2>Daily Challenge</h2></div>
+    <div class="daily-card ${dchDone?'done':''}">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="dc-ico">${dchDone?'✅':'🎯'}</div>
+        <div style="flex:1;">
+          <div class="dc-name">${dch.label}</div>
+          <div class="dc-sub">${dchDone?`Completed! +${S('nz_daily_challenge_xp')} XP earned`:dchGame.icon+' '+dchGame.name}</div>
+        </div>
+        <span class="dc-badge">2x XP</span>
+      </div>
+      ${dchDone?'':'<button class="dc-play" id="dcPlay">Play Now ▶</button>'}
+    </div>`;
+  const dcBtn=dEl.querySelector('#dcPlay');
+  if(dcBtn)dcBtn.onclick=()=>{playSound('tap');openGame(dch.game);};
   const qp=p.querySelector('#qpRow');
   GAMES.forEach(g=>{
     const best=S('nz_best_scores')[g.id];
@@ -329,6 +425,8 @@ function renderHome(){
     const fg=p.querySelector('#ringFg');
     fg.style.transition='stroke-dashoffset 1.8s cubic-bezier(.22,1,.36,1)';
     fg.style.strokeDashoffset=circ*(1-pct);
+    const xf=p.querySelector('#xpFill');
+    if(xf){xf.style.transition='width 1.2s ease';xf.style.width=xpPct+'%';}
     const num=p.querySelector('#ringNum');
     const fromS=_homePrevScore;_homePrevScore=score;
     const start=performance.now();
@@ -372,15 +470,17 @@ function renderGames(){
     grid.innerHTML='';
     GAMES.filter(g=>gamesFilter==='All'||g.cat===gamesFilter).forEach(g=>{
       const best=S('nz_best_scores')[g.id];
-      const isNew=!best;
-      const todayFeatured=GAMES[new Date().getDay()%GAMES.length].id===g.id;
+      const plays=S('nz_game_plays')[g.id]||0;
+      const isNew=plays<3;
+      const isDaily=todayChallenge().game===g.id;
       const c=$(`<div class="gcard" style="background:${g.bg}">
         ${isNew?'<div class="new-badge">NEW</div>':''}
-        ${todayFeatured?'<div class="featured-badge">★ TODAY</div>':''}
-        <div class="gico" style="background:${g.iconBg}">${g.icon}</div>
+        ${isDaily?'<div class="featured-badge">🎯 TODAY</div>':''}
+        <div class="gico gico-shimmer" style="background:${g.iconBg}">${g.icon}</div>
         <div class="gn">${g.name}</div>
         <div class="gbest">${best?'Best: '+best:'Play to set record!'}</div>
         <div class="grow"><span class="gtag">${g.cat}</span></div>
+        ${best?`<div class="pb-badge">PB: ${best}</div>`:''}
       </div>`);
       c.onclick=()=>{playSound('tap');openGame(g.id);};
       grid.appendChild(c);
@@ -409,6 +509,8 @@ function openGame(id,wkCtx){
   }
   function closeGame(){
     clearInterval(state.timer);
+    window._allTimers.forEach(t=>t.type==='iv'?clearInterval(t.id):clearTimeout(t.id));
+    window._allTimers=[];
     wrap.style.animation='slideUp .25s reverse';
     setTimeout(()=>{wrap.remove();},230);
   }
@@ -430,9 +532,12 @@ function openGame(id,wkCtx){
     playSound('complete');
     const starThresh=opts.starThresh||[5,10,15];
     const stars=opts.value>=starThresh[2]?3:opts.value>=starThresh[1]?2:opts.value>=starThresh[0]?1:0;
+    const rankPct=opts.value/(starThresh[2]||1);
+    const rank=rankPct>=0.9?'S':rankPct>=0.75?'A':rankPct>=0.5?'B':'C';
+    const nextG=GAMES[(GAMES.findIndex(x=>x.id===id)+1)%GAMES.length];
     if(stars===3)confetti(50);
     wrap.innerHTML=`${hdr()}
-      <div class="end">
+      <div class="end ${rank==='S'?'rank-s-border':''}">
         <div class="em">${opts.emoji||'🎉'}</div>
         <h2>${opts.title||'Well done!'}</h2>
         <div style="color:var(--text2);font-size:13px;margin-bottom:8px;">${opts.sub||''}</div>
@@ -441,15 +546,18 @@ function openGame(id,wkCtx){
           <span class="star ${stars>=2?'lit':''}">⭐</span>
           <span class="star ${stars>=3?'lit':''}">⭐</span>
         </div>
-        <div class="gain">+${pts} Brain Score</div>
+        <div class="rank-chip rank-${rank.toLowerCase()}">RANK ${rank}</div>
+        <div><span class="gain">+${pts} Brain Score</span></div>
         ${isRec?'<div class="rec">✨ New Personal Record!</div>':''}
         ${opts.statsHtml||''}
         <div class="btns">
           <button class="btn-primary" id="again">Play Again</button>
           <button class="btn-share">📋 Share Score</button>
+          <button class="btn-ghost" id="nextGameBtn">Try ${nextG.name} →</button>
           <button class="btn-ghost" id="back">Back to Games</button>
         </div>
       </div>`;
+    wrap.querySelector('#nextGameBtn').onclick=()=>{wrap.remove();openGame(nextG.id);};
     wrap.querySelector('#again').onclick=()=>{wrap.remove();openGame(id);};
     wrap.querySelector('#back').onclick=()=>{closeGame();setTimeout(()=>render('games'),240);};
     wrap.querySelector('.gs-back').onclick=()=>{closeGame();setTimeout(()=>render('games'),240);};
@@ -622,30 +730,34 @@ function playMemory(body,setScore,end,wrap,startClock){
     }
     gridWrap.appendChild(grid);
     body.appendChild(gridWrap);
-    // Visual SVG arc countdown
-    const circ=2*Math.PI*24;
-    const cdWrap=document.createElement('div');
-    cdWrap.style.cssText='text-align:center;margin-top:10px;position:relative;';
-    cdWrap.innerHTML=`<svg width="60" height="60" viewBox="0 0 60 60" style="transform:rotate(-90deg);">
-      <circle cx="30" cy="30" r="24" fill="none" stroke="var(--border)" stroke-width="5"/>
-      <circle id="cdArc" cx="30" cy="30" r="24" fill="none" stroke="#7C3AED" stroke-width="5" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="0"/>
-    </svg>
-    <div id="cdNum" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:22px;font-weight:900;color:var(--text);">3</div>`;
-    body.appendChild(cdWrap);
-    let count=3;
-    const cdInt=setInterval(()=>{
-      count--;
-      const cdArc=body.querySelector('#cdArc');
-      const cdNum=body.querySelector('#cdNum');
-      if(cdArc)cdArc.style.strokeDashoffset=circ*(1-count/3);
-      if(count>0){if(cdNum)cdNum.textContent=count;}
-      else{
-        clearInterval(cdInt);
-        if(cdWrap)cdWrap.style.display='none';
-        startClock&&startClock();
-        startPattern();
-      }
-    },750);
+    // Visual SVG arc countdown — only once, before Round 1
+    if(round===0){
+      const circ=2*Math.PI*24;
+      const cdWrap=document.createElement('div');
+      cdWrap.style.cssText='text-align:center;margin-top:10px;position:relative;';
+      cdWrap.innerHTML=`<svg width="60" height="60" viewBox="0 0 60 60" style="transform:rotate(-90deg);">
+        <circle cx="30" cy="30" r="24" fill="none" stroke="var(--border)" stroke-width="5"/>
+        <circle id="cdArc" cx="30" cy="30" r="24" fill="none" stroke="#7C3AED" stroke-width="5" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="0"/>
+      </svg>
+      <div id="cdNum" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:22px;font-weight:900;color:var(--text);">3</div>`;
+      body.appendChild(cdWrap);
+      let count=3;
+      const cdInt=setInterval(()=>{
+        count--;
+        const cdArc=body.querySelector('#cdArc');
+        const cdNum=body.querySelector('#cdNum');
+        if(cdArc)cdArc.style.strokeDashoffset=circ*(1-count/3);
+        if(count>0){if(cdNum)cdNum.textContent=count;}
+        else{
+          clearInterval(cdInt);
+          if(cdWrap)cdWrap.style.display='none';
+          startClock&&startClock();
+          startPattern();
+        }
+      },750);
+    } else {
+      startPattern();
+    }
     function startPattern(){
       const pattern=[];
       while(pattern.length<cfg.c){const r=Math.floor(Math.random()*cellCount);if(!pattern.includes(r))pattern.push(r);}
@@ -915,173 +1027,230 @@ function playPattern(body,setScore,end,wrap,startClock){
   instrEl.querySelector('#patStart').onclick=()=>{instrEl.remove();startClock&&startClock();next();};
 }
 
-/* ===================== WORD FLASH ===================== */
-const WORD_GROUPS=[
-  ['BRAIN','TRAIN','GRAIN','DRAIN'],['FLAME','FLARE','BLAME','BLADE'],
-  ['SPADE','SPACE','SPARE','SPARK'],['PLANE','PLACE','PLAIN','PLANK'],
-  ['STONE','STORE','STOVE','STOKE'],['CRANE','CRATE','GRACE','GRADE'],
-  ['BREAD','DREAD','TREAD','BRAID'],['SWIFT','SHIFT','SWIRL','SNIFF'],
-  ['FROST','FRONT','FROTH','FROWN'],['SHARP','SHARE','SHARD','CHARM'],
-  ['LIGHT','NIGHT','TIGHT','SIGHT'],['FORCE','FORGE','FORTE','FORTS'],
-  ['PRIDE','PRICE','PRISM','PRISE'],['CLOCK','BLOCK','FLOCK','KNOCK'],
-  ['CLOUD','CLOUT','FLOUR','FLOAT'],
+/* ===================== WORD FLASH 2.0 ===================== */
+const WF_T1=[
+  ['CALM','CLAM','COAL','CALF'],['FORM','FROM','FORT','FOAM'],
+  ['SALT','SLAT','SLOT','SILT'],['WORD','WARD','WARM','CORD'],
+  ['MILE','LIME','MINE','MICE'],['TIDE','TIED','DIET','EDIT'],
+  ['STAR','RATS','SCAR','STIR'],['LOOP','POOL','POLO','LOOT'],
+];
+const WF_T2=[
+  ['SWIFT','SHIFT','SNIFF','SWIRL'],['QUIET','QUITE','QUOTE','QUILT'],
+  ['ANGEL','ANGLE','AGILE','ANKLE'],['BREAD','BEARD','BOARD','BRAND'],
+  ['DAIRY','DIARY','DERBY','DIRTY'],['SACRED','SCARED','SEARED','SCORED'],
+  ['MARBLE','RAMBLE','MARVEL','MANTLE'],['SILVER','SLIVER','SLIDER','SILKEN'],
+];
+const WF_T3=[
+  ['THROUGH','TROUGH','THOROUGH','THOUGHT'],['PRECEDE','PROCEED','PRESIDE','PRECISE'],
+  ['DESSERT','DESERTS','DISSENT','DISSECT'],['CONVERSE','CONSERVE','CONVERGE','CONVEYED'],
+  ['ADAPTER','ADOPTER','ADAPTED','ADOPTED'],['LATERAL','LITERAL','LITERARY','LITERATE'],
+  ['EMINENT','IMMINENT','EMIGRANT','ELEGANT'],['CRYSTAL','CRUCIAL','CYNICAL','CLINICAL'],
 ];
 function playWordFlash(body,setScore,end,wrap,startClock){
-  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Word flash hoga — yaad karo, phir dhundo!<br>
-  <button style="margin-top:10px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="wfStart">▶ Start</button>
+  let q=0,score=0,streak=0,bestStreak=0,fastest=null,correctCount=0;
+  const pools={1:[...WF_T1].sort(()=>Math.random()-.5),2:[...WF_T2].sort(()=>Math.random()-.5),3:[...WF_T3].sort(()=>Math.random()-.5)};
+  const used={1:0,2:0,3:0};
+  function takeGroup(tier){const p=pools[tier];const g=p[used[tier]%p.length];used[tier]++;return g;}
+  const instrEl=$(`<div class="instr" style="margin-bottom:14px;"><strong>Word Flash 2.0</strong><br>Word ek flash mein dikhega — distractors bilkul similar honge!<br><span style="font-size:11px;color:var(--primary);">Q8+ DECOY MODE: 2 words ek saath — dono yaad rakho! ⚡ &lt;500ms = bonus point</span><br>
+  <button style="margin-top:10px;padding:12px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="wfStart">▶ Start</button>
 </div>`);
   body.appendChild(instrEl);
   const host=$(`<div></div>`);body.appendChild(host);
-  const roundBar=$(`<div class="round-bar" id="wRBar"></div>`);
-  body.appendChild(roundBar);
-  for(let i=0;i<15;i++)roundBar.appendChild($(`<div class="round-dot ${i===0?'current':''}"></div>`));
-  let q=0,score=0,shuffled=[...WORD_GROUPS].sort(()=>Math.random()-.5);
-  function updateBar(){const dots=wrap.querySelectorAll('.round-dot');dots.forEach((d,i)=>{d.className='round-dot'+(i<q?' done':i===q?' current':'');});}
   function next(){
     if(q>=15){
-      end({title:'Word Flash Done!',emoji:'📝',sub:`Score: ${score}/15`,value:score,points:score*4,starThresh:[6,10,13],
-        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}/15</span></div><div class="row"><span>Accuracy</span><span class="val">${Math.round(score/15*100)}%</span></div></div>`});
+      const acc=Math.round(correctCount/15*100);
+      end({title:'Word Flash Done! 📝',emoji:'📝',sub:`${score} pts · ${acc}% accuracy`,value:score,points:score*2,starThresh:[15,25,35],
+        statsHtml:`<div class="end-stats">
+          <div class="row"><span>Score</span><span class="val">${score} pts</span></div>
+          <div class="row"><span>Accuracy</span><span class="val">${acc}% (${correctCount}/15)</span></div>
+          <div class="row"><span>Fastest Response</span><span class="val">${fastest!==null?fastest+'ms':'—'}</span></div>
+          <div class="row"><span>Longest Streak</span><span class="val">${bestStreak} 🔥</span></div>
+        </div>`});
       return;
     }
-    updateBar();
-    const group=shuffled[q%shuffled.length];
-    const correctWord=group[0];
-    const displayMs=Math.max(400,800-q*26);
-    const opts=[...group].sort(()=>Math.random()-.5);
-    host.innerHTML=`<div class="word-display" id="wDisplay">${correctWord}</div><div class="word-opts" id="wOpts" style="opacity:0"></div>
-      <div style="text-align:center;font-size:12px;color:var(--text2);margin-top:8px;">Q${q+1}/15 · ${displayMs}ms flash</div>`;
-    const optsEl=host.querySelector('#wOpts');
-    opts.forEach(w=>{
-      const b=$(`<button class="word-opt" data-w="${w}">${w}</button>`);
-      optsEl.appendChild(b);
-    });
-    setTimeout(()=>{
-      host.querySelector('#wDisplay').style.opacity='0';
-      host.querySelector('#wDisplay').style.transition='opacity 0.2s';
-      setTimeout(()=>{
-        host.querySelector('#wDisplay').textContent='?';
-        host.querySelector('#wDisplay').style.opacity='1';
-        optsEl.style.opacity='1';
-        optsEl.style.transition='opacity 0.2s';
-        optsEl.querySelectorAll('.word-opt').forEach(b=>{
+    const tier=q<5?1:q<10?2:3;
+    const flashMs=Math.max(400,900-q*50);
+    const decoy=q>=7;
+    const group=takeGroup(tier);
+    let words=[group[0]],askSide=0,group2=null;
+    if(decoy){
+      group2=takeGroup(tier);
+      words=[group[0],group2[0]];
+      askSide=Math.random()<0.5?0:1;
+    }
+    const askGroup=decoy&&askSide===1?group2:group;
+    const askWord=askGroup[0];
+    host.innerHTML=`
+      <div class="wf-stage">
+        <div class="wf-bar"><div class="wf-bar-fill" id="wfBar"></div></div>
+        <div class="wf-words">${words.map(w=>`<div class="wf-word" style="font-size:${decoy?'26px':'48px'};">${w}</div>`).join('')}</div>
+        ${decoy?'<div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:10px;letter-spacing:.12em;font-weight:700;">DECOY MODE — DONO YAAD RAKHO!</div>':''}
+      </div>
+      <div style="text-align:center;font-size:12px;color:var(--text2);margin-top:8px;">Q${q+1}/15 · ${flashMs}ms flash${streak>=3?' · 🔥 x1.5':''}</div>`;
+    const bar=host.querySelector('#wfBar');
+    requestAnimationFrame(()=>{requestAnimationFrame(()=>{if(bar){bar.style.transition=`width ${flashMs}ms linear`;bar.style.width='0%';}});});
+    _st(()=>{
+      const stage=host.querySelector('.wf-stage');
+      if(stage){stage.style.transition='opacity .2s';stage.style.opacity='0';}
+      _st(()=>{
+        const opts=[...askGroup].sort(()=>Math.random()-.5);
+        const askTs=Date.now();
+        host.innerHTML=`
+          <div class="wf-stage" style="padding:22px 16px;">
+            <div class="wf-word" style="font-size:44px;">?</div>
+            ${decoy?`<div style="font-size:12px;color:#A78BFA;font-weight:700;margin-top:6px;">${askSide===0?'⬅ LEFT':'RIGHT ➡'} wala word kaunsa tha?</div>`:''}
+          </div>
+          <div class="word-opts" id="wOpts" style="margin-top:14px;"></div>
+          <div style="text-align:center;font-size:12px;color:var(--text2);margin-top:8px;">Q${q+1}/15${streak>=3?' · 🔥 STREAK x1.5':''}</div>`;
+        const optsEl=host.querySelector('#wOpts');
+        opts.forEach(w=>{
+          const b=$(`<button class="word-opt" data-w="${w}">${w}</button>`);
           b.onclick=()=>{
-            const chosen=b.dataset.w;
-            if(chosen===correctWord){playSound('correct');score++;setScore(score);b.classList.add('correct-ans');}
-            else{playSound('wrong');b.classList.add('wrong-ans');optsEl.querySelectorAll('.word-opt').forEach(bb=>{if(bb.dataset.w===correctWord)bb.classList.add('correct-ans');});}
             optsEl.querySelectorAll('.word-opt').forEach(bb=>bb.disabled=true);
-            setTimeout(()=>{q++;next();},500);
+            const ms=Date.now()-askTs;
+            if(b.dataset.w===askWord){
+              playSound('correct');correctCount++;
+              const fast=ms<500;
+              if(fastest===null||ms<fastest)fastest=ms;
+              let pts=fast?3:2;
+              streak++;if(streak>bestStreak)bestStreak=streak;
+              if(streak===3)showCombo('+STREAK BONUS x1.5');
+              if(streak>=3)pts=Math.round(pts*1.5);
+              if(fast)showCombo('⚡ SPEED DEMON!');
+              score+=pts;setScore(score);
+              b.classList.add('wf-correct');
+            } else {
+              playSound('wrong');streak=0;
+              b.classList.add('wf-wrong');
+              optsEl.querySelectorAll('.word-opt').forEach(bb=>{if(bb.dataset.w===askWord)bb.classList.add('wf-correct');});
+            }
+            _st(()=>{q++;next();},650);
           };
+          optsEl.appendChild(b);
         });
-      },150);
-    },displayMs);
+      },200);
+    },flashMs);
   }
   instrEl.querySelector('#wfStart').onclick=()=>{instrEl.remove();startClock&&startClock();next();};
 }
 
-/* ===================== WORD CHAIN ===================== */
+/* ===================== WORD CHAIN 2.0 ===================== */
+const WC_WORDS=['Apple','Chair','River','Cloud','Music','Tiger','Bread','Stone','Light','Phone','Dream','Water','House','Paper','Green','Earth','Smile','Train','Dance','Maple','Ocean','Clock','Flame','Brain','Sugar','Grass','Pilot','Queen','Frost','Arrow','Lemon','Storm','Movie','Brush','Radio','Pearl','Eagle','Comet','Prize','Unity'];
 function playNeuralChain(body,setScore,end,wrap,startClock){
-  const WORD_SETS=[
-    ['Apple','Chair','River','Cloud','Music'],
-    ['Tiger','Bread','Stone','Light','Phone'],
-    ['Dream','Water','House','Paper','Green'],
-    ['Earth','Smile','Train','Dance','Maple'],
-    ['Ocean','Clock','Flame','Brain','Sugar'],
-    ['Grass','Pilot','Queen','Frost','Arrow'],
-    ['Lemon','Storm','Movie','Brush','Radio'],
-    ['Pearl','Eagle','Comet','Prize','Unity'],
-  ];
+  const FLASH_COLORS=['#7C3AED','#4F8EF7','#34D399'];
+  const record=LS.get('nz_wordchain_record',0);
+  let round=0,lives=3,totalScore=0,longest=0,mistakes=0;
   const instrEl=$(`<div class="instr" style="margin-bottom:14px;">
-    <strong>Word Chain</strong><br>
-    Ek ke baad ek words dikhenge — <em>saare yaad karo!</em><br>
-    End mein sab words sahi order mein tap karo.<br>
-    <span style="font-size:11px;color:var(--primary);">Chain lambi hoti jayegi — kitni yaad rakh sakte ho?</span><br>
-    <button style="margin-top:12px;padding:10px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="wcStart">▶ Start</button>
+    <strong>Word Chain 2.0 🔗</strong><br>
+    Words ek-ek karke flash honge — order yaad rakho, phir sahi order mein tap karo!<br>
+    <span style="font-size:11px;color:var(--primary);">3 lives ❤️ · Chain 5+ = 👻 distractor · Chain 6+ = ⚡ SPEED MODE</span>
+    ${record>0?`<div style="margin-top:6px;font-size:12px;font-weight:700;color:var(--mint);">🏆 Personal Record: ${record}-word chain</div>`:''}
+    <button style="margin-top:12px;padding:12px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="wcStart">▶ Start</button>
   </div>`);
   body.appendChild(instrEl);
-  const host=$(`<div style="text-align:center;"></div>`);
+  const host=$(`<div></div>`);
   body.appendChild(host);
-  instrEl.querySelector('#wcStart').onclick=()=>{
-    instrEl.remove();
-    startClock&&startClock();
-    startRound(0,[]);
-  };
-  function startRound(chainLen,existing){
-    const allWords=WORD_SETS.flat();
-    const usedSet=new Set(existing);
-    const available=allWords.filter(w=>!usedSet.has(w));
-    const newWord=available[Math.floor(Math.random()*available.length)];
-    const chain=[...existing,newWord];
-    host.innerHTML='';
-    const chainLen2=chain.length;
+  function hudHtml(extra){
+    return `<div class="wc-hearts">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''}" id="wcH${i}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>
+    <div class="chain-links">${Array.from({length:8},(_,i)=>`<span class="ch-link ${i<round?'done':i===round?'cur':''}">${3+i}</span>`).join('<span class="ch-conn"></span>')}</div>
+    ${extra||''}`;
+  }
+  function startRound(){
+    const len=3+round;
+    const speed=len>=6;
+    const flashMs=speed?600:800;
+    const pool=[...WC_WORDS].sort(()=>Math.random()-.5);
+    const chain=pool.slice(0,len);
+    const distractor=len>=5?pool[len]:null;
     let idx=0;
-    function showNextWord(){
-      host.innerHTML=`
-        <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">Chain ${chainLen2} — Word ${idx+1}/${chainLen2}</div>
-        <div style="font-size:42px;font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding:24px;background-color:var(--card);border-radius:20px;box-shadow:var(--shadow);margin:0 auto;display:inline-block;min-width:180px;">
-          ${chain[idx]}
-        </div>
-        <div style="margin-top:12px;font-size:12px;color:var(--text2);">yaad karo...</div>
-      `;
+    function flashWord(){
+      const color=FLASH_COLORS[idx%3];
+      host.innerHTML=hudHtml(`<div style="text-align:center;font-size:12px;color:var(--text2);margin-bottom:8px;">Chain ${len} — Word ${idx+1}/${len}${speed?' · ⚡ SPEED MODE':''}</div>`)+
+        `<div class="wc-flash" style="background:${color};">${chain[idx]}</div>`;
       idx++;
-      if(idx<chainLen2){
-        setTimeout(showNextWord,1200);
-      } else {
-        setTimeout(()=>showRecall(chain),600);
-      }
+      if(idx<len)_st(flashWord,flashMs);
+      else _st(()=>showRecall(),flashMs);
     }
-    showNextWord();
-    function showRecall(chain){
-      const shuffled=[...chain].sort(()=>Math.random()-.5);
-      let tapped=[];
-      host.innerHTML=`
-        <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">Sahi order mein tap karo!</div>
-        <div style="min-height:48px;background:var(--card);border-radius:14px;padding:10px;margin-bottom:14px;box-shadow:var(--shadow);font-size:14px;font-weight:600;color:var(--primary);" id="wcAnswer">
-          ${chain.map((_,i)=>`<span id="wcSlot${i}" style="opacity:.3;">_____</span>`).join(' → ')}
+    function showRecall(){
+      let opts=[...chain];
+      if(distractor)opts.push(distractor);
+      opts.sort(()=>Math.random()-.5);
+      let tapped=0;
+      host.innerHTML=hudHtml()+`
+        <div style="text-align:center;font-size:13px;color:var(--text2);margin-bottom:8px;">Sahi order mein tap karo!${distractor?' <span style="color:#F97316;font-weight:700;">(1 distractor hai 👻)</span>':''}</div>
+        <div style="min-height:44px;background:var(--card);border-radius:14px;padding:10px;margin-bottom:14px;box-shadow:var(--shadow);font-size:13px;font-weight:600;color:var(--primary);text-align:center;" id="wcSlots">
+          ${chain.map((_,i)=>`<span id="wcSlot${i}" style="opacity:.3;">____</span>`).join(' → ')}
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;" id="wcBtns">
-          ${shuffled.map(w=>`<button class="wc-btn" data-w="${w}" style="padding:10px 16px;background:var(--card);border-radius:12px;font-weight:600;font-size:14px;box-shadow:var(--shadow);border:2px solid var(--border);">${w}</button>`).join('')}
-        </div>
-        <div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text2);">${tapped.length}/${chain.length} tapped</div>
-      `;
+          ${opts.map(w=>`<button class="wc-btn" data-w="${w}" style="padding:12px 18px;min-height:44px;background:var(--card);border-radius:12px;font-weight:600;font-size:14px;box-shadow:var(--shadow);border:2px solid var(--border);">${w}</button>`).join('')}
+        </div>`;
       host.querySelectorAll('.wc-btn').forEach(btn=>{
         btn.onclick=()=>{
           if(btn.disabled)return;
-          btn.disabled=true;
-          btn.style.opacity='.4';
-          tapped.push(btn.dataset.w);
-          const slot=host.querySelector(`#wcSlot${tapped.length-1}`);
-          if(slot){
-            const correct=chain[tapped.length-1]===btn.dataset.w;
-            slot.textContent=btn.dataset.w;
-            slot.style.opacity='1';
-            slot.style.color=correct?'#34D399':'#EF4444';
-            playSound(correct?'correct':'wrong');
-          }
-          if(tapped.length>=chain.length){
-            const correctCount=tapped.filter((w,i)=>w===chain[i]).length;
-            const allCorrect=correctCount===chain.length;
-            setTimeout(()=>{
-              if(allCorrect){
-                setScore(chain.length);
-                host.innerHTML+=`<div style="text-align:center;margin-top:12px;font-size:16px;font-weight:700;color:#34D399;">✅ Perfect! Next chain...</div>`;
-                setTimeout(()=>startRound(chainLen2,chain),1200);
-              } else {
-                const finalScore=chain.length-1;
-                end({
-                  title:'Word Chain Complete! 🔗',
-                  emoji:'🔗',
-                  sub:`Longest chain: ${finalScore} words`,
-                  value:finalScore,
-                  points:Math.max(5,finalScore*4),
-                  starThresh:[4,7,10]
-                });
-              }
-            },800);
+          const w=btn.dataset.w;
+          if(w===chain[tapped]){
+            playSound('correct');
+            btn.disabled=true;btn.style.opacity='.35';
+            const slot=host.querySelector('#wcSlot'+tapped);
+            if(slot){slot.textContent=w;slot.style.opacity='1';slot.style.color='#34D399';}
+            tapped++;
+            if(tapped>=len)roundComplete(len);
+          } else {
+            mistakes++;
+            playSound('wrong');
+            btn.style.background='#F87171';btn.style.color='#fff';
+            host.querySelectorAll('.wc-btn').forEach(b=>b.disabled=true);
+            loseLife();
           }
         };
       });
     }
+    flashWord();
   }
+  function roundComplete(len){
+    totalScore+=len;if(len>longest)longest=len;
+    setScore(totalScore);
+    showCombo('CHAIN COMPLETE! 🔗');
+    playSound('complete');
+    host.innerHTML=hudHtml()+`
+      <div style="text-align:center;padding:24px 0;">
+        <div style="display:inline-block;background:var(--grad);color:#fff;padding:14px 26px;border-radius:50px;font-weight:800;font-size:18px;box-shadow:var(--shadow-lg);animation:popIn .4s ease;">🔗 ${len}-WORD CHAIN · +${len}pts</div>
+      </div>`;
+    round++;
+    if(round>=8)_st(()=>finish(),1300);
+    else _st(()=>startRound(),1300);
+  }
+  function loseLife(){
+    lives--;
+    showCombo('CHAIN BROKEN! 💔');
+    const h=host.querySelector('#wcH'+lives);
+    if(h){h.textContent='💔';h.classList.add('crack','lost');}
+    if(lives<=0){_st(()=>finish(),1200);return;}
+    _st(()=>startRound(),1400);
+  }
+  function finish(){
+    const perfect=mistakes===0;
+    let chainPts=totalScore;
+    if(perfect)chainPts*=2;
+    const livesBonus=lives*5;
+    const final=chainPts+livesBonus;
+    setScore(final);
+    if(longest>record)LS.set('nz_wordchain_record',longest);
+    end({
+      title:lives>0?'Chain Master! 🔗':'Chain Over! 💔',
+      emoji:'🔗',
+      sub:`Longest chain: ${longest} words${perfect?' · ✨ PERFECT x2':''}`,
+      value:final,points:final*2,starThresh:[20,40,60],
+      statsHtml:`<div class="end-stats">
+        <div class="row"><span>Longest Chain</span><span class="val">${longest} words</span></div>
+        <div class="row"><span>Chain Points${perfect?' (x2 perfect)':''}</span><span class="val">${chainPts}</span></div>
+        <div class="row"><span>Lives Bonus</span><span class="val">+${livesBonus} (${lives} ❤️)</span></div>
+        <div class="row"><span>Total Score</span><span class="val">${final}</span></div>
+        ${longest>record&&longest>0?`<div class="row"><span>🏆 New Record</span><span class="val">${longest}-word chain</span></div>`:''}
+      </div>`
+    });
+  }
+  instrEl.querySelector('#wcStart').onclick=()=>{instrEl.remove();startClock&&startClock();startRound();};
 }
 
 /* ===================== QUICK MATH ===================== */
@@ -1135,6 +1304,7 @@ function playMath(body,setScore,end,wrap,startClock){
     }
   }
   function endRun(opts){
+    wrap.classList.remove('fire-glow');
     const total=score+sdBonus;
     end({...opts,value:total,points:total*3,statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}/20</span></div><div class="row"><span>Max Tier</span><span class="val">${maxTier+1}</span></div><div class="row"><span>SD Bonus</span><span class="val">+${sdBonus}</span></div></div>`});
   }
@@ -1147,7 +1317,7 @@ function playMath(body,setScore,end,wrap,startClock){
     const {display,correct,isWord}=genQuestion();
     const tc=TIERS[tier];
     if(tier>maxTier)maxTier=tier;
-    const mult=combo>=3?1.5:1;
+    const mult=consecutive>=5?3:consecutive>=3?2:1;
     const timeMs=tc.timeMs;
     const range=Math.max(Math.ceil(Math.abs(correct)*0.15),3);
     const used=new Set([correct]);
@@ -1162,7 +1332,7 @@ function playMath(body,setScore,end,wrap,startClock){
     const opts=[correct,...distract].sort(()=>Math.random()-.5);
     host.innerHTML=`
       <div class="timer-bar"><div class="timer-fill timer-green" id="mBar" style="width:100%"></div></div>
-      <div style="text-align:center;font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;">${tc.label}${sdMode?'  <span style="color:#EF4444;">💀 SUDDEN DEATH</span>':''}${combo>=3?`  🔥×${Math.round(mult)}`:''}  Q${q+1}/20</div>
+      <div style="text-align:center;font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;">${tc.label}${sdMode?'  <span style="color:#EF4444;">💀 SUDDEN DEATH</span>':''}${mult>1?`  ${mult===3?'🔥 x3':'⚡ x2'}`:''}  Q${q+1}/20</div>
       <div style="text-align:center;font-size:${isWord?'14px':'32px'};font-weight:${isWord?'600':'900'};margin:${isWord?'8px':'10px'} 0;line-height:${isWord?'1.4':'1'};min-height:${isWord?'56px':'auto'};">${display}</div>
       <div class="math-opts">${opts.map(v=>`<button class="math-opt" data-v="${v}">${v}</button>`).join('')}</div>`;
     let elapsed=0;
@@ -1172,7 +1342,7 @@ function playMath(body,setScore,end,wrap,startClock){
       const bar=wrap.querySelector('#mBar');
       if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
       if(elapsed>=timeMs){
-        clearInterval(barTimer);combo=0;consecutive=0;
+        clearInterval(barTimer);combo=0;consecutive=0;wrap.classList.remove('fire-glow');
         host.querySelectorAll('.math-opt').forEach(b=>{if(+b.dataset.v===correct)b.classList.add('correct-ans');b.disabled=true;});
         host.innerHTML+=`<div style="text-align:center;font-size:12px;color:#EF4444;margin-top:6px;">⏱ ${display} = ${correct}</div>`;
         if(sdMode){setTimeout(()=>endRun({title:'Sudden Death!',emoji:'💀',sub:`SD Run ended! +${sdBonus} bonus`}),700);return;}
@@ -1186,11 +1356,12 @@ function playMath(body,setScore,end,wrap,startClock){
         const chosen=+btn.dataset.v;
         if(chosen===correct){
           playSound('correct');
-          score+=Math.round(mult);setScore(score);
+          score+=mult;setScore(score);
           btn.classList.add('correct-ans');
           consecutive++;wrong2=0;
-          if(consecutive>=5&&!sdMode){sdMode=true;sdBonus+=10;showCombo('💀 SUDDEN DEATH!');}
-          else if(consecutive>=3){combo=consecutive;showCombo(`🔥 ${combo}× COMBO!`);}
+          if(consecutive===3){combo=consecutive;showCombo('COMBO x2');}
+          if(consecutive===5){wrap.classList.add('fire-glow');showCombo('ON FIRE 🔥');}
+          if(consecutive>=5&&!sdMode){sdMode=true;sdBonus+=10;}
           if(consecutive>=4&&consecutive%4===0)tier=Math.min(7,tier+1);
         } else {
           playSound('wrong');
@@ -1202,7 +1373,7 @@ function playMath(body,setScore,end,wrap,startClock){
             setTimeout(()=>endRun({title:'Sudden Death!',emoji:'💀',sub:`Score: ${score} + ${sdBonus} SD bonus`}),900);
             return;
           }
-          combo=0;consecutive=0;wrong2++;
+          combo=0;consecutive=0;wrong2++;wrap.classList.remove('fire-glow');
           if(wrong2>=2){wrong2=0;tier=Math.max(0,tier-1);}
           host.innerHTML+=`<div style="text-align:center;font-size:12px;color:var(--text2);margin-top:6px;">${display} = ${correct} ✓</div>`;
         }
@@ -1218,7 +1389,21 @@ function playMath(body,setScore,end,wrap,startClock){
 function playStroopX(body,setScore,end,wrap,startClock){
   const COLORS=[{name:'Red',hex:'#EF4444'},{name:'Blue',hex:'#3B82F6'},{name:'Green',hex:'#22C55E'},{name:'Yellow',hex:'#EAB308'},{name:'Purple',hex:'#A855F7'}];
   const SHAPES=[{name:'Circle',sym:'●'},{name:'Square',sym:'■'},{name:'Triangle',sym:'▲'},{name:'Star',sym:'★'}];
-  let round=0,score=0,combo=0,maxCombo=0;
+  let round=0,score=0,combo=0,maxCombo=0,lives=3;
+  function livesHtml(){return `<div class="wc-hearts">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>`;}
+  function loseLife(){
+    lives--;
+    host.classList.add('shake-anim');
+    _st(()=>host.classList.remove('shake-anim'),450);
+    if(lives<=0){
+      _st(()=>{
+        end({title:'Out of Lives! 💔',emoji:'🎨',sub:`Score: ${score} pts · ${round+1} rounds`,value:score,points:score*4,starThresh:[40,65,90],
+          statsHtml:`<div class="end-stats"><div class="row"><span>Score</span><span class="val">${score}</span></div><div class="row"><span>Rounds Survived</span><span class="val">${round+1}/30</span></div><div class="row"><span>Max Combo</span><span class="val">${maxCombo}</span></div></div>`});
+      },900);
+      return true;
+    }
+    return false;
+  }
   const host=$(`<div style="text-align:center;padding:12px 0;"></div>`);
   body.appendChild(host);
   const btn=$(`<button class="start-btn">Tap to Start (30 rounds)</button>`);
@@ -1253,6 +1438,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
       choices.sort(()=>Math.random()-.5);
       host.innerHTML=`
         <div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>
+        ${livesHtml()}
         <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Round ${round+1}/30 · Phase 1 — INK ka rang tap karo!</div>
         ${combo>=3?`<div style="font-size:11px;font-weight:700;color:#7C3AED;margin-bottom:4px;">🔥 Combo ×1.5</div>`:''}
         <div style="font-size:52px;font-weight:900;color:${ink.hex};margin:14px 0;">${word.name}</div>
@@ -1275,6 +1461,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
           } else {
             playSound('wrong');combo=0;b.style.background='#EF4444';
             host.innerHTML+=`<div style="font-size:11px;color:#EF4444;margin-top:4px;">Ink: <strong style="color:${ink.hex}">${ink.name}</strong></div>`;
+            if(loseLife())return;
           }
           host.querySelectorAll('.stroop-opt').forEach(x=>x.disabled=true);
           round++;setTimeout(nextRound,700);
@@ -1288,6 +1475,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
       const choices=[...SHAPES].sort(()=>Math.random()-.5);
       host.innerHTML=`
         <div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>
+        ${livesHtml()}
         <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Round ${round+1}/30 · Phase 2 — Jo SHAPE dikhti hai, usse tap karo!</div>
         <div style="font-size:64px;font-weight:900;color:${inkColor.hex};margin:10px 0;">${dispShape.sym}</div>
         <div style="font-size:11px;color:var(--text2);margin-bottom:8px;">(Word: "${wordShape.name}" — IGNORE karo)</div>
@@ -1310,6 +1498,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
           } else {
             playSound('wrong');combo=0;b.style.background='#EF4444';b.style.color='#fff';
             host.innerHTML+=`<div style="font-size:11px;color:#EF4444;margin-top:4px;">Was: ${dispShape.sym} ${dispShape.name}</div>`;
+            if(loseLife())return;
           }
           host.querySelectorAll('.stroop-opt').forEach(x=>x.disabled=true);
           round++;setTimeout(nextRound,700);
@@ -1334,6 +1523,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
       }
       host.innerHTML=`
         <div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>
+        ${livesHtml()}
         <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Round ${round+1}/30 · Phase 3</div>
         <div style="font-size:13px;font-weight:700;color:${askColor?'#A78BFA':'#34D399'};margin-bottom:6px;">${askColor?'🎨 INK COLOR kya hai?':'🔷 SHAPE kya dikhti hai?'}</div>
         <div style="font-size:58px;font-weight:900;color:${inkColor.hex};margin:6px 0;">${dispShape.sym}</div>
@@ -1360,6 +1550,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
           } else {
             playSound('wrong');combo=0;b.style.background='#EF4444';b.style.color='#fff';
             host.innerHTML+=`<div style="font-size:11px;color:#EF4444;margin-top:4px;">Answer: ${target}</div>`;
+            if(loseLife())return;
           }
           host.querySelectorAll('.stroop-opt').forEach(x=>x.disabled=true);
           round++;setTimeout(nextRound,700);
@@ -1557,7 +1748,7 @@ const SOUNDS=[
   {name:'White Noise',emoji:'💨',desc:'Breathing rhythm'},
   {name:'Deep Focus',emoji:'🎯',desc:'40Hz binaural beats'},
 ];
-let relaxAudio={ctx:null,master:null,nodes:[],timers:[],playing:-1,targetVol:0.7};
+let relaxAudio={ctx:null,master:null,nodes:[],timers:[],playing:-1,targetVol:0.7,paused:false};
 
 function stopRelaxAudio(){
   const ac=relaxAudio.ctx;
@@ -1568,11 +1759,12 @@ function stopRelaxAudio(){
     try{m.gain.cancelScheduledValues(ac.currentTime);m.gain.setValueAtTime(m.gain.value,ac.currentTime);m.gain.linearRampToValueAtTime(0,ac.currentTime+1.5);}catch(e){}
     setTimeout(()=>stale.forEach(n=>{try{n.stop();}catch(e){}}),1600);
   }else{relaxAudio.nodes.forEach(n=>{try{n.stop();}catch(e){}});}
-  relaxAudio.nodes=[];relaxAudio.master=null;relaxAudio.playing=-1;
+  relaxAudio.nodes=[];relaxAudio.master=null;relaxAudio.playing=-1;relaxAudio.paused=false;
 }
 
 function makeNoiseBuffer(ac,type){
-  const len=ac.sampleRate*4;
+  if(_noiseCache[type])return _noiseCache[type];
+  const len=ac.sampleRate*2;
   const buf=ac.createBuffer(1,len,ac.sampleRate);
   const d=buf.getChannelData(0);
   if(type==='brown'){
@@ -1586,6 +1778,7 @@ function makeNoiseBuffer(ac,type){
       d[i]=(b0+b1+b2+w*0.1848)*0.18;
     }
   }else{for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*0.5;}
+  _noiseCache[type]=buf;
   return buf;
 }
 
@@ -1600,6 +1793,7 @@ function birdChirp(ac,dest){
     g.gain.setValueAtTime(0.0001,ac.currentTime);
     g.gain.exponentialRampToValueAtTime(0.08,ac.currentTime+0.03);
     g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+0.3);
+    o.onended=()=>{try{o.disconnect();}catch(e){}};
     o.connect(g);g.connect(dest);o.start();o.stop(ac.currentTime+0.32);
   }catch(e){}
 }
@@ -1620,7 +1814,7 @@ function playRelaxSound(idx,vol){
   master.gain.setValueAtTime(0.0001,ac.currentTime);
   master.gain.linearRampToValueAtTime(vol,ac.currentTime+2);
   master.connect(ac.destination);
-  relaxAudio.ctx=ac;relaxAudio.master=master;relaxAudio.playing=idx;relaxAudio.targetVol=vol;
+  relaxAudio.ctx=ac;relaxAudio.master=master;relaxAudio.playing=idx;relaxAudio.targetVol=vol;relaxAudio.paused=false;
   buildRelaxSound(idx,ac,master);
 }
 
@@ -1640,6 +1834,7 @@ function buildRelaxSound(idx,ac,master){
         const dg=ac.createGain();const t=ac.currentTime;
         dg.gain.setValueAtTime(0,t);dg.gain.linearRampToValueAtTime(0.04+Math.random()*0.09,t+0.008);
         dg.gain.exponentialRampToValueAtTime(0.0001,t+0.05+Math.random()*0.09);
+        d.onended=()=>{try{d.disconnect();}catch(e){}};
         d.connect(df);df.connect(dg);dg.connect(master);d.start(t);d.stop(t+0.18);
       }catch(e){}
     },120));
@@ -1675,6 +1870,7 @@ function buildRelaxSound(idx,ac,master){
           const cf=ac.createBiquadFilter();cf.type='lowpass';cf.frequency.value=1400;
           const cg=ac.createGain();const t=ac.currentTime;
           cg.gain.setValueAtTime(0,t);cg.gain.linearRampToValueAtTime(0.35,t+0.4);cg.gain.exponentialRampToValueAtTime(0.0001,t+2.8);
+          c.onended=()=>{try{c.disconnect();}catch(e){}};
           c.connect(cf);cf.connect(cg);cg.connect(master);c.start(t);c.stop(t+3.2);
         }catch(e){}
         crash();
@@ -1767,9 +1963,9 @@ function renderRelax(){
         <div class="np-name" id="npName">Choose a sound</div>
       </div>
       <div class="player-row">
-        <div class="pl-btn">⏮</div>
+        <button class="pl-btn" id="prevBtn">⏮</button>
         <button class="pl-play" id="playBtn">▶</button>
-        <div class="pl-btn">⏭</div>
+        <button class="pl-btn" id="nextBtn">⏭</button>
       </div>
       <div class="vol-row">
         <span style="font-size:16px;">🔈</span>
@@ -1791,7 +1987,37 @@ function renderRelax(){
   let vol=0.7;
   const volSlider=p.querySelector('#volSlider');
   const volPct=p.querySelector('#volPct');
-  volSlider.oninput=()=>{vol=volSlider.value/100;volPct.textContent=volSlider.value+'%';if(relaxAudio.master&&relaxAudio.ctx)relaxAudio.master.gain.setTargetAtTime(vol,relaxAudio.ctx.currentTime,0.02);relaxAudio.targetVol=vol;};
+  const playBtn=p.querySelector('#playBtn');
+  function resumeCtx(){if(relaxAudio.ctx&&relaxAudio.ctx.state==='suspended')relaxAudio.ctx.resume();}
+  function updateUI(){
+    const idx=relaxAudio.playing;
+    const npName=p.querySelector('#npName'),npIcon=p.querySelector('#npIcon');
+    if(!npName||!npIcon)return;
+    if(idx>=0){npName.textContent=SOUNDS[idx].name;npIcon.textContent=SOUNDS[idx].emoji;}
+    else{npName.textContent='Choose a sound';npIcon.textContent='🎵';}
+    playBtn.textContent=(idx>=0&&!relaxAudio.paused)?'⏸':'▶';
+    sg.querySelectorAll('.sound-btn').forEach((b,j)=>b.classList.toggle('active',idx===j));
+  }
+  volSlider.oninput=()=>{
+    vol=volSlider.value/100;volPct.textContent=volSlider.value+'%';
+    relaxAudio.targetVol=vol;
+    if(relaxAudio.master&&relaxAudio.ctx&&!relaxAudio.paused)relaxAudio.master.gain.setTargetAtTime(vol,relaxAudio.ctx.currentTime,0.02);
+  };
+  function startSound(i){resumeCtx();playRelaxSound(i,vol);updateUI();}
+  playBtn.onclick=()=>{
+    resumeCtx();
+    if(relaxAudio.playing<0){startSound(0);return;}
+    if(relaxAudio.paused){
+      relaxAudio.paused=false;
+      if(relaxAudio.master&&relaxAudio.ctx)relaxAudio.master.gain.setTargetAtTime(relaxAudio.targetVol,relaxAudio.ctx.currentTime,0.1);
+    } else {
+      relaxAudio.paused=true;
+      if(relaxAudio.master&&relaxAudio.ctx)relaxAudio.master.gain.setTargetAtTime(0.0001,relaxAudio.ctx.currentTime,0.1);
+    }
+    updateUI();
+  };
+  p.querySelector('#prevBtn').onclick=()=>{startSound(((relaxAudio.playing<0?0:relaxAudio.playing)-1+SOUNDS.length)%SOUNDS.length);};
+  p.querySelector('#nextBtn').onclick=()=>{startSound((relaxAudio.playing+1)%SOUNDS.length);};
   SOUNDS.forEach((s,i)=>{
     const btn=$(`<button class="sound-btn ${relaxAudio.playing===i?'active':''}">
       <div class="se">${s.emoji}</div>
@@ -1799,12 +2025,14 @@ function renderRelax(){
       <div style="font-size:10px;color:var(--text2);">${s.desc}</div>
     </button>`);
     btn.onclick=()=>{
-      if(relaxAudio.playing===i){stopRelaxAudio();p.querySelector('#npName').textContent='Choose a sound';p.querySelector('#npIcon').textContent='🎵';}
-      else{playRelaxSound(i,vol);p.querySelector('#npName').textContent=s.name;p.querySelector('#npIcon').textContent=s.emoji;}
-      sg.querySelectorAll('.sound-btn').forEach((b,j)=>b.classList.toggle('active',relaxAudio.playing===j));
+      resumeCtx();
+      if(relaxAudio.playing===i)stopRelaxAudio();
+      else playRelaxSound(i,vol);
+      updateUI();
     };
     sg.appendChild(btn);
   });
+  updateUI();
   // Breathing
   let breathRunning=false,breathPhase=0,breathTimer=null;
   const phases=['Breathe In 🫁','Hold ⏸','Breathe Out 💨','Hold ⏸'];
@@ -1832,13 +2060,15 @@ function renderRelax(){
 function renderProfile(){
   const name=S('nz_username');
   const sett=S('nz_settings');
+  const lvP=xpLevel(S('nz_xp')).cur;
   const p=$(`<div></div>`);
   p.innerHTML=`
     <div class="hdr"><div><div class="greet">Your account</div><h1>Profile</h1></div></div>
     <div class="prof-card">
       <div class="prof-top">
         <div class="prof-avatar">${name.charAt(0).toUpperCase()}</div>
-        <div><div class="prof-name">${name}</div><div class="prof-email">NeuroZen Player</div></div>
+        <div style="flex:1;"><div class="prof-name">${name}</div><div class="prof-email">NeuroZen Player</div></div>
+        <div class="lvl-badge">Lv ${lvP.lv}<br><span style="font-size:9px;letter-spacing:.06em;">${lvP.name.toUpperCase()}</span></div>
       </div>
       <div class="prof-stats">
         <div class="prof-stat"><div class="v">${S('nz_brain_score')}</div><div class="l">Brain Score</div></div>
