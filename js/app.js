@@ -513,12 +513,14 @@ function openGame(id,wkCtx){
     </div>`;
   }
   function closeGame(){
+    wrap.dispatchEvent(new Event('remove_game'));
     clearInterval(state.timer);
     _clearAllTimers();
     wrap.style.animation='slideUp .25s reverse';
     setTimeout(()=>{wrap.remove();},230);
   }
   function startClock(){
+    state.startTs=Date.now();
     state.timer=setInterval(()=>{
       const el=wrap.querySelector('#gsTime');
       if(el)el.textContent=((Date.now()-state.startTs)/1000).toFixed(1)+'s';
@@ -582,7 +584,10 @@ function openGame(id,wkCtx){
     }
   }
   wrap.innerHTML=hdr()+`<div class="gs-body" id="gsBody"></div>`;
-  wrap.querySelector('.gs-back').onclick=closeGame;
+  wrap.querySelector('.gs-back').onclick=()=>{
+    closeGame();
+    setTimeout(()=>render('games'),240);
+  };
   const body=wrap.querySelector('#gsBody');
   if(id==='schulte')playSchulte(body,setScore,endGame,wrap,startClock);
   else if(id==='memory')playMemory(body,setScore,endGame,wrap,startClock);
@@ -1209,21 +1214,21 @@ function playPattern(body,setScore,end,wrap,startClock){
     lives--;streak=0;haptic([30,50,30]);toast('❌ -1 Life');
   }
   function showArc(secs,onDone){
-    clearInterval(arcTimer);
+    _cti(arcTimer);
     const circ=2*Math.PI*30;
     const arcEl=host.querySelector('#arcSvg');
     if(!arcEl)return;
     let remaining=secs*10;
-    arcTimer=setInterval(()=>{
+    arcTimer=_si(()=>{
       remaining--;
       const fg=host.querySelector('#arcFg');
       const num=host.querySelector('#arcNum');
-      if(!fg||!num){clearInterval(arcTimer);return;}
+      if(!fg||!num){_cti(arcTimer);return;}
       const pct=remaining/(secs*10);
       fg.style.strokeDashoffset=circ*(1-pct);
       fg.setAttribute('stroke',remaining<15?'#EF4444':remaining<30?'#F59E0B':'#7C3AED');
       num.textContent=Math.ceil(remaining/10);
-      if(remaining<=0){clearInterval(arcTimer);onDone();}
+      if(remaining<=0){_cti(arcTimer);onDone();}
     },100);
   }
   function next(){
@@ -1238,7 +1243,7 @@ function playPattern(body,setScore,end,wrap,startClock){
         statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}</span></div><div class="row"><span>Attempted</span><span class="val">${q}</span></div><div class="row"><span>Speed Bonus</span><span class="val">+${bonus}</span></div><div class="row"><span>Accuracy</span><span class="val">${acc}%</span></div><div class="row"><span>Longest Streak</span><span class="val">${bestStreak} 🔥</span></div><div class="row"><span>Personal Best</span><span class="val">${Math.max(score,record)}${newPB?' 🏆':''}</span></div></div>${newPB?'<div class="rec">New Personal Best! 🎉</div>':''}`});
       return;
     }
-    clearInterval(arcTimer);
+    _cti(arcTimer);
     const type=q%6;
     let answerIdx=0,html='';
     if(type===0){
@@ -1316,7 +1321,7 @@ function playPattern(body,setScore,end,wrap,startClock){
     showArc(4,()=>{playSound('wrong');patLoseLife();q++;_st(next,700);});
     host.querySelectorAll('.pat-opt').forEach(btn=>{
       btn.onclick=()=>{
-        clearInterval(arcTimer);
+        _cti(arcTimer);
         const chosen=+btn.dataset.i;
         const elapsed=Date.now()-qStartTs;
         if(chosen===answerIdx){
@@ -1656,7 +1661,7 @@ function playMath(body,setScore,end,wrap,startClock){
       endRun({title:'Math Ninja! 🔢',emoji:'🔢',sub:`Score: ${score}/20${sdBonus?` + ${sdBonus} SD bonus`:''}`});
       return;
     }
-    clearInterval(barTimer);
+    _cti(barTimer);
     const {display,correct,isWord}=genQuestion();
     const tc=TIERS[tier];
     if(tier>maxTier)maxTier=tier;
@@ -1679,23 +1684,23 @@ function playMath(body,setScore,end,wrap,startClock){
       <div style="text-align:center;font-size:${isWord?'14px':'32px'};font-weight:${isWord?'600':'900'};margin:${isWord?'8px':'10px'} 0;line-height:${isWord?'1.4':'1'};min-height:${isWord?'56px':'auto'};">${display}</div>
       <div class="math-opts">${opts.map(v=>`<button class="math-opt" data-v="${v}">${v}</button>`).join('')}</div>`;
     let elapsed=0;
-    barTimer=setInterval(()=>{
+    barTimer=_si(()=>{
       elapsed+=100;
       const pct=Math.max(0,100-elapsed/timeMs*100);
       const bar=wrap.querySelector('#mBar');
       if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
       if(elapsed>=timeMs){
-        clearInterval(barTimer);combo=0;consecutive=0;wrap.classList.remove('fire-glow');
+        _cti(barTimer);combo=0;consecutive=0;wrap.classList.remove('fire-glow');
         host.querySelectorAll('.math-opt').forEach(b=>{if(+b.dataset.v===correct)b.classList.add('correct-ans');b.disabled=true;});
         host.innerHTML+=`<div style="text-align:center;font-size:12px;color:#EF4444;margin-top:6px;">⏱ ${display} = ${correct}</div>`;
-        if(sdMode){setTimeout(()=>endRun({title:'Sudden Death!',emoji:'💀',sub:`SD Run ended! +${sdBonus} bonus`}),700);return;}
+        if(sdMode){_st(()=>endRun({title:'Sudden Death!',emoji:'💀',sub:`SD Run ended! +${sdBonus} bonus`}),700);return;}
         wrong2++;if(wrong2>=2){wrong2=0;tier=Math.max(0,tier-1);}
-        setTimeout(()=>{q++;next();},900);
+        _st(()=>{q++;next();},900);
       }
     },100);
     host.querySelectorAll('.math-opt').forEach(btn=>{
       btn.onclick=()=>{
-        clearInterval(barTimer);
+        _cti(barTimer);
         const chosen=+btn.dataset.v;
         if(chosen===correct){
           playSound('correct');
@@ -1713,7 +1718,7 @@ function playMath(body,setScore,end,wrap,startClock){
           if(sdMode){
             host.querySelectorAll('.math-opt').forEach(b=>b.disabled=true);
             host.innerHTML+=`<div style="text-align:center;font-size:13px;color:#EF4444;margin-top:8px;">💀 Sudden Death ended! +${sdBonus} bonus earned</div>`;
-            setTimeout(()=>endRun({title:'Sudden Death!',emoji:'💀',sub:`Score: ${score} + ${sdBonus} SD bonus`}),900);
+            _st(()=>endRun({title:'Sudden Death!',emoji:'💀',sub:`Score: ${score} + ${sdBonus} SD bonus`}),900);
             return;
           }
           combo=0;consecutive=0;wrong2++;wrap.classList.remove('fire-glow');
@@ -1721,7 +1726,7 @@ function playMath(body,setScore,end,wrap,startClock){
           host.innerHTML+=`<div style="text-align:center;font-size:12px;color:var(--text2);margin-top:6px;">${display} = ${correct} ✓</div>`;
         }
         host.querySelectorAll('.math-opt').forEach(b=>b.disabled=true);
-        setTimeout(()=>{q++;next();},600);
+        _st(()=>{q++;next();},600);
       };
     });
   }
@@ -1793,11 +1798,11 @@ function playStroopX(body,setScore,end,wrap,startClock){
       barT=startBar(3000,()=>{
         combo=0;round++;
         host.innerHTML+=`<div style="font-size:12px;color:#EF4444;margin-top:8px;">⏱ Too slow! Ink: <strong style="color:${ink.hex}">${ink.name}</strong></div>`;
-        setTimeout(nextRound,900);
+        _st(nextRound,900);
       });
       host.querySelectorAll('.stroop-opt').forEach(b=>{
         b.onclick=()=>{
-          clearInterval(barT);const ms=Date.now()-ts;
+          _cti(barT);const ms=Date.now()-ts;
           if(b.dataset.name===ink.name){
             playSound('correct');const pts=ms<1000?3:ms<2000?2:1;
             combo++;if(combo>maxCombo)maxCombo=combo;score+=pts;setScore(score);
@@ -1809,7 +1814,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
             if(loseLife())return;
           }
           host.querySelectorAll('.stroop-opt').forEach(x=>x.disabled=true);
-          round++;setTimeout(nextRound,700);
+          round++;_st(nextRound,700);
         };
       });
     } else if(phase===2){
@@ -1830,11 +1835,11 @@ function playStroopX(body,setScore,end,wrap,startClock){
       barT=startBar(2500,()=>{
         combo=0;round++;
         host.innerHTML+=`<div style="font-size:12px;color:#EF4444;margin-top:8px;">⏱ It was ${dispShape.sym} ${dispShape.name}!</div>`;
-        setTimeout(nextRound,900);
+        _st(nextRound,900);
       });
       host.querySelectorAll('.stroop-opt').forEach(b=>{
         b.onclick=()=>{
-          clearInterval(barT);const ms=Date.now()-ts;
+          _cti(barT);const ms=Date.now()-ts;
           if(b.dataset.name===dispShape.name){
             playSound('correct');const pts=ms<1000?3:ms<1500?2:1;
             combo++;if(combo>maxCombo)maxCombo=combo;score+=pts;setScore(score);
@@ -1846,7 +1851,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
             if(loseLife())return;
           }
           host.querySelectorAll('.stroop-opt').forEach(x=>x.disabled=true);
-          round++;setTimeout(nextRound,700);
+          round++;_st(nextRound,700);
         };
       });
     } else {
@@ -1882,11 +1887,11 @@ function playStroopX(body,setScore,end,wrap,startClock){
       barT=startBar(2000,()=>{
         combo=0;round++;
         host.innerHTML+=`<div style="font-size:12px;color:#EF4444;margin-top:8px;">⏱ Answer: ${target}</div>`;
-        setTimeout(nextRound,900);
+        _st(nextRound,900);
       });
       host.querySelectorAll('.stroop-opt').forEach(b=>{
         b.onclick=()=>{
-          clearInterval(barT);const ms=Date.now()-ts;
+          _cti(barT);const ms=Date.now()-ts;
           if(b.dataset.name===target){
             playSound('correct');const pts=ms<800?3:ms<1500?2:1;
             combo++;if(combo>maxCombo)maxCombo=combo;score+=pts;setScore(score);
@@ -1898,7 +1903,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
             if(loseLife())return;
           }
           host.querySelectorAll('.stroop-opt').forEach(x=>x.disabled=true);
-          round++;setTimeout(nextRound,700);
+          round++;_st(nextRound,700);
         };
       });
     }
@@ -2616,7 +2621,7 @@ function playReactionLab(body,setScore,end,wrap,startClock){
   const infoBar=$(`<div id="rlInfo" style="text-align:center;font-size:12px;color:var(--text2);margin-top:6px;min-height:18px;"></div>`);
   body.appendChild(infoBar);
   const times=[];
-  let round=0,score=0,delayT=null,holdT=null,busy=false;
+  let round=0,score=0,delayT=null,holdT=null,busy=false,gameActive=true;
 
   instrEl.querySelector('#rlStart').onclick=()=>{
     instrEl.style.display='none';arena.style.display='block';
@@ -2630,6 +2635,7 @@ function playReactionLab(body,setScore,end,wrap,startClock){
   }
 
   function advance(t,msg,color,pts){
+    if(!gameActive)return;
     clearTimeout(holdT);busy=true;
     times.push(t);
     if(pts>0){score+=pts;setScore(score);}
@@ -2647,7 +2653,7 @@ function playReactionLab(body,setScore,end,wrap,startClock){
     arena.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:14px;letter-spacing:.15em;">+ + +</div>';
     const delay=1000+Math.random()*2500;
     delayT=setTimeout(()=>{
-      if(round!==rnd)return;
+      if(!gameActive||round!==rnd)return;
       arena.innerHTML='';
       const aw=arena.clientWidth||300,ah=arena.clientHeight||220;
       if(isBig){
@@ -2748,6 +2754,12 @@ function playReactionLab(body,setScore,end,wrap,startClock){
       </div>`
     });
   }
+  wrap.addEventListener('remove_game',()=>{
+    gameActive=false;
+    clearTimeout(delayT);
+    clearTimeout(holdT);
+    busy=true;
+  });
 }
 
 /* ===================== SPATIAL SPIN ===================== */
@@ -2810,7 +2822,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       });
       return;
     }
-    clearInterval(barT);
+    _cti(barT);
     const {type,dispRot,rotAmt,hint}=questions[qi];
     const cells=SHAPES[type];
     const rots=getRots(cells);
@@ -2856,24 +2868,24 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       }
     }
     let elapsed=0;
-    barT=setInterval(()=>{
+    barT=_si(()=>{
       elapsed+=100;
       const pct=Math.max(0,100-elapsed/8000*100);
       const bar=host.querySelector('#ssBar');
       if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
       if(elapsed>=8000){
-        clearInterval(barT);
+        _cti(barT);
         host.querySelectorAll('.ss-opt').forEach(b=>{
           if(+b.dataset.r===targetRot){b.style.border='3px solid #22C55E';b.style.background='rgba(52,211,153,.1)';}
           b.disabled=true;
         });
         const fb=host.querySelector('#ssFb');if(fb){fb.style.color='#EF4444';fb.textContent='⏱ Time\'s up!';}
-        qi++;setTimeout(nextQ,1000);
+        qi++;_st(nextQ,1000);
       }
     },100);
     host.querySelectorAll('.ss-opt').forEach(btn=>{
       btn.onclick=()=>{
-        clearInterval(barT);
+        _cti(barT);
         const chosen=+btn.dataset.r;
         const fb=host.querySelector('#ssFb');
         host.querySelectorAll('.ss-opt').forEach(b=>b.disabled=true);
@@ -2889,7 +2901,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
           });
           if(fb){fb.style.color='#EF4444';fb.textContent='❌ Wrong!';}
         }
-        qi++;setTimeout(nextQ,900);
+        qi++;_st(nextQ,900);
       };
     });
   }
