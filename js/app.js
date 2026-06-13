@@ -1,6 +1,10 @@
 window._allTimers=[];
-const _st=(fn,ms)=>{const id=setTimeout(fn,ms);window._allTimers.push({type:'to',id});return id;};
+function _untrack(id){const a=window._allTimers;for(let i=a.length-1;i>=0;i--){if(a[i].id===id){a.splice(i,1);break;}}}
+const _st=(fn,ms)=>{const id=setTimeout(()=>{_untrack(id);try{fn();}catch(e){}},ms);window._allTimers.push({type:'to',id});return id;};
 const _si=(fn,ms)=>{const id=setInterval(fn,ms);window._allTimers.push({type:'iv',id});return id;};
+function _ct(id){clearTimeout(id);_untrack(id);}
+function _cti(id){clearInterval(id);_untrack(id);}
+function _clearAllTimers(){window._allTimers.forEach(t=>t.type==='iv'?clearInterval(t.id):clearTimeout(t.id));window._allTimers=[];}
 const _noiseCache={};
 /* ===================== STATE ===================== */
 const LS={
@@ -259,6 +263,7 @@ const tabs=['home','games','progress','relax','profile'];
 function render(tab,dir){
   if(!dir)dir=tabs.indexOf(tab)>tabs.indexOf(currentTab)?'fwd':'back';
   currentTab=tab;
+  _clearAllTimers();
   const app=document.getElementById('app');
   app.innerHTML='';
   let page;
@@ -509,8 +514,7 @@ function openGame(id,wkCtx){
   }
   function closeGame(){
     clearInterval(state.timer);
-    window._allTimers.forEach(t=>t.type==='iv'?clearInterval(t.id):clearTimeout(t.id));
-    window._allTimers=[];
+    _clearAllTimers();
     wrap.style.animation='slideUp .25s reverse';
     setTimeout(()=>{wrap.remove();},230);
   }
@@ -592,232 +596,532 @@ function openGame(id,wkCtx){
   else if(id==='spatialspin')playSpatialSpin(body,setScore,endGame,wrap,startClock);
 }
 
-/* ===================== SCHULTE TABLE ===================== */
-const SCHULTE_CONFIGS=[
-  {size:3,target:20,mult:1.0,label:'3×3'},
-  {size:4,target:45,mult:1.5,label:'4×4'},
-  {size:5,target:80,mult:2.0,label:'5×5'},
-  {size:6,target:120,mult:2.5,label:'6×6'},
-  {size:7,target:160,mult:3.0,label:'7×7'},
-  {size:8,target:200,mult:3.5,label:'8×8'},
-  {size:9,target:250,mult:4.0,label:'9×9'},
-];
+/* ===================== SCHULTE TABLE (redesigned) ===================== */
+/* No fixed levels. Fresh random board every game. Modes + records + daily challenge. */
+const SCHULTE_MODES={
+  normal:{size:5,label:'Normal',sub:'Classic Focus',emoji:'',reverse:false,ghost:false,bestKey:'nz_schulte_best_normal',thresh:[30,25,20,15,10]},
+  medium:{size:6,label:'Medium',sub:'Sharp Mind',emoji:'',reverse:false,ghost:false,bestKey:'nz_schulte_best_medium',thresh:[40,35,30,25,20]},
+  hard:{size:7,label:'Hard',sub:'Elite Focus',emoji:'',reverse:false,ghost:false,bestKey:'nz_schulte_best_hard',thresh:[50,45,40,35,30]},
+  reverse:{size:5,label:'Reverse',sub:'Tap 25→1',emoji:'↩️',reverse:true,ghost:false,bestKey:'nz_schulte_best_normal',thresh:[30,25,20,15,10]},
+  ghost:{size:5,label:'Ghost',sub:'Numbers vanish in 3s',emoji:'👻',reverse:false,ghost:true,bestKey:'nz_schulte_best_normal',thresh:[30,25,20,15,10]},
+  zen:{size:5,label:'Zen',sub:'No timer, no pressure',emoji:'🧘',reverse:false,ghost:false,zen:true,bestKey:null,thresh:[30,25,20,15,10]},
+};
+/* Rating from time using mode thresholds [good,great,amazing,incredible,genius] (genius->legendary below) */
+function schulteRating(secs,thresh){
+  const [t30,t25,t20,t15,t10]=thresh;
+  if(secs>=t30)return{emoji:'🙂',text:'Good'};
+  if(secs>=t25)return{emoji:'😎',text:'Great'};
+  if(secs>=t20)return{emoji:'🔥',text:'Amazing'};
+  if(secs>=t15)return{emoji:'⚡',text:'Incredible'};
+  if(secs>=t10)return{emoji:'🧠',text:'Genius'};
+  return{emoji:'👑',text:'Legendary Focus'};
+}
+function schulteAccuracyAvg(){
+  const h=S('nz_schulte_accuracy_history')||[];
+  if(!h.length)return 0;
+  return Math.round(h.reduce((a,b)=>a+b,0)/h.length);
+}
+function schulteFocusRating(){
+  // 0-100 derived from avg accuracy and best normal time
+  const acc=schulteAccuracyAvg();
+  const best=S('nz_schulte_best_normal');
+  let timeScore=50;
+  if(best!=null){const b=+best;timeScore=Math.max(0,Math.min(100,Math.round(100-(b-8)*3)));}
+  if(!acc&&best==null)return 0;
+  return Math.round(acc*0.5+timeScore*0.5);
+}
+/* Daily challenge from date seed */
+function schulteDailyChallenge(){
+  const dayN=Math.floor(Date.now()/86400000);
+  const defs=[
+    {mode:'normal',label:'Normal Mode under 20s',limit:20},
+    {mode:'medium',label:'Medium Mode under 35s',limit:35},
+    {mode:'ghost',label:'Ghost Mode any time',limit:Infinity},
+    {mode:'hard',label:'Hard Mode under 50s',limit:50},
+    {mode:'reverse',label:'Reverse Mode under 25s',limit:25},
+    {mode:'normal',label:'Normal Mode under 15s',limit:15},
+    {mode:'medium',label:'Medium Mode under 30s',limit:30},
+  ];
+  return defs[dayN%defs.length];
+}
+function schulteDailyDone(){
+  return S('nz_schulte_daily_date')===todayKey()&&!!S('nz_schulte_daily_done');
+}
 function playSchulte(body,setScore,end,wrap,startClock){
-  const lvl=Math.min(6,S('nz_schulte_level')||0);
-  const cfg=SCHULTE_CONFIGS[lvl];
-  const ghostMode=lvl>=3;
-  const total=cfg.size*cfg.size;
-  const nums=Array.from({length:total},(_,i)=>i+1).sort(()=>Math.random()-.5);
-  // Personal best leaderboard
-  const bestTimes=S('nz_schulte_best_times')||{};
-  const topTimes=(bestTimes[cfg.size]||[]).slice(0,3);
-  const lbHtml=topTimes.length
-    ?`<div style="margin-top:8px;font-size:11px;color:var(--text2);">🏆 Best (${cfg.label}): ${topTimes.map((t,i)=>['🥇','🥈','🥉'][i]+' '+t+'s').join(' · ')}</div>`:''
-  ;
-  const instrEl=$(`<div class="instr">Tap <strong>1 → ${total}</strong> in order as fast as you can.<br><em>${cfg.label} — Level ${lvl+1}/7${ghostMode?' · <strong style="color:#A78BFA;">👻 Ghost Mode</strong>: numbers vanish in 2s!':''}</em>${lbHtml}<br><button style="margin-top:12px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;font-size:14px;" id="schulteStart">▶ Start</button></div>`);
-  body.appendChild(instrEl);
-  instrEl.querySelector('#schulteStart').onclick=()=>{instrEl.style.display='none';startClock&&startClock();};
-  const timerBar=$(`<div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>`);
-  body.appendChild(timerBar);
-  const fs=cfg.size<=4?'22px':cfg.size<=6?'16px':cfg.size<=7?'13px':'11px';
-  const grid=$(`<div class="schulte-grid" style="grid-template-columns:repeat(${cfg.size},1fr);font-size:${fs};"></div>`);
-  body.appendChild(grid);
-  const status=$(`<div style="text-align:center;font-size:13px;color:var(--text2);margin-top:10px;" id="sStatus">Find: <strong>1</strong></div>`);
-  body.appendChild(status);
-  let next=1,startTs=null,barTimer=null,ghostDone=false;
-  const cells=[];
-  nums.forEach(n=>{
-    const c=$(`<div class="sc-cell">${n}</div>`);
-    c.onclick=()=>{
-      if(!startTs){
-        startTs=Date.now();startBar();
-        if(ghostMode){
-          setTimeout(()=>{
-            if(!ghostDone){
-              ghostDone=true;
-              cells.forEach(cell=>{if(!cell.classList.contains('done'))cell.style.color='transparent';});
-            }
-          },2000);
-        }
-      }
-      if(n===next){
-        playSound('correct');
-        c.classList.add('done');
-        c.style.color='';
-        setScore(next);next++;
-        status.innerHTML=next<=total?`Find: <strong>${next}</strong>`:'';
-        if(next>total){
-          clearInterval(barTimer);
-          const secs=(Date.now()-startTs)/1000;
-          const secsR=Math.round(secs*10)/10;
-          // Save to leaderboard
-          const bt=S('nz_schulte_best_times')||{};
-          const arr=(bt[cfg.size]||[]);
-          arr.push(secsR);arr.sort((a,b)=>a-b);
-          bt[cfg.size]=arr.slice(0,3);
-          setS('nz_schulte_best_times',bt);
-          const rawPts=Math.ceil(1000/secs)*cfg.mult;
-          setS('nz_schulte_level',Math.min(6,lvl+1));
-          const nlvl=Math.min(6,lvl+1);
-          end({
-            title:'Grid Clear! 🏆',emoji:'🏆',
-            sub:`${secsR}s · ${cfg.label}${ghostMode?' 👻':''}`,
-            value:Math.round(rawPts),points:Math.round(rawPts),
-            starThresh:[Math.round(rawPts*0.5),Math.round(rawPts*0.8),rawPts],
-            statsHtml:`<div class="end-stats"><div class="row"><span>Time</span><span class="val">${secsR}s</span></div><div class="row"><span>Grid</span><span class="val">${cfg.label}${ghostMode?' 👻':''}</span></div><div class="row"><span>Next Level</span><span class="val">${SCHULTE_CONFIGS[nlvl].label}</span></div>${arr.length>0?`<div class="row"><span>🥇 Personal Best</span><span class="val">${arr[0]}s</span></div>`:''}</div>`
-          });
-        }
-      } else {
-        playSound('wrong');
-        c.classList.add('wrong');
-        setTimeout(()=>c.classList.remove('wrong'),350);
-      }
+  let mode='normal';
+  let challenge=true; // Challenge Mode (timer on, records) vs Practice
+  renderStart();
+
+  function renderStart(){
+    body.innerHTML='';
+    const bestN=S('nz_schulte_best_normal');
+    const games=S('nz_schulte_games')||0;
+    const acc=schulteAccuracyAvg();
+    const focus=schulteFocusRating();
+    const dc=schulteDailyChallenge();
+    const dcDone=schulteDailyDone();
+    const screen=$(`<div class="sch-start"></div>`);
+    screen.innerHTML=`
+      <div class="sch-stats">
+        <div class="sch-stat"><div class="v">${bestN!=null?bestN+'s':'—'}</div><div class="l">Best Time</div></div>
+        <div class="sch-stat"><div class="v">${games}</div><div class="l">Games</div></div>
+        <div class="sch-stat"><div class="v">${acc}%</div><div class="l">Accuracy</div></div>
+        <div class="sch-stat"><div class="v">${focus}</div><div class="l">Focus</div></div>
+      </div>
+      <div class="daily-card ${dcDone?'done':''}" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="dc-ico">${dcDone?'✅':'🎯'}</div>
+          <div style="flex:1;"><div class="dc-name">Daily: ${dc.label}</div><div class="dc-sub">${dcDone?'Completed today!':'Complete for bonus XP'}</div></div>
+          <span class="dc-badge">2x XP</span>
+        </div>
+      </div>
+      <div class="sch-mode-title">Choose a Mode</div>
+      <div class="sch-modes" id="schModes"></div>
+      <div class="sch-toggle" id="schToggle">
+        <button class="sch-tg active" data-c="1">⏱ Challenge<span>Timer · records</span></button>
+        <button class="sch-tg" data-c="0">🧘 Practice<span>No ranking</span></button>
+      </div>
+      <button class="btn-primary" id="schGo" style="margin-top:18px;">Start Game ▶</button>
+    `;
+    body.appendChild(screen);
+    const modesEl=screen.querySelector('#schModes');
+    const order=['normal','medium','hard','reverse','ghost','zen'];
+    order.forEach(k=>{
+      const m=SCHULTE_MODES[k];
+      const card=$(`<button class="sch-mode ${k===mode?'sel':''}" data-m="${k}">
+        <div class="sm-top">${m.emoji||'▦'} ${m.label}</div>
+        <div class="sm-grid">${m.size}×${m.size}${m.zen?'':k==='reverse'?' · 25→1':k==='ghost'?'':' · 1-'+(m.size*m.size)}</div>
+        <div class="sm-sub">${m.sub}</div>
+      </button>`);
+      card.onclick=()=>{playSound('tap');mode=k;modesEl.querySelectorAll('.sch-mode').forEach(c=>c.classList.toggle('sel',c.dataset.m===k));updateToggleForMode();};
+      modesEl.appendChild(card);
+    });
+    const toggleEl=screen.querySelector('#schToggle');
+    function updateToggleForMode(){
+      // Zen mode forces practice (no timer)
+      const zen=SCHULTE_MODES[mode].zen;
+      if(zen){challenge=false;}
+      toggleEl.querySelectorAll('.sch-tg').forEach(b=>b.classList.toggle('active',(b.dataset.c==='1')===challenge));
+      toggleEl.style.opacity=zen?'0.5':'1';
+      toggleEl.style.pointerEvents=zen?'none':'auto';
+    }
+    toggleEl.querySelectorAll('.sch-tg').forEach(b=>{
+      b.onclick=()=>{playSound('tap');challenge=b.dataset.c==='1';updateToggleForMode();};
+    });
+    updateToggleForMode();
+    screen.querySelector('#schGo').onclick=()=>{playSound('tap');startCountdown();};
+  }
+
+  function startCountdown(){
+    const m=SCHULTE_MODES[mode];
+    const useTimer=challenge&&!m.zen;
+    body.innerHTML='';
+    const ov=$(`<div class="countdown-overlay"><div class="countdown-num" id="cdNum">3</div><div class="countdown-sub">Get ready…</div></div>`);
+    wrap.appendChild(ov);
+    buildBoard(m,useTimer);
+    let n=3;
+    const numEl=ov.querySelector('#cdNum');
+    const step=()=>{
+      n--;
+      if(n>0){numEl.textContent=n;numEl.style.animation='none';void numEl.offsetWidth;numEl.style.animation='countPop .35s cubic-bezier(.16,1,.3,1)';_st(step,800);}
+      else{numEl.textContent='GO!';numEl.style.animation='none';void numEl.offsetWidth;numEl.style.animation='countPop .4s cubic-bezier(.16,1,.3,1)';playSound('complete');_st(()=>{ov.remove();beginGame(m,useTimer);},650);}
     };
-    cells.push(c);
-    grid.appendChild(c);
-  });
-  function startBar(){
-    const maxMs=cfg.target*1000;
-    barTimer=setInterval(()=>{
-      const elapsed=Date.now()-startTs;
-      const pct=Math.max(0,100-(elapsed/maxMs*100));
-      const bar=wrap.querySelector('#sBar');
-      if(bar){
-        bar.style.width=pct+'%';
-        const rem=(maxMs-elapsed)/1000;
-        bar.className='timer-fill '+(rem<10?'timer-red':rem<30?'timer-yellow':'timer-green');
+    _st(step,800);
+  }
+
+  let board=null;
+  function buildBoard(m,useTimer){
+    const total=m.size*m.size;
+    const nums=Array.from({length:total},(_,i)=>i+1).sort(()=>Math.random()-.5);
+    const chipEmoji=m.emoji||(mode==='medium'?'⚡':mode==='hard'?'🔥':'▦');
+    const fs=m.size<=5?'22px':m.size===6?'17px':'14px';
+    const cont=$(`<div class="sch-play${m.zen?' sch-zen':''}"></div>`);
+    cont.innerHTML=`
+      <div class="sch-chip">${chipEmoji} ${m.label} Mode${useTimer?'':' · Practice'}</div>
+      <div class="sch-progress"><div class="sch-progress-fill" id="schProg" style="width:0%"></div></div>
+      ${useTimer?'<div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>':''}
+      <div class="schulte-grid" id="schGrid" style="grid-template-columns:repeat(${m.size},1fr);font-size:${fs};"></div>
+      <div class="sch-find" id="schFind">Find: <strong id="schNext"></strong></div>
+    `;
+    body.appendChild(cont);
+    const grid=cont.querySelector('#schGrid');
+    const cells=[];
+    nums.forEach(n=>{
+      const c=$(`<div class="sc-cell">${n}</div>`);
+      c.dataset.n=n;
+      grid.appendChild(c);
+      cells.push(c);
+    });
+    board={m,total,cells,locked:true,cont};
+  }
+
+  function beginGame(m,useTimer){
+    const {total,cells,cont}=board;
+    board.locked=false;
+    const reverse=m.reverse;
+    let next=reverse?total:1;
+    let done=0,correct=0,wrong=0,startTs=Date.now(),barTimer=null,penaltyMs=0;
+    const findEl=cont.querySelector('#schNext');
+    const progEl=cont.querySelector('#schProg');
+    if(findEl)findEl.textContent=next;
+    // Ghost: numbers vanish after 3s
+    if(m.ghost){
+      _st(()=>{cells.forEach(cell=>{if(!cell.classList.contains('done'))cell.classList.add('sch-ghost-hidden');});},3000);
+    }
+    if(useTimer){
+      const maxMs=(m.thresh[0]+20)*1000;
+      barTimer=_si(()=>{
+        const elapsed=Date.now()-startTs+penaltyMs;
+        const pct=Math.max(0,100-(elapsed/maxMs*100));
+        const bar=wrap.querySelector('#sBar');
+        if(bar){bar.style.width=pct+'%';const rem=(maxMs-elapsed)/1000;bar.className='timer-fill '+(rem<10?'timer-red':rem<25?'timer-yellow':'timer-green');}
+      },100);
+    }
+    cells.forEach(c=>{
+      c.onclick=()=>{
+        if(board.locked)return;
+        const n=+c.dataset.n;
+        if(n===next){
+          correct++;done++;
+          playSound('correct');
+          c.classList.add('done');c.classList.remove('sch-ghost-hidden');
+          if(m.ghost)c.classList.add('sch-revealed');
+          setScore(done);
+          if(progEl)progEl.style.width=Math.round(done/total*100)+'%';
+          next=reverse?next-1:next+1;
+          const remaining=reverse?next>=1:next<=total;
+          if(findEl&&remaining)findEl.textContent=next;
+          if(done>=total){
+            if(barTimer)_cti(barTimer);
+            finish();
+          }
+        } else {
+          wrong++;
+          playSound('wrong');
+          haptic([30,50,30]);
+          c.classList.add('wrong');
+          penaltyMs+=2000; // -2s penalty (applies to displayed timer where shown)
+          flashEdge();
+          if(m.ghost){const pen=$(`<span class="sch-pen">-2s</span>`);c.appendChild(pen);_st(()=>pen.remove(),800);}
+          _st(()=>c.classList.remove('wrong'),350);
+        }
+      };
+    });
+
+    function finish(){
+      board.locked=true;
+      const rawSecs=(Date.now()-startTs)/1000;
+      const secs=rawSecs+(useTimer?penaltyMs/1000:0);
+      const secsR=Math.round(secs*10)/10;
+      const totalTaps=correct+wrong;
+      const accuracy=totalTaps?Math.round(correct/totalTaps*100):100;
+      const rating=schulteRating(secsR,m.thresh);
+      // Focus Score
+      let focusScore=100-(wrong*5);
+      const overGood=secsR-m.thresh[4]; // seconds over the genius threshold
+      if(overGood>0)focusScore-=Math.min(60,Math.round(overGood*2));
+      focusScore=Math.max(10,Math.min(100,focusScore));
+      // Completion wave + confetti
+      cells.forEach((cell,i)=>{_st(()=>{cell.classList.add('sch-wave');_st(()=>cell.classList.remove('sch-wave'),400);},i*22);});
+      confetti(50);
+      // Records (only Challenge mode, not Zen/Practice)
+      let newPB=false;
+      const ranked=useTimer&&!m.zen;
+      if(ranked){
+        setS('nz_schulte_games',(S('nz_schulte_games')||0)+1);
+        const accH=S('nz_schulte_accuracy_history')||[];
+        accH.push(accuracy);while(accH.length>10)accH.shift();
+        setS('nz_schulte_accuracy_history',accH);
+        if(m.bestKey){
+          const prev=S(m.bestKey);
+          if(prev==null||secsR<+prev){setS(m.bestKey,secsR);newPB=true;}
+        }
+        // Daily challenge
+        const dc=schulteDailyChallenge();
+        if(dc.mode===mode&&!schulteDailyDone()&&secsR<=dc.limit){
+          setS('nz_schulte_daily_date',todayKey());
+          setS('nz_schulte_daily_done',true);
+          setTimeout(()=>toast('🎯 Daily Challenge complete! 2x XP'),700);
+        }
       }
-    },100);
+      const pts=Math.max(5,focusScore);
+      end({
+        title:`${rating.emoji} ${rating.text}`,emoji:rating.emoji,
+        sub:`${secsR}s · ${m.emoji||''} ${m.label} Mode`,
+        value:focusScore,points:pts,
+        starThresh:[40,65,85],
+        statsHtml:`<div class="end-stats">
+          <div class="row"><span>Time</span><span class="val">${secsR}s</span></div>
+          <div class="row"><span>Accuracy</span><span class="val">${accuracy}%</span></div>
+          <div class="row"><span>Wrong Taps</span><span class="val">${wrong}</span></div>
+          <div class="row"><span>Focus Score</span><span class="val">${focusScore}/100</span></div>
+          ${!ranked?'<div class="row"><span>Mode</span><span class="val">Practice (not ranked)</span></div>':''}
+          ${newPB?'<div class="row"><span>🏆 New Personal Best!</span><span class="val">'+secsR+'s</span></div>':''}
+        </div>`
+      });
+    }
+  }
+
+  function flashEdge(){
+    let g=document.getElementById('schEdgeGlow');
+    if(!g){g=$(`<div id="schEdgeGlow" class="sch-edge-glow"></div>`);document.body.appendChild(g);}
+    g.classList.add('show');
+    _st(()=>{g.classList.remove('show');},120);
   }
 }
 
-/* ===================== MEMORY MATRIX ===================== */
-function playMemory(body,setScore,end,wrap,startClock){
-  const ROUNDS=[
-    {g:3,c:3},{g:4,c:4},{g:4,c:5},{g:5,c:6},{g:5,c:8},
-    {g:6,c:9},{g:6,c:11},{g:7,c:12}
+/* ===================== MEMORY MATRIX (endless survival) ===================== */
+const MM_MODES={
+  easy:{label:'Easy',emoji:'🌱',sub:'3×3 → 5×5',start:3,max:12,ghost:false,zen:false},
+  medium:{label:'Medium',emoji:'⚡',sub:'5×5 → 6×6',start:4,max:15,ghost:false,zen:false},
+  hard:{label:'Hard',emoji:'🔥',sub:'6×6 → 7×7',start:5,max:18,ghost:false,zen:false},
+  ghost:{label:'Ghost',emoji:'👻',sub:'Cells vanish faster',start:3,max:14,ghost:true,zen:false},
+  zen:{label:'Zen',emoji:'🧘',sub:'No timer, relax',start:3,max:14,ghost:false,zen:true},
+};
+const MM_COLORS=[{n:'red',hex:'#EF4444'},{n:'blue',hex:'#3B82F6'},{n:'green',hex:'#22C55E'},{n:'yellow',hex:'#EAB308'}];
+function mmGridSize(round){
+  if(round<=5)return 3;if(round<=10)return 4;if(round<=15)return 5;if(round<=20)return 6;return 7;
+}
+function mmFlashMs(round){
+  if(round<=5)return 2000;if(round<=10)return 1500;if(round<=15)return 1200;if(round<=20)return 900;return 700;
+}
+function mmRank(round){
+  if(round<=5)return{em:'🌱',txt:'Keep Practicing'};
+  if(round<=10)return{em:'💪',txt:'Getting Better'};
+  if(round<=15)return{em:'🧠',txt:'Sharp Mind'};
+  if(round<=20)return{em:'⚡',txt:'Memory Expert'};
+  if(round<=25)return{em:'🏆',txt:'Memory Master'};
+  return{em:'👑',txt:'Legendary Memory'};
+}
+function mmDailyChallenge(){
+  const dayN=Math.floor(Date.now()/86400000);
+  const defs=[
+    {label:'Reach Round 10',type:'round',target:10},
+    {label:'Complete 5 rounds with no mistakes',type:'streak',target:5},
+    {label:'Survive Ghost mode 8 rounds',type:'ghost',target:8},
+    {label:'Reach Round 15',type:'round',target:15},
+    {label:'Get a 7 correct streak',type:'streak',target:7},
   ];
-  const maxScore=ROUNDS.reduce((a,r)=>a+r.c,0);
-  let round=0,total=0;
-  const instrBox=$(`<div class="instr" style="margin-bottom:16px;">Highlighted cells yaad karo, phir tap karo!<br><span style="font-size:11px;color:var(--primary);">Round 5+ mein 👻 interference mode on hoga!</span><br>
-    <button style="margin-top:12px;padding:10px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;font-size:14px;" id="memStart">▶ Start</button>
-  </div>`);
-  body.appendChild(instrBox);
-  instrBox.querySelector('#memStart').onclick=()=>{instrBox.remove();doRound();};
-  function doRound(){
-    const cfg=ROUNDS[round];
-    const cellCount=cfg.g*cfg.g;
-    const cellSize=Math.min(52,Math.floor(280/cfg.g));
-    const interference=round>=4;
-    while(body.lastChild)body.removeChild(body.lastChild);
-    const info=document.createElement('div');
-    info.style.cssText='text-align:center;font-size:13px;color:var(--text2);font-weight:600;margin-bottom:10px;';
-    info.textContent=`Round ${round+1}/8 — ${cfg.c} cells yaad karo${interference?' 👻':''}`;
-    info.id='memInfo';
-    body.appendChild(info);
-    const gridWrap=document.createElement('div');
-    gridWrap.style.cssText='position:relative;display:flex;justify-content:center;';
-    const grid=document.createElement('div');
-    grid.id='memGrid';
-    grid.style.cssText=`display:grid;grid-template-columns:repeat(${cfg.g},${cellSize}px);gap:6px;`;
-    const cells=[];
-    for(let i=0;i<cellCount;i++){
-      const c=document.createElement('div');
-      c.style.cssText=`width:${cellSize}px;height:${cellSize}px;background:var(--card);border-radius:10px;box-shadow:var(--shadow);transition:all .2s;cursor:pointer;`;
-      c.dataset.i=i;
-      grid.appendChild(c);
-      cells.push(c);
+  return defs[dayN%defs.length];
+}
+function mmDailyDone(){return S('nz_mm_daily_date')===todayKey()&&!!S('nz_mm_daily_done');}
+function mmEdgeFlash(){
+  let g=document.getElementById('mmEdgeGlow');
+  if(!g){g=$(`<div id="mmEdgeGlow" class="mm-edge-glow"></div>`);document.body.appendChild(g);}
+  g.classList.add('show');_st(()=>g.classList.remove('show'),150);
+}
+function playMemory(body,setScore,end,wrap,startClock){
+  let mode='easy';
+  renderStart();
+
+  function renderStart(){
+    body.innerHTML='';
+    const bestRound=S('nz_mm_best_round')||0;
+    const games=S('nz_mm_games')||0;
+    const accH=S('nz_mm_accuracy')||[];
+    const bestAcc=accH.length?Math.max(...accH):0;
+    const dc=mmDailyChallenge();
+    const dcDone=mmDailyDone();
+    const screen=$(`<div class="mm-start"></div>`);
+    screen.innerHTML=`
+      <div class="mm-stats">
+        <div class="mm-stat"><div class="v">${bestRound}</div><div class="l">Best Round</div></div>
+        <div class="mm-stat"><div class="v">${games}</div><div class="l">Games</div></div>
+        <div class="mm-stat"><div class="v">${bestAcc}%</div><div class="l">Best Acc</div></div>
+      </div>
+      <div class="daily-card ${dcDone?'done':''}" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="dc-ico">${dcDone?'✅':'🎯'}</div>
+          <div style="flex:1;"><div class="dc-name">Daily: ${dc.label}</div><div class="dc-sub">${dcDone?'Completed today!':'Complete for 2x XP'}</div></div>
+          <span class="dc-badge">2x XP</span>
+        </div>
+      </div>
+      <div class="mm-mode-title">Choose a Mode</div>
+      <div class="mm-modes" id="mmModes"></div>
+      <button class="btn-primary" id="mmGo" style="margin-top:18px;">Start ▶</button>
+    `;
+    body.appendChild(screen);
+    const modesEl=screen.querySelector('#mmModes');
+    ['easy','medium','hard','ghost','zen'].forEach(k=>{
+      const m=MM_MODES[k];
+      const card=$(`<button class="mm-mode ${k===mode?'sel':''}" data-m="${k}">
+        <div class="sm-top">${m.emoji} ${m.label}</div>
+        <div class="sm-grid">${m.start} cells start</div>
+        <div class="sm-sub">${m.sub}</div>
+      </button>`);
+      card.onclick=()=>{playSound('tap');mode=k;modesEl.querySelectorAll('.mm-mode').forEach(c=>c.classList.toggle('sel',c.dataset.m===k));};
+      modesEl.appendChild(card);
+    });
+    screen.querySelector('#mmGo').onclick=()=>{playSound('tap');startGame();};
+  }
+
+  function startGame(){
+    const m=MM_MODES[mode];
+    let round=1,lives=3,cells=m.start,streak=0,bestStreak=0,correctRounds=0,totalRounds=0,speedBonus=0;
+    body.innerHTML='';
+    const stage=$(`<div class="mm-stage${m.zen?' mm-zen':''}"></div>`);
+    body.appendChild(stage);
+
+    function heartsHtml(){
+      return [0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''} ${(lives===1&&i===0)?'mm-last':''}">${i>=lives?'💔':'❤️'}</span>`).join('');
     }
-    gridWrap.appendChild(grid);
-    body.appendChild(gridWrap);
-    // Visual SVG arc countdown — only once, before Round 1
-    if(round===0){
-      const circ=2*Math.PI*24;
-      const cdWrap=document.createElement('div');
-      cdWrap.style.cssText='text-align:center;margin-top:10px;position:relative;';
-      cdWrap.innerHTML=`<svg width="60" height="60" viewBox="0 0 60 60" style="transform:rotate(-90deg);">
-        <circle cx="30" cy="30" r="24" fill="none" stroke="var(--border)" stroke-width="5"/>
-        <circle id="cdArc" cx="30" cy="30" r="24" fill="none" stroke="#7C3AED" stroke-width="5" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="0"/>
-      </svg>
-      <div id="cdNum" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:22px;font-weight:900;color:var(--text);">3</div>`;
-      body.appendChild(cdWrap);
-      let count=3;
-      const cdInt=setInterval(()=>{
-        count--;
-        const cdArc=body.querySelector('#cdArc');
-        const cdNum=body.querySelector('#cdNum');
-        if(cdArc)cdArc.style.strokeDashoffset=circ*(1-count/3);
-        if(count>0){if(cdNum)cdNum.textContent=count;}
-        else{
-          clearInterval(cdInt);
-          if(cdWrap)cdWrap.style.display='none';
-          startClock&&startClock();
-          startPattern();
-        }
-      },750);
-    } else {
-      startPattern();
+    function hud(extra){
+      const best=S('nz_mm_best_round')||0;
+      return `<div class="wc-hearts">${heartsHtml()}</div>
+        <div class="mm-roundrow"><span>Round <strong>${round}</strong></span><span>Best <strong>${Math.max(best,round-1)}</strong></span></div>
+        ${extra||''}`;
     }
-    function startPattern(){
-      const pattern=[];
-      while(pattern.length<cfg.c){const r=Math.floor(Math.random()*cellCount);if(!pattern.includes(r))pattern.push(r);}
-      if(interference){
-        // Show fake red cells for 0.5s before real pattern
-        const fakeCount=Math.min(3,Math.floor(cfg.c*0.4));
-        const fakePattern=[];
-        while(fakePattern.length<fakeCount){
-          const r=Math.floor(Math.random()*cellCount);
-          if(!fakePattern.includes(r)&&!pattern.includes(r))fakePattern.push(r);
-        }
-        fakePattern.forEach(i=>{cells[i].style.background='#F87171';cells[i].style.transform='scale(1.04)';});
-        setTimeout(()=>{
-          fakePattern.forEach(i=>{cells[i].style.background='var(--card)';cells[i].style.transform='';});
-          showRealPattern(pattern);
-        },500);
-      } else {
-        showRealPattern(pattern);
+
+    function showPhaseToast(){
+      if(m.zen)return;
+      if(round===6)toast('⚡ Speed increases!');
+      else if(round===11)toast('👻 Interference mode!');
+      else if(round===16)toast('👁️ Ghost mode!');
+      else if(round===21)toast('🎨 Color memory!');
+    }
+
+    function doRound(){
+      const gsize=mmGridSize(round);
+      const cellCount=gsize*gsize;
+      const n=Math.min(cells,cellCount-1,m.max);
+      const cellPx=Math.min(54,Math.floor(300/gsize));
+      let flashMs=mmFlashMs(round)-speedBonus*100;
+      if(flashMs<400)flashMs=400;
+      if(m.zen)flashMs=mmFlashMs(round<=10?round:10);
+      const colorMode=!m.zen&&round>=21;
+      const interference=!m.zen&&round>=11&&round<=15;
+      const ghostPhase=m.ghost||(!m.zen&&round>=16);
+      showPhaseToast();
+      // Fisher-Yates on indices
+      const idxs=Array.from({length:cellCount},(_,i)=>i);
+      for(let i=idxs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idxs[i],idxs[j]]=[idxs[j],idxs[i]];}
+      const pattern=idxs.slice(0,n);
+      // Color order assignment (for color mode)
+      const colorOf={};
+      if(colorMode)pattern.forEach((idx,i)=>{colorOf[idx]=MM_COLORS[i%MM_COLORS.length];});
+      stage.innerHTML=hud(`
+        <div class="mm-info" id="mmInfo">Memorize ${n} cell${n>1?'s':''}${colorMode?' (tap in color order: red→blue→green→yellow)':''}</div>
+        <div class="mm-gridwrap"><div class="schulte-grid mm-grid" id="mmGrid" style="grid-template-columns:repeat(${gsize},${cellPx}px);max-width:none;"></div></div>`);
+      const grid=stage.querySelector('#mmGrid');
+      const cellEls=[];
+      for(let i=0;i<cellCount;i++){
+        const c=$(`<div class="mm-cell" style="width:${cellPx}px;height:${cellPx}px;"></div>`);
+        c.dataset.i=i;grid.appendChild(c);cellEls.push(c);
       }
-    }
-    function showRealPattern(pattern){
-      pattern.forEach(i=>{
-        cells[i].style.background='linear-gradient(135deg,#7C3AED,#4F8EF7)';
-        cells[i].style.transform='scale(1.06)';
-        cells[i].style.boxShadow='0 0 20px rgba(124,58,237,.6)';
-      });
-      setTimeout(()=>{
-        cells.forEach(c=>{c.style.background='var(--card)';c.style.transform='';c.style.boxShadow='var(--shadow)';});
-        const infoEl=body.querySelector('#memInfo');
-        if(infoEl)infoEl.textContent=`Round ${round+1}/8 — ${cfg.c} cells tap karo!`;
-        setTimeout(()=>{
-          let picked=[];
-          cells.forEach(c=>{
-            c.onclick=()=>{
-              const idx=+c.dataset.i;
-              if(picked.includes(idx))return;
+      // Show pattern
+      function reveal(){
+        pattern.forEach((idx,i)=>{
+          const c=cellEls[idx];
+          const col=colorMode?colorOf[idx].hex:null;
+          if(ghostPhase&&!m.zen&&round>=16){
+            // vanish one by one: stagger reveal + hide
+            _st(()=>{c.classList.add('mm-flash');if(col){c.style.background=col;c.style.boxShadow='0 0 18px '+col;}},i*Math.max(120,flashMs/n/1.5));
+            _st(()=>{c.classList.remove('mm-flash');c.style.background='';c.style.boxShadow='';},i*Math.max(120,flashMs/n/1.5)+flashMs/2);
+          } else {
+            c.classList.add('mm-flash');
+            if(col){c.style.background=col;c.style.boxShadow='0 0 18px '+col;}
+          }
+        });
+        const hideAt=(ghostPhase&&round>=16)?(flashMs+n*Math.max(120,flashMs/n/1.5)):flashMs;
+        _st(()=>{
+          cellEls.forEach(c=>{c.classList.remove('mm-flash');c.style.background='';c.style.boxShadow='';});
+          if(interference)showFakes();else beginRecall();
+        },hideAt);
+      }
+      function showFakes(){
+        const avail=Array.from({length:cellCount},(_,i)=>i).filter(i=>!pattern.includes(i));
+        for(let i=avail.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[avail[i],avail[j]]=[avail[j],avail[i]];}
+        const fakes=avail.slice(0,2);
+        fakes.forEach(i=>cellEls[i].classList.add('mm-fake'));
+        _st(()=>{fakes.forEach(i=>cellEls[i].classList.remove('mm-fake'));beginRecall();},400);
+      }
+      function beginRecall(){
+        const infoEl=stage.querySelector('#mmInfo');
+        if(infoEl)infoEl.textContent=colorMode?'Tap in color order: red→blue→green→yellow':`Tap the ${n} cell${n>1?'s':''}!`;
+        const picked=[];
+        let roundFailed=false;
+        const colorRank={red:0,blue:1,green:2,yellow:3};
+        const orderedPattern=colorMode?[...pattern].sort((a,b)=>colorRank[colorOf[a].n]-colorRank[colorOf[b].n]):null;
+        cellEls.forEach(c=>{
+          c.onclick=()=>{
+            if(roundFailed)return;
+            const idx=+c.dataset.i;
+            if(picked.includes(idx))return;
+            let ok;
+            if(colorMode){ok=idx===orderedPattern[picked.length];}
+            else{ok=pattern.includes(idx);}
+            if(ok){
               picked.push(idx);
-              if(pattern.includes(idx)){
-                c.style.background='#34D399';c.style.transform='scale(0.94)';
-                total++;setScore(total);playSound('correct');
-              } else {
-                c.style.background='#F87171';playSound('wrong');
-                gridWrap.style.animation='shake .3s';
-                setTimeout(()=>gridWrap.style.animation='',300);
-              }
-              if(picked.length>=cfg.c){
-                const infoEl2=body.querySelector('#memInfo');
-                if(infoEl2)infoEl2.textContent=`Round ${round+1} done! ${picked.filter(p=>pattern.includes(p)).length===cfg.c?'🎯 Perfect!':''}`;
-                setTimeout(()=>{
-                  round++;
-                  if(round>=8){
-                    end({title:'Memory Master! 🧠',emoji:'🧠',sub:`${total}/${maxScore} correct`,value:total,points:8+total*3,starThresh:[20,35,50]});
-                  } else doRound();
-                },900);
-              }
-            };
-          });
-        },500);
-      },1300);
+              c.classList.add('mm-correct');
+              if(colorMode){c.style.background=colorOf[idx].hex;c.style.color='#fff';}
+              playSound('correct');
+              if(picked.length>=n)roundComplete();
+            } else {
+              roundFailed=true;
+              c.classList.add('mm-wrong');
+              playSound('wrong');haptic([30,50,30]);mmEdgeFlash();
+              loseLife();
+            }
+          };
+        });
+      }
+      function roundComplete(){
+        correctRounds++;totalRounds++;streak++;if(streak>bestStreak)bestStreak=streak;
+        if(streak>0&&streak%3===0)speedBonus++;
+        haptic(10);
+        pattern.forEach((idx,i)=>_st(()=>{cellEls[idx].classList.add('mm-wave');_st(()=>cellEls[idx].classList.remove('mm-wave'),350);},i*60));
+        toast(`✅ Round ${round} Complete!`);
+        cells=Math.min(cells+1,m.max);
+        round++;
+        _st(doRound,800);
+      }
+      reveal();
     }
+
+    function loseLife(){
+      lives--;totalRounds++;
+      const hearts=stage.querySelectorAll('.wc-heart');
+      const h=hearts[lives];
+      if(h){h.textContent='💔';h.classList.add('crack','lost');}
+      toast('❌ -1 Life');
+      if(lives<=0){_st(gameOver,1100);return;}
+      _st(doRound,1100);
+    }
+
+    function gameOver(){
+      const finalRound=round; // round in progress when last life was lost
+      const accuracy=totalRounds?Math.round(correctRounds/totalRounds*100):0;
+      const prevBest=S('nz_mm_best_round')||0;
+      const newPB=finalRound>prevBest;
+      if(finalRound>prevBest)setS('nz_mm_best_round',finalRound);
+      setS('nz_mm_games',(S('nz_mm_games')||0)+1);
+      const accH=S('nz_mm_accuracy')||[];accH.push(accuracy);while(accH.length>10)accH.shift();setS('nz_mm_accuracy',accH);
+      if(bestStreak>(S('nz_mm_best_streak')||0))setS('nz_mm_best_streak',bestStreak);
+      const dc=mmDailyChallenge();
+      if(!mmDailyDone()){
+        let pass=false;
+        if(dc.type==='round')pass=finalRound>=dc.target;
+        else if(dc.type==='streak')pass=bestStreak>=dc.target;
+        else if(dc.type==='ghost')pass=(mode==='ghost'&&finalRound>=dc.target);
+        if(pass){setS('nz_mm_daily_date',todayKey());setS('nz_mm_daily_done',true);setTimeout(()=>toast('🎯 Daily Challenge complete! 2x XP'),700);}
+      }
+      const rank=mmRank(finalRound);
+      setScore(finalRound);
+      end({
+        title:`${rank.em} ${rank.txt}`,emoji:rank.em,
+        sub:`Reached Round ${finalRound}${newPB?' · 🏆 New Best!':''}`,
+        value:finalRound,points:finalRound*8,starThresh:[8,15,22],
+        statsHtml:`<div class="end-stats">
+          <div class="row"><span>Round Reached</span><span class="val">${finalRound}</span></div>
+          <div class="row"><span>Personal Best</span><span class="val">${Math.max(finalRound,prevBest)}${newPB?' 🏆':''}</span></div>
+          <div class="row"><span>Accuracy</span><span class="val">${accuracy}%</span></div>
+          <div class="row"><span>Longest Streak</span><span class="val">${bestStreak}</span></div>
+          <div class="row"><span>XP Earned</span><span class="val">+${finalRound*8}</span></div>
+        </div>${newPB?'<div class="rec">New Personal Best! 🎉</div>':''}`
+      });
+    }
+
+    doRound();
   }
 }
 
@@ -893,12 +1197,17 @@ function genRomanSeq(){
   return{seq:nums.map(toRoman),opts:opts.map(toRoman),answerIdx:opts.indexOf(ans)};
 }
 function playPattern(body,setScore,end,wrap,startClock){
-  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Pattern dhundo aur sahi answer chunno!<br><span style="font-size:11px;color:var(--primary);">⚡ 2 seconds mein jawab = Speed Bonus +1!</span><br>
+  const record=S('nz_pattern_best')||0;
+  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Pattern dhundo aur sahi answer chunno! Endless — 3 lives ❤️ jab tak khatam na ho.<br><span style="font-size:11px;color:var(--primary);">⚡ 2 seconds mein jawab = Speed Bonus +1 · ❌ galat/timeout = -1 life</span>${record?`<div style="margin-top:6px;font-size:12px;font-weight:700;color:var(--mint);">🏆 Best: ${record}</div>`:''}<br>
   <button style="margin-top:10px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="patStart">▶ Start</button>
 </div>`);
   body.appendChild(instrEl);
   const host=$(`<div></div>`);body.appendChild(host);
-  let q=0,score=0,bonus=0,arcTimer=null,qStartTs=0;
+  let q=0,score=0,bonus=0,arcTimer=null,qStartTs=0,lives=3,streak=0,bestStreak=0;
+  function patHearts(){return `<div class="wc-hearts" style="margin-bottom:6px;">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''} ${(lives===1&&i===0)?'mm-last':''}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>`;}
+  function patLoseLife(){
+    lives--;streak=0;haptic([30,50,30]);toast('❌ -1 Life');
+  }
   function showArc(secs,onDone){
     clearInterval(arcTimer);
     const circ=2*Math.PI*30;
@@ -918,10 +1227,15 @@ function playPattern(body,setScore,end,wrap,startClock){
     },100);
   }
   function next(){
-    if(q>=15){
+    if(lives<=0){
       const total=score+bonus;
-      end({title:'Pattern Master!',emoji:'💡',sub:`Score: ${score}/15 + ${bonus} speed bonus`,value:total,points:total*5,starThresh:[6,10,13],
-        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}/15</span></div><div class="row"><span>Speed Bonus</span><span class="val">+${bonus}</span></div><div class="row"><span>Accuracy</span><span class="val">${Math.round(score/15*100)}%</span></div></div>`});
+      const newPB=score>record;
+      if(newPB)setS('nz_pattern_best',score);
+      setS('nz_pattern_games',(S('nz_pattern_games')||0)+1);
+      if(newPB)confetti(50);
+      const acc=q?Math.round(score/q*100):0;
+      end({title:newPB?'New Best! 🏆':'Pattern Master! 💡',emoji:'💡',sub:`${score} correct · ${q} attempted${newPB?' · 🏆':''}`,value:total,points:Math.max(5,total*5),starThresh:[8,15,25],
+        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}</span></div><div class="row"><span>Attempted</span><span class="val">${q}</span></div><div class="row"><span>Speed Bonus</span><span class="val">+${bonus}</span></div><div class="row"><span>Accuracy</span><span class="val">${acc}%</span></div><div class="row"><span>Longest Streak</span><span class="val">${bestStreak} 🔥</span></div><div class="row"><span>Personal Best</span><span class="val">${Math.max(score,record)}${newPB?' 🏆':''}</span></div></div>${newPB?'<div class="rec">New Personal Best! 🎉</div>':''}`});
       return;
     }
     clearInterval(arcTimer);
@@ -997,16 +1311,16 @@ function playPattern(body,setScore,end,wrap,startClock){
       </svg>
       <div class="arc-num" id="arcNum">4</div>
     </div>`;
-    host.innerHTML=arcHtml+html+`<div style="text-align:center;margin-top:8px;color:var(--text2);font-size:12px;">Q${q+1}/15</div>`;
+    host.innerHTML=patHearts()+arcHtml+html+`<div style="text-align:center;margin-top:8px;color:var(--text2);font-size:12px;">Round ${q+1} · ❤️ ${lives}${streak>=2?' · 🔥 '+streak:''}</div>`;
     qStartTs=Date.now();
-    showArc(4,()=>{playSound('wrong');q++;next();});
+    showArc(4,()=>{playSound('wrong');patLoseLife();q++;_st(next,700);});
     host.querySelectorAll('.pat-opt').forEach(btn=>{
       btn.onclick=()=>{
         clearInterval(arcTimer);
         const chosen=+btn.dataset.i;
         const elapsed=Date.now()-qStartTs;
         if(chosen===answerIdx){
-          playSound('correct');score++;setScore(score);
+          playSound('correct');score++;setScore(score);streak++;if(streak>bestStreak)bestStreak=streak;
           btn.classList.add('correct-ans');
           if(elapsed<2000){
             bonus++;
@@ -1019,57 +1333,80 @@ function playPattern(body,setScore,end,wrap,startClock){
           playSound('wrong');
           btn.classList.add('wrong-ans');
           host.querySelectorAll('.pat-opt')[answerIdx].classList.add('correct-ans');
+          patLoseLife();
         }
-        setTimeout(()=>{q++;next();},500);
+        setTimeout(()=>{q++;next();},600);
       };
     });
   }
   instrEl.querySelector('#patStart').onclick=()=>{instrEl.remove();startClock&&startClock();next();};
 }
 
-/* ===================== WORD FLASH 2.0 ===================== */
+/* ===================== WORD FLASH (endless) ===================== */
 const WF_T1=[
   ['CALM','CLAM','COAL','CALF'],['FORM','FROM','FORT','FOAM'],
   ['SALT','SLAT','SLOT','SILT'],['WORD','WARD','WARM','CORD'],
   ['MILE','LIME','MINE','MICE'],['TIDE','TIED','DIET','EDIT'],
   ['STAR','RATS','SCAR','STIR'],['LOOP','POOL','POLO','LOOT'],
+  ['BEAR','BARE','BEAD','BEAN'],['PALE','PEAL','PLEA','PALM'],
+  ['DEAL','LEAD','DEAR','DENT'],['NOTE','TONE','NONE','NODE'],
+  ['GAME','MAGE','GATE','GAZE'],['RICE','RACE','RIPE','RIDE'],
+  ['SAND','SEND','BAND','SANE'],['WIND','WING','WINE','WIDE'],
 ];
 const WF_T2=[
   ['SWIFT','SHIFT','SNIFF','SWIRL'],['QUIET','QUITE','QUOTE','QUILT'],
   ['ANGEL','ANGLE','AGILE','ANKLE'],['BREAD','BEARD','BOARD','BRAND'],
   ['DAIRY','DIARY','DERBY','DIRTY'],['SACRED','SCARED','SEARED','SCORED'],
   ['MARBLE','RAMBLE','MARVEL','MANTLE'],['SILVER','SLIVER','SLIDER','SILKEN'],
+  ['TRIAL','TRAIL','TRILL','TIDAL'],['BLAME','BLADE','BLARE','BLAZE'],
+  ['STEAM','STEAK','STEAL','STEEL'],['GLARE','LARGE','GLAZE','GRACE'],
+  ['CRATE','CARET','CATER','TRACE'],['SPARE','SPEAR','PARSE','SPADE'],
+  ['POSE','PROSE','POISE','PURSE'],['NIGHT','RIGHT','NIGHTLY','MIGHT'],
 ];
 const WF_T3=[
   ['THROUGH','TROUGH','THOROUGH','THOUGHT'],['PRECEDE','PROCEED','PRESIDE','PRECISE'],
   ['DESSERT','DESERTS','DISSENT','DISSECT'],['CONVERSE','CONSERVE','CONVERGE','CONVEYED'],
   ['ADAPTER','ADOPTER','ADAPTED','ADOPTED'],['LATERAL','LITERAL','LITERARY','LITERATE'],
   ['EMINENT','IMMINENT','EMIGRANT','ELEGANT'],['CRYSTAL','CRUCIAL','CYNICAL','CLINICAL'],
+  ['PERSIST','PERSUADE','PERSPIRE','PERSONAL'],['DECLINE','DECLARE','DECIMAL','DECLAIM'],
+  ['ILLUSION','ALLUSION','ELUSION','EVASION'],['STATIONARY','STATIONERY','STATIONS','SITUATION'],
+  ['ACCEPT','EXCEPT','EXPECT','ACCESS'],['AFFECT','EFFECT','AFFLICT','EFFORT'],
+  ['PRINCIPAL','PRINCIPLE','PRINCESS','PRINTING'],['COMPLEMENT','COMPLIMENT','COMPONENT','COMPLETE'],
 ];
 function playWordFlash(body,setScore,end,wrap,startClock){
-  let q=0,score=0,streak=0,bestStreak=0,fastest=null,correctCount=0;
+  let q=0,score=0,streak=0,bestStreak=0,fastest=null,correctCount=0,lives=3;
+  const record=S('nz_wf_best')||0;
+  // shuffled, recycling pools
   const pools={1:[...WF_T1].sort(()=>Math.random()-.5),2:[...WF_T2].sort(()=>Math.random()-.5),3:[...WF_T3].sort(()=>Math.random()-.5)};
   const used={1:0,2:0,3:0};
-  function takeGroup(tier){const p=pools[tier];const g=p[used[tier]%p.length];used[tier]++;return g;}
-  const instrEl=$(`<div class="instr" style="margin-bottom:14px;"><strong>Word Flash 2.0</strong><br>Word ek flash mein dikhega — distractors bilkul similar honge!<br><span style="font-size:11px;color:var(--primary);">Q8+ DECOY MODE: 2 words ek saath — dono yaad rakho! ⚡ &lt;500ms = bonus point</span><br>
+  function takeGroup(tier){const p=pools[tier];const g=p[used[tier]%p.length];used[tier]++;if(used[tier]%p.length===0)p.sort(()=>Math.random()-.5);return g;}
+  const instrEl=$(`<div class="instr" style="margin-bottom:14px;"><strong>Word Flash ♾️</strong><br>Word ek flash mein dikhega — distractors bilkul similar honge! Endless: jab tak 3 lives hain khelte raho.<br><span style="font-size:11px;color:var(--primary);">Q8+ DECOY MODE: 2 words · ⚡ &lt;500ms = bonus · ❌ galat = -1 life</span>${record?`<div style="margin-top:6px;font-size:12px;font-weight:700;color:var(--mint);">🏆 Best: ${record} pts</div>`:''}<br>
   <button style="margin-top:10px;padding:12px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="wfStart">▶ Start</button>
 </div>`);
   body.appendChild(instrEl);
   const host=$(`<div></div>`);body.appendChild(host);
+  function heartsHtml(){return `<div class="wc-hearts">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''} ${(lives===1&&i===0)?'mm-last':''}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>`;}
+  function gameOver(){
+    const acc=q?Math.round(correctCount/q*100):0;
+    const newPB=score>record;
+    if(newPB)setS('nz_wf_best',score);
+    setS('nz_wf_games',(S('nz_wf_games')||0)+1);
+    if(newPB)confetti(50);
+    end({title:newPB?'New Best! 🏆':'Word Flash 📝',emoji:'📝',sub:`${score} pts · ${q} rounds · ${acc}%`,value:score,points:Math.max(5,score*2),starThresh:[20,40,70],
+      statsHtml:`<div class="end-stats">
+        <div class="row"><span>Score</span><span class="val">${score} pts</span></div>
+        <div class="row"><span>Rounds Survived</span><span class="val">${q}</span></div>
+        <div class="row"><span>Accuracy</span><span class="val">${acc}% (${correctCount}/${q})</span></div>
+        <div class="row"><span>Fastest Response</span><span class="val">${fastest!==null?fastest+'ms':'—'}</span></div>
+        <div class="row"><span>Longest Streak</span><span class="val">${bestStreak} 🔥</span></div>
+        <div class="row"><span>Personal Best</span><span class="val">${Math.max(score,record)}${newPB?' 🏆':''}</span></div>
+      </div>${newPB?'<div class="rec">New Personal Best! 🎉</div>':''}`});
+  }
   function next(){
-    if(q>=15){
-      const acc=Math.round(correctCount/15*100);
-      end({title:'Word Flash Done! 📝',emoji:'📝',sub:`${score} pts · ${acc}% accuracy`,value:score,points:score*2,starThresh:[15,25,35],
-        statsHtml:`<div class="end-stats">
-          <div class="row"><span>Score</span><span class="val">${score} pts</span></div>
-          <div class="row"><span>Accuracy</span><span class="val">${acc}% (${correctCount}/15)</span></div>
-          <div class="row"><span>Fastest Response</span><span class="val">${fastest!==null?fastest+'ms':'—'}</span></div>
-          <div class="row"><span>Longest Streak</span><span class="val">${bestStreak} 🔥</span></div>
-        </div>`});
-      return;
-    }
-    const tier=q<5?1:q<10?2:3;
-    const flashMs=Math.max(400,900-q*50);
+    if(lives<=0){gameOver();return;}
+    // difficulty scales endlessly with round
+    const tier=q<5?1:q<11?2:3;
+    const flashMs=Math.max(380,900-q*40);
     const decoy=q>=7;
     const group=takeGroup(tier);
     let words=[group[0]],askSide=0,group2=null;
@@ -1081,12 +1418,13 @@ function playWordFlash(body,setScore,end,wrap,startClock){
     const askGroup=decoy&&askSide===1?group2:group;
     const askWord=askGroup[0];
     host.innerHTML=`
+      ${heartsHtml()}
       <div class="wf-stage">
         <div class="wf-bar"><div class="wf-bar-fill" id="wfBar"></div></div>
         <div class="wf-words">${words.map(w=>`<div class="wf-word" style="font-size:${decoy?'26px':'48px'};">${w}</div>`).join('')}</div>
         ${decoy?'<div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:10px;letter-spacing:.12em;font-weight:700;">DECOY MODE — DONO YAAD RAKHO!</div>':''}
       </div>
-      <div style="text-align:center;font-size:12px;color:var(--text2);margin-top:8px;">Q${q+1}/15 · ${flashMs}ms flash${streak>=3?' · 🔥 x1.5':''}</div>`;
+      <div style="text-align:center;font-size:12px;color:var(--text2);margin-top:8px;">Round ${q+1} · ${flashMs}ms flash${streak>=3?' · 🔥 x1.5':''}</div>`;
     const bar=host.querySelector('#wfBar');
     requestAnimationFrame(()=>{requestAnimationFrame(()=>{if(bar){bar.style.transition=`width ${flashMs}ms linear`;bar.style.width='0%';}});});
     _st(()=>{
@@ -1096,12 +1434,13 @@ function playWordFlash(body,setScore,end,wrap,startClock){
         const opts=[...askGroup].sort(()=>Math.random()-.5);
         const askTs=Date.now();
         host.innerHTML=`
+          ${heartsHtml()}
           <div class="wf-stage" style="padding:22px 16px;">
             <div class="wf-word" style="font-size:44px;">?</div>
             ${decoy?`<div style="font-size:12px;color:#A78BFA;font-weight:700;margin-top:6px;">${askSide===0?'⬅ LEFT':'RIGHT ➡'} wala word kaunsa tha?</div>`:''}
           </div>
           <div class="word-opts" id="wOpts" style="margin-top:14px;"></div>
-          <div style="text-align:center;font-size:12px;color:var(--text2);margin-top:8px;">Q${q+1}/15${streak>=3?' · 🔥 STREAK x1.5':''}</div>`;
+          <div style="text-align:center;font-size:12px;color:var(--text2);margin-top:8px;">Round ${q+1}${streak>=3?' · 🔥 STREAK x1.5':''}</div>`;
         const optsEl=host.querySelector('#wOpts');
         opts.forEach(w=>{
           const b=$(`<button class="word-opt" data-w="${w}">${w}</button>`);
@@ -1119,12 +1458,14 @@ function playWordFlash(body,setScore,end,wrap,startClock){
               if(fast)showCombo('⚡ SPEED DEMON!');
               score+=pts;setScore(score);
               b.classList.add('wf-correct');
+              q++;_st(next,600);
             } else {
-              playSound('wrong');streak=0;
+              playSound('wrong');streak=0;haptic([30,50,30]);
               b.classList.add('wf-wrong');
               optsEl.querySelectorAll('.word-opt').forEach(bb=>{if(bb.dataset.w===askWord)bb.classList.add('wf-correct');});
+              lives--;toast('❌ -1 Life');
+              q++;_st(next,800);
             }
-            _st(()=>{q++;next();},650);
           };
           optsEl.appendChild(b);
         });
@@ -1134,16 +1475,16 @@ function playWordFlash(body,setScore,end,wrap,startClock){
   instrEl.querySelector('#wfStart').onclick=()=>{instrEl.remove();startClock&&startClock();next();};
 }
 
-/* ===================== WORD CHAIN 2.0 ===================== */
-const WC_WORDS=['Apple','Chair','River','Cloud','Music','Tiger','Bread','Stone','Light','Phone','Dream','Water','House','Paper','Green','Earth','Smile','Train','Dance','Maple','Ocean','Clock','Flame','Brain','Sugar','Grass','Pilot','Queen','Frost','Arrow','Lemon','Storm','Movie','Brush','Radio','Pearl','Eagle','Comet','Prize','Unity'];
+/* ===================== WORD CHAIN 2.0 (endless) ===================== */
+const WC_WORDS=['Apple','Chair','River','Cloud','Music','Tiger','Bread','Stone','Light','Phone','Dream','Water','House','Paper','Green','Earth','Smile','Train','Dance','Maple','Ocean','Clock','Flame','Brain','Sugar','Grass','Pilot','Queen','Frost','Arrow','Lemon','Storm','Movie','Brush','Radio','Pearl','Eagle','Comet','Prize','Unity','Honey','Cabin','Glove','Torch','Wheat','Coral','Piano','Robin','Maze','Vault','Bloom','Crane','Drift','Ember','Fable','Glide','Harbor','Ivory','Jolly','Kite','Lunar','Meadow','Nectar','Onyx','Plume','Quartz','Ridge','Spark','Tide','Vivid','Whale','Zephyr','Amber','Birch','Cedar','Dune'];
 function playNeuralChain(body,setScore,end,wrap,startClock){
   const FLASH_COLORS=['#7C3AED','#4F8EF7','#34D399'];
   const record=LS.get('nz_wordchain_record',0);
   let round=0,lives=3,totalScore=0,longest=0,mistakes=0;
   const instrEl=$(`<div class="instr" style="margin-bottom:14px;">
-    <strong>Word Chain 2.0 🔗</strong><br>
+    <strong>Word Chain ♾️</strong><br>
     Words ek-ek karke flash honge — order yaad rakho, phir sahi order mein tap karo!<br>
-    <span style="font-size:11px;color:var(--primary);">3 lives ❤️ · Chain 5+ = 👻 distractor · Chain 6+ = ⚡ SPEED MODE</span>
+    <span style="font-size:11px;color:var(--primary);">3 lives ❤️ · Endless — chain badhta jaayega · 5+ = 👻 distractor · 6+ = ⚡ SPEED</span>
     ${record>0?`<div style="margin-top:6px;font-size:12px;font-weight:700;color:var(--mint);">🏆 Personal Record: ${record}-word chain</div>`:''}
     <button style="margin-top:12px;padding:12px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="wcStart">▶ Start</button>
   </div>`);
@@ -1151,14 +1492,15 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
   const host=$(`<div></div>`);
   body.appendChild(host);
   function hudHtml(extra){
-    return `<div class="wc-hearts">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''}" id="wcH${i}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>
-    <div class="chain-links">${Array.from({length:8},(_,i)=>`<span class="ch-link ${i<round?'done':i===round?'cur':''}">${3+i}</span>`).join('<span class="ch-conn"></span>')}</div>
+    const len=3+round;
+    return `<div class="wc-hearts">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''} ${(lives===1&&i===0)?'mm-last':''}" id="wcH${i}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>
+    <div class="mm-roundrow"><span>Chain <strong>${len}</strong></span><span>Best <strong>${Math.max(record,longest)}</strong></span></div>
     ${extra||''}`;
   }
   function startRound(){
     const len=3+round;
     const speed=len>=6;
-    const flashMs=speed?600:800;
+    const flashMs=speed?Math.max(420,600-(len-6)*30):800;
     const pool=[...WC_WORDS].sort(()=>Math.random()-.5);
     const chain=pool.slice(0,len);
     const distractor=len>=5?pool[len]:null;
@@ -1197,7 +1539,7 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
             if(tapped>=len)roundComplete(len);
           } else {
             mistakes++;
-            playSound('wrong');
+            playSound('wrong');haptic([30,50,30]);
             btn.style.background='#F87171';btn.style.color='#fff';
             host.querySelectorAll('.wc-btn').forEach(b=>b.disabled=true);
             loseLife();
@@ -1217,8 +1559,7 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
         <div style="display:inline-block;background:var(--grad);color:#fff;padding:14px 26px;border-radius:50px;font-weight:800;font-size:18px;box-shadow:var(--shadow-lg);animation:popIn .4s ease;">🔗 ${len}-WORD CHAIN · +${len}pts</div>
       </div>`;
     round++;
-    if(round>=8)_st(()=>finish(),1300);
-    else _st(()=>startRound(),1300);
+    _st(()=>startRound(),1300);
   }
   function loseLife(){
     lives--;
@@ -1235,9 +1576,11 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
     const livesBonus=lives*5;
     const final=chainPts+livesBonus;
     setScore(final);
-    if(longest>record)LS.set('nz_wordchain_record',longest);
+    const newRec=longest>record;
+    if(newRec)LS.set('nz_wordchain_record',longest);
+    if(newRec)confetti(50);
     end({
-      title:lives>0?'Chain Master! 🔗':'Chain Over! 💔',
+      title:newRec?'New Record! 🏆':(lives>0?'Chain Master! 🔗':'Chain Over! 💔'),
       emoji:'🔗',
       sub:`Longest chain: ${longest} words${perfect?' · ✨ PERFECT x2':''}`,
       value:final,points:final*2,starThresh:[20,40,60],
@@ -1246,8 +1589,8 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
         <div class="row"><span>Chain Points${perfect?' (x2 perfect)':''}</span><span class="val">${chainPts}</span></div>
         <div class="row"><span>Lives Bonus</span><span class="val">+${livesBonus} (${lives} ❤️)</span></div>
         <div class="row"><span>Total Score</span><span class="val">${final}</span></div>
-        ${longest>record&&longest>0?`<div class="row"><span>🏆 New Record</span><span class="val">${longest}-word chain</span></div>`:''}
-      </div>`
+        <div class="row"><span>Personal Best</span><span class="val">${Math.max(longest,record)}${newRec?' 🏆':''}</span></div>
+      </div>${newRec?'<div class="rec">New Personal Record! 🎉</div>':''}`
     });
   }
   instrEl.querySelector('#wcStart').onclick=()=>{instrEl.remove();startClock&&startClock();startRound();};
@@ -1389,44 +1732,46 @@ function playMath(body,setScore,end,wrap,startClock){
 function playStroopX(body,setScore,end,wrap,startClock){
   const COLORS=[{name:'Red',hex:'#EF4444'},{name:'Blue',hex:'#3B82F6'},{name:'Green',hex:'#22C55E'},{name:'Yellow',hex:'#EAB308'},{name:'Purple',hex:'#A855F7'}];
   const SHAPES=[{name:'Circle',sym:'●'},{name:'Square',sym:'■'},{name:'Triangle',sym:'▲'},{name:'Star',sym:'★'}];
+  const record=S('nz_stroop_best')||0;
   let round=0,score=0,combo=0,maxCombo=0,lives=3;
-  function livesHtml(){return `<div class="wc-hearts">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>`;}
+  function livesHtml(){return `<div class="wc-hearts">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''} ${(lives===1&&i===0)?'mm-last':''}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>`;}
+  function gameOver(){
+    const newPB=score>record;
+    if(newPB)setS('nz_stroop_best',score);
+    setS('nz_stroop_games',(S('nz_stroop_games')||0)+1);
+    if(newPB)confetti(50);
+    end({title:newPB?'New Best! 🏆':'Out of Lives! 🎨',emoji:'🎨',sub:`Score: ${score} pts · ${round} rounds`,value:score,points:Math.max(5,score*4),starThresh:[40,80,130],
+      statsHtml:`<div class="end-stats"><div class="row"><span>Score</span><span class="val">${score}</span></div><div class="row"><span>Rounds Survived</span><span class="val">${round}</span></div><div class="row"><span>Max Combo</span><span class="val">${maxCombo}</span></div><div class="row"><span>Personal Best</span><span class="val">${Math.max(score,record)}${newPB?' 🏆':''}</span></div></div>${newPB?'<div class="rec">New Personal Best! 🎉</div>':''}`});
+  }
   function loseLife(){
     lives--;
     host.classList.add('shake-anim');
     _st(()=>host.classList.remove('shake-anim'),450);
     if(lives<=0){
-      _st(()=>{
-        end({title:'Out of Lives! 💔',emoji:'🎨',sub:`Score: ${score} pts · ${round+1} rounds`,value:score,points:score*4,starThresh:[40,65,90],
-          statsHtml:`<div class="end-stats"><div class="row"><span>Score</span><span class="val">${score}</span></div><div class="row"><span>Rounds Survived</span><span class="val">${round+1}/30</span></div><div class="row"><span>Max Combo</span><span class="val">${maxCombo}</span></div></div>`});
-      },900);
+      _st(gameOver,900);
       return true;
     }
     return false;
   }
   const host=$(`<div style="text-align:center;padding:12px 0;"></div>`);
   body.appendChild(host);
-  const btn=$(`<button class="start-btn">Tap to Start (30 rounds)</button>`);
+  const btn=$(`<button class="start-btn">Tap to Start — Endless ❤️${record?' · 🏆 '+record:''}</button>`);
   body.appendChild(btn);
   btn.onclick=()=>{btn.remove();startClock&&startClock();nextRound();};
   function startBar(limit,onTimeout){
     let elapsed=0;
-    const barT=setInterval(()=>{
+    const barT=_si(()=>{
       elapsed+=100;
       const pct=Math.max(0,100-elapsed/limit*100);
       const bar=wrap.querySelector('#sBar');
       if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
-      if(elapsed>=limit){clearInterval(barT);onTimeout();}
+      if(elapsed>=limit){_cti(barT);onTimeout();}
     },100);
     return barT;
   }
   function nextRound(){
-    if(round>=30){
-      end({title:'Stroop Master! 🎨',emoji:'🎨',sub:`Score: ${score} pts · 30 rounds`,value:score,points:score*4,starThresh:[40,65,90],
-        statsHtml:`<div class="end-stats"><div class="row"><span>Score</span><span class="val">${score}</span></div><div class="row"><span>Max Combo</span><span class="val">${maxCombo}</span></div><div class="row"><span>Phase</span><span class="val">${round>25?'3':round>10?'2':'1'}</span></div></div>`});
-      return;
-    }
-    const phase=round<11?1:round<16?2:3;
+    if(lives<=0){return;}
+    const phase=round<10?1:round<16?2:3;
     const ts=Date.now();
     let barT=null;
     if(phase===1){
@@ -1439,7 +1784,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
       host.innerHTML=`
         <div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>
         ${livesHtml()}
-        <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Round ${round+1}/30 · Phase 1 — INK ka rang tap karo!</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Round ${round+1} · Phase 1 — INK ka rang tap karo!</div>
         ${combo>=3?`<div style="font-size:11px;font-weight:700;color:#7C3AED;margin-bottom:4px;">🔥 Combo ×1.5</div>`:''}
         <div style="font-size:52px;font-weight:900;color:${ink.hex};margin:14px 0;">${word.name}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:280px;margin:0 auto;">
@@ -1476,7 +1821,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
       host.innerHTML=`
         <div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>
         ${livesHtml()}
-        <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Round ${round+1}/30 · Phase 2 — Jo SHAPE dikhti hai, usse tap karo!</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Round ${round+1} · Phase 2 — Jo SHAPE dikhti hai, usse tap karo!</div>
         <div style="font-size:64px;font-weight:900;color:${inkColor.hex};margin:10px 0;">${dispShape.sym}</div>
         <div style="font-size:11px;color:var(--text2);margin-bottom:8px;">(Word: "${wordShape.name}" — IGNORE karo)</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:280px;margin:0 auto;">
@@ -1524,7 +1869,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
       host.innerHTML=`
         <div class="timer-bar"><div class="timer-fill timer-green" id="sBar" style="width:100%"></div></div>
         ${livesHtml()}
-        <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Round ${round+1}/30 · Phase 3</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Round ${round+1} · Phase 3</div>
         <div style="font-size:13px;font-weight:700;color:${askColor?'#A78BFA':'#34D399'};margin-bottom:6px;">${askColor?'🎨 INK COLOR kya hai?':'🔷 SHAPE kya dikhti hai?'}</div>
         <div style="font-size:58px;font-weight:900;color:${inkColor.hex};margin:6px 0;">${dispShape.sym}</div>
         <div style="font-size:11px;color:var(--text2);margin-bottom:8px;">(Text: "${decoyWord}")</div>
@@ -1560,87 +1905,151 @@ function playStroopX(body,setScore,end,wrap,startClock){
   }
 }
 
-/* ===================== IQ TEST ===================== */
+/* ===================== IQ TEST (redesigned) ===================== */
+const IQ_POOL=[
+  {q:'Sequence: 2, 4, 8, 16, __. Agla number?',opts:['24','32','20','28'],ans:1,cat:'numerical',diff:'easy',exp:'Geometric ×2: 16×2 = 32.'},
+  {q:'Sequence: 2, 6, 12, 20, 30, __',opts:['40','42','44','38'],ans:1,cat:'numerical',diff:'medium',exp:'Differences 4,6,8,10,12 → 30+12 = 42.'},
+  {q:'Fibonacci: 1, 1, 2, 3, 5, 8, __',opts:['11','13','12','14'],ans:1,cat:'numerical',diff:'easy',exp:'Pichle 2 ka sum: 5+8 = 13.'},
+  {q:'450 ka 10% kitna hai?',opts:['40','45','50','55'],ans:1,cat:'numerical',diff:'easy',exp:'450÷10 = 45.'},
+  {q:'100 − 17 − 23 − 15 = ?',opts:['45','50','55','42'],ans:0,cat:'numerical',diff:'easy',exp:'83→60→45.'},
+  {q:'Kaunsa number 4 aur 6 dono se divisible hai?',opts:['10','14','12','16'],ans:2,cat:'numerical',diff:'easy',exp:'LCM(4,6)=12.'},
+  {q:'Sequence: 1, 4, 9, 16, 25, __',opts:['30','36','35','49'],ans:1,cat:'numerical',diff:'medium',exp:'Squares: 6² = 36.'},
+  {q:'Sequence: 3, 6, 11, 18, 27, __',opts:['36','38','40','35'],ans:1,cat:'numerical',diff:'medium',exp:'Differences 3,5,7,9,11 → 27+11 = 38.'},
+  {q:'Sequence: 1, 2, 6, 24, 120, __',opts:['600','720','480','240'],ans:1,cat:'numerical',diff:'hard',exp:'Factorials ×n: 120×6 = 720.'},
+  {q:'25% of 240 = ?',opts:['48','60','50','72'],ans:1,cat:'numerical',diff:'easy',exp:'240÷4 = 60.'},
+  {q:'Average of 10, 20, 30, 40 = ?',opts:['20','25','30','22'],ans:1,cat:'numerical',diff:'easy',exp:'100÷4 = 25.'},
+  {q:'Ek train 60km/h se 2 ghante chalti hai. Doori?',opts:['60km','100km','120km','180km'],ans:2,cat:'numerical',diff:'easy',exp:'60×2 = 120km.'},
+  {q:'Koi 90km 1.5 ghante mein. Speed?',opts:['45km/h','60km/h','90km/h','30km/h'],ans:1,cat:'numerical',diff:'medium',exp:'90÷1.5 = 60.'},
+  {q:'3 hafte mein kitne din?',opts:['18','21','24','28'],ans:1,cat:'numerical',diff:'easy',exp:'3×7 = 21.'},
+  {q:'6×4=24, 5×3=15, to 7×5=?',opts:['30','35','40','45'],ans:1,cat:'numerical',diff:'easy',exp:'7×5 = 35.'},
+  {q:'5 logon ki line mein Rahul 3rd hai. Uske baad kitne log?',opts:['1','2','3','4'],ans:1,cat:'logic',diff:'easy',exp:'5−3 = 2.'},
+  {q:'Neha, Priya se 3 saal badi. 5 saal baad Priya 20. Abhi Neha?',opts:['18','23','22','20'],ans:0,cat:'logic',diff:'medium',exp:'Priya=15, Neha=18.'},
+  {q:'3 cats 3 mice ko 3 min mein pakadti hain. 100 mice ke liye kitni cats?',opts:['100','33','3','10'],ans:2,cat:'logic',diff:'medium',exp:'1 cat=1 mouse/3min, to 3 cats kaafi.'},
+  {q:'A ki umar B se double. Dono ka sum 36. B ki umar?',opts:['9','10','12','14'],ans:2,cat:'logic',diff:'medium',exp:'3B=36 → B=12.'},
+  {q:'Aaj Wednesday hai. 10 din baad kaunsa din?',opts:['Monday','Friday','Saturday','Sunday'],ans:2,cat:'logic',diff:'medium',exp:'Wed+7=Wed, +3=Saturday.'},
+  {q:'Algebra: 3x − 7 = 14. x = ?',opts:['5','6','7','8'],ans:2,cat:'logic',diff:'hard',exp:'3x=21 → x=7.'},
+  {q:'Sab roses flowers hain. Kuch flowers fade jaate hain. To?',opts:['Sab roses fade','Kuch roses fade ho sakte','Koi rose fade nahi','Roses flowers nahi'],ans:1,cat:'logic',diff:'hard',exp:'Sirf kuch roses fade ho sakte hain — valid.'},
+  {q:'Ek ghadi roz 5 min slow hoti hai. 12 ghante mein kitni slow?',opts:['2.5 min','5 min','1 min','10 min'],ans:0,cat:'logic',diff:'hard',exp:'5min/24h → 12h mein 2.5 min.'},
+  {q:'Agar MANGO ka code 50 hai (A=1..). APPLE ka code?',opts:['50','51','52','53'],ans:0,cat:'verbal',diff:'medium',exp:'1+16+16+12+5 = 50.'},
+  {q:'Odd one out: Cat, Dog, Rose, Lion',opts:['Cat','Dog','Rose','Lion'],ans:2,cat:'verbal',diff:'easy',exp:'Rose plant hai.'},
+  {q:'BOOK : READING :: FORK : ?',opts:['Kitchen','Eating','Spoon','Metal'],ans:1,cat:'verbal',diff:'easy',exp:'Book reading ke liye, fork eating ke liye.'},
+  {q:'Ephemeral ka matlab?',opts:['Permanent','Short-lived','Heavy','Bright'],ans:1,cat:'verbal',diff:'hard',exp:'Ephemeral = bahut short-lived.'},
+  {q:'Odd one out: Apple, Mango, Carrot, Banana',opts:['Apple','Mango','Carrot','Banana'],ans:2,cat:'verbal',diff:'easy',exp:'Carrot vegetable hai.'},
+  {q:'HOT : COLD :: UP : ?',opts:['Sky','Down','High','Top'],ans:1,cat:'verbal',diff:'easy',exp:'Opposites: up↔down.'},
+  {q:'Agar CIPHER reverse karo to?',opts:['REHPIC','REPHIC','RHEPIC','REHPCI'],ans:0,cat:'verbal',diff:'medium',exp:'C-I-P-H-E-R → R-E-H-P-I-C.'},
+  {q:'Benevolent ka matlab?',opts:['Cruel','Kind','Lazy','Angry'],ans:1,cat:'verbal',diff:'medium',exp:'Benevolent = kind/generous.'},
+  {q:'Letter sequence: A, C, E, G, __',opts:['H','I','J','K'],ans:1,cat:'pattern',diff:'easy',exp:'+2 har baar → I.'},
+  {q:'Letter sequence: Z, X, V, T, __',opts:['P','Q','R','S'],ans:2,cat:'pattern',diff:'medium',exp:'−2 har baar → R.'},
+  {q:'Series: AZ, BY, CX, __',opts:['DV','DW','EW','DX'],ans:1,cat:'pattern',diff:'medium',exp:'Aage A,B,C,D; peeche Z,Y,X,W → DW.'},
+  {q:'Series: J, F, M, A, M, __ (mahine)',opts:['J','A','S','O'],ans:0,cat:'pattern',diff:'medium',exp:'Jan..May,June → J.'},
+  {q:'Pattern: 1A, 2B, 3C, 4D, __',opts:['5E','5F','6E','4E'],ans:0,cat:'pattern',diff:'easy',exp:'Number+1, letter next → 5E.'},
+  {q:'Series: 2, A, 4, B, 6, C, 8, __',opts:['D','E','9','10'],ans:0,cat:'pattern',diff:'medium',exp:'Even numbers + A,B,C,D → D.'},
+  {q:'Ghadi mein 3:15 hain. Hour aur minute hand ke beech angle?',opts:['0°','7.5°','15°','30°'],ans:1,cat:'spatial',diff:'hard',exp:'Hour=97.5°, Minute=90° → 7.5°.'},
+  {q:'Ek square ka perimeter 40cm. Area?',opts:['80cm²','100cm²','160cm²','40cm²'],ans:1,cat:'spatial',diff:'medium',exp:'Side 10 → 100cm².'},
+  {q:'Mirror image mein REPLIT?',opts:['TILPER','TILEPR','TIRPLE','TIPREL'],ans:0,cat:'spatial',diff:'medium',exp:'Reverse → TILPER.'},
+  {q:'Ek triangle ke angles 60° aur 70°. Teesra?',opts:['40°','50°','60°','70°'],ans:1,cat:'spatial',diff:'easy',exp:'180−60−70 = 50°.'},
+  {q:'Ek cube ki kitni faces?',opts:['4','8','6','12'],ans:2,cat:'spatial',diff:'easy',exp:'Cube = 6 faces.'},
+  {q:'Ek cube ke kitne edges hote hain?',opts:['8','10','12','6'],ans:2,cat:'spatial',diff:'medium',exp:'Cube = 12 edges.'},
+  {q:'Circle ko 4 baar half-fold karo to kitne layers?',opts:['8','16','4','12'],ans:1,cat:'spatial',diff:'hard',exp:'2⁴ = 16 layers.'},
+  {q:'Rectangle 8×6. Diagonal kitni?',opts:['10','12','14','9'],ans:0,cat:'spatial',diff:'medium',exp:'√(64+36)=√100=10.'},
+];
+const IQ_CATS={logic:{label:'Logic',color:'#7C3AED'},numerical:{label:'Numerical',color:'#4F8EF7'},verbal:{label:'Verbal',color:'#34D399'},spatial:{label:'Spatial',color:'#F97316'},pattern:{label:'Pattern',color:'#F472B6'}};
+const IQ_DIFF_W={easy:1,medium:1.5,hard:2.2};
+const IQ_TIMER={easy:25000,medium:20000,hard:14000};
+const IQ_N=10;
+function iqClassify(iq){
+  if(iq>=140)return{label:'Genius',pct:99};
+  if(iq>=130)return{label:'Very Superior',pct:98};
+  if(iq>=120)return{label:'Superior',pct:91};
+  if(iq>=110)return{label:'Above Average',pct:75};
+  if(iq>=90)return{label:'Average',pct:50};
+  if(iq>=80)return{label:'Below Average',pct:25};
+  return{label:'Keep Practicing',pct:9};
+}
 function playIQTest(body,setScore,end,wrap,startClock){
-  const ALL_QS=[
-    {q:'Sequence: 2, 4, 8, 16, __. Agla number kya hai?',opts:['24','32','20','28'],ans:1,diff:'easy',exp:'Geometric series ×2: 16×2 = 32.'},
-    {q:'Agar M=13, A=1, N=14, G=7, O=15 → MANGO=50. APPLE ka code? (A=1, B=2...)',opts:['50','51','52','53'],ans:0,diff:'easy',exp:'A(1)+P(16)+P(16)+L(12)+E(5) = 50.'},
-    {q:'5 logon ki line mein Rahul 3rd hai. Uske baad kitne log hain?',opts:['1','2','3','4'],ans:1,diff:'easy',exp:'5 − 3 = 2 log Rahul ke baad hain.'},
-    {q:'Ghadi mein 3:15 hain. Minute aur hour hand ke beech angle?',opts:['0°','7.5°','15°','30°'],ans:1,diff:'medium',exp:'Hour hand = 97.5°. Minute hand = 90°. Difference = 7.5°.'},
-    {q:'Odd one out: Cat, Dog, Rose, Lion',opts:['Cat','Dog','Rose','Lion'],ans:2,diff:'easy',exp:'Rose ek plant hai, baaki teen animals hain.'},
-    {q:'6×4=24 aur 5×3=15, toh 7×5=?',opts:['30','35','40','45'],ans:1,diff:'easy',exp:'Simple multiplication: 7×5 = 35.'},
-    {q:'Ek square ka perimeter 40cm hai. Area?',opts:['80cm²','100cm²','160cm²','40cm²'],ans:1,diff:'easy',exp:'Side = 40÷4 = 10cm. Area = 10×10 = 100cm².'},
-    {q:'Letter sequence: A, C, E, G, __',opts:['H','I','J','K'],ans:1,diff:'easy',exp:'Har step +2 (odd letters): A→C→E→G→I.'},
-    {q:'Neha, Priya se 3 saal badi. 5 saal baad Priya 20 hogi. Abhi Neha ki umar?',opts:['18','23','22','20'],ans:0,diff:'medium',exp:'Priya abhi = 20−5 = 15. Neha = 15+3 = 18.'},
-    {q:'3 cats 3 mice ko 3 minutes mein pakadti hain. 100 mice ke liye kitni cats?',opts:['100','33','3','10'],ans:2,diff:'medium',exp:'Ek cat 1 mouse ko 3 min mein pakadti hai. 3 cats kaafi hain.'},
-    {q:'Ek train 60km/h se 2 ghante chalti hai. Kitni doori?',opts:['60km','100km','120km','180km'],ans:2,diff:'easy',exp:'Distance = Speed × Time = 60 × 2 = 120km.'},
-    {q:'Kaunsa number 4 aur 6 dono se divisible hai?',opts:['10','14','12','16'],ans:2,diff:'easy',exp:'LCM(4,6) = 12. 12÷4=3 ✓, 12÷6=2 ✓.'},
-    {q:'Mirror image mein "REPLIT" kaisa dikhega?',opts:['TILPER','TILEPR','TIRPLE','TIPREL'],ans:0,diff:'medium',exp:'Mirror = reverse: R-E-P-L-I-T → T-I-L-P-E-R = TILPER.'},
-    {q:'Ek triangle ke angles 60° aur 70° hain. Teesra angle?',opts:['40°','50°','60°','70°'],ans:1,diff:'easy',exp:'180° − 60° − 70° = 50°.'},
-    {q:'Sequence: 2, 6, 12, 20, 30, __',opts:['40','42','44','38'],ans:1,diff:'medium',exp:'Differences: 4,6,8,10,12. Next = 30+12 = 42.'},
-    {q:'Fibonacci: 1, 1, 2, 3, 5, 8, __. Agla kya hai?',opts:['11','13','12','14'],ans:1,diff:'easy',exp:'Fibonacci: pichle 2 ka sum. 5+8 = 13.'},
-    {q:'450 ka 10% kitna hai?',opts:['40','45','50','55'],ans:1,diff:'easy',exp:'10% = 450÷10 = 45.'},
-    {q:'Ek cube ki kitni faces hoti hain?',opts:['4','8','6','12'],ans:2,diff:'easy',exp:'Cube ki 6 faces: top, bottom, front, back, left, right.'},
-    {q:'Koi 90km 1.5 ghante mein tay karta hai. Speed?',opts:['45km/h','60km/h','90km/h','30km/h'],ans:1,diff:'medium',exp:'Speed = 90÷1.5 = 60km/h.'},
-    {q:'A ki umar B se double hai. Dono ka sum 36. B ki umar?',opts:['9','10','12','14'],ans:2,diff:'medium',exp:'A = 2B. 2B+B = 36 → 3B = 36 → B = 12.'},
-    {q:'3 hafte mein kitne din?',opts:['18','21','24','28'],ans:1,diff:'easy',exp:'3 × 7 = 21 din.'},
-    {q:'Letter sequence: Z, X, V, T, __',opts:['P','Q','R','S'],ans:2,diff:'medium',exp:'Har step −2: Z→X→V→T→R.'},
-    {q:'100 − 17 − 23 − 15 = ?',opts:['45','50','55','42'],ans:0,diff:'easy',exp:'100−17=83, 83−23=60, 60−15 = 45.'},
-    {q:'Aaj Wednesday hai. 10 din baad kaunsa din?',opts:['Monday','Friday','Saturday','Sunday'],ans:2,diff:'medium',exp:'Wed + 7 = Wed. Wed + 3 more = Saturday.'},
-    {q:'Algebra: 3x − 7 = 14. x = ?',opts:['5','6','7','8'],ans:2,diff:'hard',exp:'3x = 14+7 = 21. x = 21÷3 = 7.'},
-  ];
-  const TIMER={easy:30000,medium:20000,hard:12000};
-  // Shuffle questions each session
-  const QS=[...ALL_QS].sort(()=>Math.random()-.5);
-  let qi=0,correct=0;
+  const pool=[...IQ_POOL];
+  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+  const QS=pool.slice(0,IQ_N);
+  let qi=0,correct=0,weightSum=0,weightGot=0,speedSum=0,speedCount=0,fastest=null;
+  const catStats={};
+  Object.keys(IQ_CATS).forEach(c=>catStats[c]={got:0,total:0});
   const host=$(`<div style="padding:0 4px;"></div>`);
   body.appendChild(host);
-  const btn=$(`<button class="start-btn">Start IQ Test (25 Qs)</button>`);
-  body.appendChild(btn);
-  btn.onclick=()=>{btn.remove();startClock&&startClock();showQ();};
+  const bestIQ=S('nz_iq_best')||0;
+  const intro=$(`<div class="instr" style="margin-bottom:14px;"><strong>🧩 IQ Test</strong><br>${IQ_N} random reasoning questions — Logic, Numerical, Verbal, Spatial & Pattern.<br><span style="font-size:11px;color:var(--primary);">Faster + harder correct answers = higher IQ.</span>${bestIQ?`<div style="margin-top:6px;font-size:12px;font-weight:700;color:var(--mint);">🏆 Best IQ: ${bestIQ}</div>`:''}<br><button class="start-btn" id="iqStart" style="margin-top:10px;">Start Test ▶</button></div>`);
+  body.appendChild(intro);
+  intro.querySelector('#iqStart').onclick=()=>{intro.remove();startClock&&startClock();showQ();};
+  function finish(){
+    const wAcc=weightSum?weightGot/weightSum:0;
+    const speedFactor=speedCount?Math.max(0,Math.min(1,1-(speedSum/speedCount))):0.5;
+    let iq=Math.round(60+wAcc*80+(speedFactor-0.5)*16);
+    iq=Math.max(55,Math.min(160,iq));
+    const cls=iqClassify(iq);
+    const prevBest=S('nz_iq_best')||0;
+    const newPB=iq>prevBest;
+    if(newPB)setS('nz_iq_best',iq);
+    setS('nz_iq_games',(S('nz_iq_games')||0)+1);
+    setScore(iq);
+    if(newPB)confetti(60);
+    const catRows=Object.keys(catStats).filter(c=>catStats[c].total>0).map(c=>{
+      const st=catStats[c];const pctv=Math.round(st.got/st.total*100);
+      return `<div class="iq-cat-row"><span class="iq-cat-name" style="color:${IQ_CATS[c].color}">${IQ_CATS[c].label}</span><span class="iq-cat-bar"><span class="iq-cat-fill" style="width:${pctv}%;background:${IQ_CATS[c].color}"></span></span><span class="iq-cat-val">${st.got}/${st.total}</span></div>`;
+    }).join('');
+    const gPct=Math.round((iq-55)/(160-55)*100);
+    const circ=Math.round(2*Math.PI*52);
+    const gauge=`<div class="iq-gauge"><svg width="150" height="150" viewBox="0 0 120 120" style="transform:rotate(-90deg);"><circle cx="60" cy="60" r="52" fill="none" stroke="var(--border)" stroke-width="10"/><circle id="iqArc" cx="60" cy="60" r="52" fill="none" stroke="url(#iqG)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${circ}"/><defs><linearGradient id="iqG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C3AED"/><stop offset="1" stop-color="#34D399"/></linearGradient></defs></svg><div class="iq-gauge-inner"><div class="iq-gauge-num" id="iqNum">0</div><div class="iq-gauge-lbl">IQ</div></div></div>`;
+    end({
+      title:cls.label,emoji:'🧩',
+      sub:`Top ${100-cls.pct}% · ${correct}/${IQ_N} correct${newPB?' · 🏆 New Best!':''}`,
+      value:iq,points:Math.max(10,Math.round((iq-55)*0.9)),starThresh:[90,110,130],
+      statsHtml:`${gauge}<div class="end-stats"><div class="row"><span>Estimated IQ</span><span class="val">${iq}</span></div><div class="row"><span>Classification</span><span class="val">${cls.label}</span></div><div class="row"><span>Percentile</span><span class="val">Top ${100-cls.pct}%</span></div><div class="row"><span>Correct</span><span class="val">${correct}/${IQ_N}</span></div><div class="row"><span>Fastest Answer</span><span class="val">${fastest!=null?(fastest/1000).toFixed(1)+'s':'—'}</span></div><div class="row"><span>Personal Best</span><span class="val">${Math.max(iq,prevBest)}${newPB?' 🏆':''}</span></div></div><div class="iq-cats"><div class="iq-cats-title">Category Breakdown</div>${catRows}</div>${newPB?'<div class="rec">New Best IQ! 🎉</div>':''}`
+    });
+    _st(()=>{
+      const arc=wrap.querySelector('#iqArc');const num=wrap.querySelector('#iqNum');
+      if(arc){arc.style.transition='stroke-dashoffset 1.4s cubic-bezier(.22,1,.36,1)';arc.style.strokeDashoffset=circ*(1-gPct/100);}
+      if(num){const start=performance.now();const tick=t=>{const k=Math.min(1,(t-start)/1400);const e=1-Math.pow(1-k,3);num.textContent=Math.round(iq*e);if(k<1)requestAnimationFrame(tick);};requestAnimationFrame(tick);}
+    },60);
+  }
   function showQ(){
-    if(qi>=QS.length){
-      const iq=Math.round(70+(correct/25)*70);
-      end({title:`IQ Score: ${iq} 🧩`,emoji:'🧩',sub:`${correct}/25 correct`,value:iq,points:correct*5,starThresh:[10,16,22],
-        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${correct}/25</span></div><div class="row"><span>Estimated IQ</span><span class="val">${iq}</span></div><div class="row"><span>Rating</span><span class="val">${iq>=130?'Genius':iq>=115?'Above Avg':iq>=100?'Average':'Below Avg'}</span></div></div>`});
-      return;
-    }
-    const {q,opts,ans,diff,exp}=QS[qi];
-    const timeMs=TIMER[diff]||20000;
+    if(qi>=QS.length){finish();return;}
+    const {q,opts,ans,diff,exp,cat}=QS[qi];
+    const w=IQ_DIFF_W[diff]||1;
+    weightSum+=w;catStats[cat].total++;
+    const timeMs=IQ_TIMER[diff]||20000;
     const lvl=diff==='easy'?{label:'🟢 Easy',color:'#22C55E'}:diff==='medium'?{label:'🟡 Medium',color:'#EAB308'}:{label:'🔴 Hard',color:'#EF4444'};
+    const catInfo=IQ_CATS[cat];
     let barT=null,elapsed=0,answered=false;
-    host.innerHTML=`
-      <div class="timer-bar"><div class="timer-fill timer-green" id="iqBar" style="width:100%"></div></div>
-      <div style="text-align:center;margin-bottom:6px;font-size:12px;font-weight:700;color:${lvl.color}">${lvl.label} · Q${qi+1}/25 · ${timeMs/1000}s</div>
-      <div style="font-size:14px;font-weight:600;margin-bottom:12px;line-height:1.5;">${q}</div>
-      <div style="display:flex;flex-direction:column;gap:8px;" id="iqOpts">
-        ${opts.map((o,i)=>`<button class="math-opt iq-opt" style="text-align:left;padding:10px 14px;font-size:13px;" data-i="${i}">${String.fromCharCode(65+i)}. ${o}</button>`).join('')}
-      </div>`;
-    barT=setInterval(()=>{
-      elapsed+=100;
-      const pct=Math.max(0,100-elapsed/timeMs*100);
-      const bar=wrap.querySelector('#iqBar');
-      if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
-      if(elapsed>=timeMs&&!answered){
-        clearInterval(barT);answered=true;
-        host.querySelectorAll('.iq-opt').forEach((b,i)=>{if(i===ans)b.classList.add('correct-ans');b.disabled=true;});
-        showExp('⏱ Time\'s up!','#EF4444');
-        qi++;setTimeout(showQ,1800);
-      }
-    },100);
+    const tsStart=Date.now();
+    host.innerHTML=`<div class="timer-bar"><div class="timer-fill timer-green" id="iqBar" style="width:100%"></div></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:700;color:${lvl.color}">${lvl.label}</span><span class="iq-cat-chip" style="background:${catInfo.color}">${catInfo.label}</span><span style="font-size:12px;font-weight:700;color:var(--text2)">Q${qi+1}/${IQ_N}</span></div><div style="font-size:15px;font-weight:600;margin-bottom:14px;line-height:1.5;">${q}</div><div style="display:flex;flex-direction:column;gap:8px;" id="iqOpts">${opts.map((o,i)=>`<button class="math-opt iq-opt" style="text-align:left;padding:12px 14px;font-size:13px;min-height:44px;" data-i="${i}">${String.fromCharCode(65+i)}. ${o}</button>`).join('')}</div>`;
     function showExp(msg,color){
       const el=document.createElement('div');
       el.style.cssText='margin-top:10px;padding:8px 12px;background:var(--card);border-radius:10px;font-size:12px;line-height:1.5;border-left:3px solid '+color+';';
       el.innerHTML=`<span style="color:${color};font-weight:700;">${msg}</span><br><span style="color:var(--text2);">💡 ${exp}</span>`;
       host.appendChild(el);
     }
+    barT=_si(()=>{
+      elapsed+=100;
+      const pct=Math.max(0,100-elapsed/timeMs*100);
+      const bar=wrap.querySelector('#iqBar');
+      if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
+      if(elapsed>=timeMs&&!answered){
+        _cti(barT);answered=true;
+        speedSum+=1;speedCount++;
+        host.querySelectorAll('.iq-opt').forEach((b,i)=>{if(i===ans)b.classList.add('correct-ans');b.disabled=true;});
+        showExp("⏱ Time's up!",'#EF4444');
+        qi++;_st(showQ,1700);
+      }
+    },100);
     host.querySelectorAll('.iq-opt').forEach(b=>{
       b.onclick=()=>{
         if(answered)return;
-        clearInterval(barT);answered=true;
+        _cti(barT);answered=true;
+        const elapsedMs=Date.now()-tsStart;
+        speedSum+=Math.min(1,elapsedMs/timeMs);speedCount++;
+        if(fastest==null||elapsedMs<fastest)fastest=elapsedMs;
         const chosen=+b.dataset.i;
         if(chosen===ans){
-          playSound('correct');correct++;setScore(correct);
+          playSound('correct');correct++;weightGot+=w;catStats[cat].got++;setScore(correct);
           b.classList.add('correct-ans');showExp('✅ Correct!','#22C55E');
         } else {
           playSound('wrong');b.classList.add('wrong-ans');
@@ -1648,7 +2057,7 @@ function playIQTest(body,setScore,end,wrap,startClock){
           showExp('❌ Wrong!','#EF4444');
         }
         host.querySelectorAll('.iq-opt').forEach(x=>x.disabled=true);
-        qi++;setTimeout(showQ,1800);
+        qi++;_st(showQ,1700);
       };
     });
   }
