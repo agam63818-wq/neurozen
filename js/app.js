@@ -714,7 +714,7 @@ function playSchulte(body,setScore,end,wrap,startClock){
       b.onclick=()=>{playSound('tap');challenge=b.dataset.c==='1';updateToggleForMode();};
     });
     updateToggleForMode();
-    screen.querySelector('#schGo').onclick=()=>{playSound('tap');startCountdown();};
+    screen.querySelector('#schGo').onclick=()=>{playSound('tap');startClock&&startClock();startCountdown();};
   }
 
   function startCountdown(){
@@ -957,7 +957,7 @@ function playMemory(body,setScore,end,wrap,startClock){
       card.onclick=()=>{playSound('tap');mode=k;modesEl.querySelectorAll('.mm-mode').forEach(c=>c.classList.toggle('sel',c.dataset.m===k));};
       modesEl.appendChild(card);
     });
-    screen.querySelector('#mmGo').onclick=()=>{playSound('tap');startGame();};
+    screen.querySelector('#mmGo').onclick=()=>{playSound('tap');startClock&&startClock();startGame();};
   }
 
   function startGame(){
@@ -1602,135 +1602,242 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
 }
 
 /* ===================== QUICK MATH ===================== */
-const TIERS=[
-  {label:'TIER 1',ops:['+','-'],maxA:9,maxB:9,timeMs:4000},
-  {label:'TIER 2',ops:['+','-'],maxA:99,maxB:9,timeMs:4000},
-  {label:'TIER 3',ops:['×','+'],maxA:25,maxB:9,timeMs:3500},
-  {label:'TIER 4',ops:['×','-'],maxA:20,maxB:12,timeMs:3000},
-  {label:'TIER 5',ops:['×','+'],maxA:15,maxB:15,brackets:true,timeMs:2500},
-  {label:'TIER 6',ops:['÷'],maxA:12,maxB:12,timeMs:2500},
-  {label:'TIER 7',ops:['alg'],maxA:10,maxB:20,timeMs:2000},
-  {label:'TIER 8',ops:['word'],maxA:0,maxB:0,timeMs:2000},
-];
+/* Quick Math — endless survival. Modes + adaptive difficulty + combo + sudden death. */
+const QM_MODES={
+  easy:{label:'Easy',emoji:'🟢',sub:'Add / subtract',time:4000,ops:['+','-'],zen:false},
+  medium:{label:'Medium',emoji:'🟡',sub:'× and ÷ included',time:3000,ops:['+','-','×','÷'],zen:false},
+  hard:{label:'Hard',emoji:'🔴',sub:'2-step problems',time:2500,ops:['2step'],zen:false},
+  algebra:{label:'Algebra',emoji:'⚡',sub:'Solve for x',time:2000,ops:['alg'],zen:false},
+  zen:{label:'Zen',emoji:'🧘',sub:'No timer, no lives',time:0,ops:['+','-','×','÷'],zen:true},
+};
+function qmDailyChallenge(){
+  const dayN=Math.floor(Date.now()/86400000);
+  const defs=[
+    {label:'Answer 20 questions correctly',target:20},
+    {label:'Reach a 10 answer streak',target:10,streak:true},
+    {label:'Answer 30 questions correctly',target:30},
+    {label:'Score 25+ in one run',target:25},
+    {label:'Reach a 12 answer streak',target:12,streak:true},
+  ];
+  return defs[dayN%defs.length];
+}
+function qmDailyDone(){return S('nz_qm_daily_date')===todayKey()&&!!S('nz_qm_daily_done');}
+function qmRank(score){
+  if(score>=40)return{em:'👑',txt:'Math Legend'};
+  if(score>=30)return{em:'⚡',txt:'Lightning Brain'};
+  if(score>=20)return{em:'🧠',txt:'Math Wizard'};
+  if(score>=10)return{em:'💪',txt:'Getting Sharper'};
+  return{em:'🌱',txt:'Keep Practicing'};
+}
+/* Adaptive number scaling based on question index (1-based). */
+function qmScale(qn){
+  if(qn<=10)return{a:9,b:9,big:12};
+  if(qn<=20)return{a:50,b:12,big:60};
+  if(qn<=30)return{a:150,b:15,big:140};
+  return{a:400,b:25,big:300};
+}
 function playMath(body,setScore,end,wrap,startClock){
-  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Jaldi solve karo! Combos se bonus. 5 correct in a row = 💀 Sudden Death!<br>
-  <button style="margin-top:10px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="mathStart">▶ Start</button>
-</div>`);
-  body.appendChild(instrEl);
-  const host=$(`<div style="position:relative;"></div>`);body.appendChild(host);
-  let q=0,score=0,tier=0,combo=0,consecutive=0,wrong2=0,sdMode=false,sdBonus=0,maxTier=0;
-  let barTimer=null;
-  function genWordProblem(){
-    const t=Math.floor(Math.random()*5);
-    if(t===0){const n=(Math.floor(Math.random()*5)+2),m=(Math.floor(Math.random()*8)+3);return{q:`${n} boxes × ${m} items = ? items`,ans:n*m};}
-    if(t===1){const sp=(Math.floor(Math.random()*4)+2)*10,hr=(Math.floor(Math.random()*3)+1);return{q:`${sp}km/h × ${hr}h = ? km`,ans:sp*hr};}
-    if(t===2){const p=(Math.floor(Math.random()*5)+2)*10;return{q:`₹${p}, 10% off. Final = ?`,ans:p-p/10};}
-    if(t===3){const a=(Math.floor(Math.random()*5)+3),b=(Math.floor(Math.random()*5)+3);return{q:`A = B + ${a}. A+B = ${a+2*b}. A = ?`,ans:a+b};}
-    const n=(Math.floor(Math.random()*6)+2),pp=(Math.floor(Math.random()*9)+4);return{q:`${n} students, ${pp} pencils each. Total?`,ans:n*pp};
-  }
-  function genQuestion(){
-    const tc=TIERS[tier];
-    if(tc.ops[0]==='alg'){
-      const a=Math.floor(Math.random()*4)+2,b=Math.floor(Math.random()*10)+1,x=Math.floor(Math.random()*8)+1;
-      return{display:`${a}x + ${b} = ${a*x+b}`,correct:x};
-    } else if(tc.ops[0]==='word'){
-      const wp=genWordProblem();return{display:wp.q,correct:wp.ans,isWord:true};
-    } else if(tc.ops[0]==='÷'){
-      const a=Math.floor(Math.random()*tc.maxB)+2,b=Math.floor(Math.random()*tc.maxA)+1;
-      return{display:`${a*b} ÷ ${a}`,correct:b};
-    } else {
-      const a=Math.floor(Math.random()*tc.maxA)+1,b=Math.floor(Math.random()*tc.maxB)+1;
-      const op=tc.ops[Math.floor(Math.random()*tc.ops.length)];
-      let correct=op==='+'?a+b:op==='-'?a-b:a*b;
-      let display=`${a} ${op} ${b}`;
-      if(tc.brackets&&Math.random()>0.5){
-        const c=Math.floor(Math.random()*6)+2,op2=['+','-'][Math.floor(Math.random()*2)];
-        const inner=op2==='+'?b+c:Math.max(1,b-c);
-        correct=a*inner;display=`${a} × (${b} ${op2} ${c})`;
-      }
-      return{display,correct};
-    }
-  }
-  function endRun(opts){
-    wrap.classList.remove('fire-glow');
-    const total=score+sdBonus;
-    end({...opts,value:total,points:total*3,statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}/20</span></div><div class="row"><span>Max Tier</span><span class="val">${maxTier+1}</span></div><div class="row"><span>SD Bonus</span><span class="val">+${sdBonus}</span></div></div>`});
-  }
-  function next(){
-    if(q>=20){
-      endRun({title:'Math Ninja! 🔢',emoji:'🔢',sub:`Score: ${score}/20${sdBonus?` + ${sdBonus} SD bonus`:''}`});
-      return;
-    }
-    _cti(barTimer);
-    const {display,correct,isWord}=genQuestion();
-    const tc=TIERS[tier];
-    if(tier>maxTier)maxTier=tier;
-    const mult=consecutive>=5?3:consecutive>=3?2:1;
-    const timeMs=tc.timeMs;
-    const range=Math.max(Math.ceil(Math.abs(correct)*0.15),3);
-    const used=new Set([correct]);
-    const distract=[];
-    let tries=0;
-    while(distract.length<3&&tries<80){
-      tries++;
-      const d=correct+Math.floor(Math.random()*range*2+1)-range;
-      if(d>=0&&d!==correct&&!used.has(d)){used.add(d);distract.push(d);}
-    }
-    while(distract.length<3)distract.push(correct+(distract.length+1)*2);
-    const opts=[correct,...distract].sort(()=>Math.random()-.5);
-    host.innerHTML=`
-      <div class="timer-bar"><div class="timer-fill timer-green" id="mBar" style="width:100%"></div></div>
-      <div style="text-align:center;font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;">${tc.label}${sdMode?'  <span style="color:#EF4444;">💀 SUDDEN DEATH</span>':''}${mult>1?`  ${mult===3?'🔥 x3':'⚡ x2'}`:''}  Q${q+1}/20</div>
-      <div style="text-align:center;font-size:${isWord?'14px':'32px'};font-weight:${isWord?'600':'900'};margin:${isWord?'8px':'10px'} 0;line-height:${isWord?'1.4':'1'};min-height:${isWord?'56px':'auto'};">${display}</div>
-      <div class="math-opts">${opts.map(v=>`<button class="math-opt" data-v="${v}">${v}</button>`).join('')}</div>`;
-    let elapsed=0;
-    barTimer=_si(()=>{
-      elapsed+=100;
-      const pct=Math.max(0,100-elapsed/timeMs*100);
-      const bar=wrap.querySelector('#mBar');
-      if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
-      if(elapsed>=timeMs){
-        _cti(barTimer);combo=0;consecutive=0;wrap.classList.remove('fire-glow');
-        host.querySelectorAll('.math-opt').forEach(b=>{if(+b.dataset.v===correct)b.classList.add('correct-ans');b.disabled=true;});
-        host.innerHTML+=`<div style="text-align:center;font-size:12px;color:#EF4444;margin-top:6px;">⏱ ${display} = ${correct}</div>`;
-        if(sdMode){_st(()=>endRun({title:'Sudden Death!',emoji:'💀',sub:`SD Run ended! +${sdBonus} bonus`}),700);return;}
-        wrong2++;if(wrong2>=2){wrong2=0;tier=Math.max(0,tier-1);}
-        _st(()=>{q++;next();},900);
-      }
-    },100);
-    host.querySelectorAll('.math-opt').forEach(btn=>{
-      btn.onclick=()=>{
-        _cti(barTimer);
-        const chosen=+btn.dataset.v;
-        if(chosen===correct){
-          playSound('correct');
-          score+=mult;setScore(score);
-          btn.classList.add('correct-ans');
-          consecutive++;wrong2=0;
-          if(consecutive===3){combo=consecutive;showCombo('COMBO x2');}
-          if(consecutive===5){wrap.classList.add('fire-glow');showCombo('ON FIRE 🔥');}
-          if(consecutive>=5&&!sdMode){sdMode=true;sdBonus+=10;}
-          if(consecutive>=4&&consecutive%4===0)tier=Math.min(7,tier+1);
-        } else {
-          playSound('wrong');
-          btn.classList.add('wrong-ans');
-          host.querySelectorAll('.math-opt').forEach(b=>{if(+b.dataset.v===correct)b.classList.add('correct-ans');});
-          if(sdMode){
-            host.querySelectorAll('.math-opt').forEach(b=>b.disabled=true);
-            host.innerHTML+=`<div style="text-align:center;font-size:13px;color:#EF4444;margin-top:8px;">💀 Sudden Death ended! +${sdBonus} bonus earned</div>`;
-            _st(()=>endRun({title:'Sudden Death!',emoji:'💀',sub:`Score: ${score} + ${sdBonus} SD bonus`}),900);
-            return;
-          }
-          combo=0;consecutive=0;wrong2++;wrap.classList.remove('fire-glow');
-          if(wrong2>=2){wrong2=0;tier=Math.max(0,tier-1);}
-          host.innerHTML+=`<div style="text-align:center;font-size:12px;color:var(--text2);margin-top:6px;">${display} = ${correct} ✓</div>`;
-        }
-        host.querySelectorAll('.math-opt').forEach(b=>b.disabled=true);
-        _st(()=>{q++;next();},600);
-      };
+  let mode='easy';
+  renderStart();
+
+  function renderStart(){
+    body.innerHTML='';
+    const best=S('nz_qm_best_score')||0;
+    const games=S('nz_qm_games')||0;
+    const bestStreak=S('nz_qm_best_streak')||0;
+    const accH=S('nz_qm_accuracy')||[];
+    const avgAcc=accH.length?Math.round(accH.reduce((a,b)=>a+b,0)/accH.length):0;
+    const dc=qmDailyChallenge();
+    const dcDone=qmDailyDone();
+    const screen=$(`<div class="qm-start"></div>`);
+    screen.innerHTML=`
+      <div class="qm-stats">
+        <div class="qm-stat"><div class="v">${best}</div><div class="l">Best Score</div></div>
+        <div class="qm-stat"><div class="v">${games}</div><div class="l">Games</div></div>
+        <div class="qm-stat"><div class="v">${bestStreak}</div><div class="l">Best Streak</div></div>
+        <div class="qm-stat"><div class="v">${avgAcc}%</div><div class="l">Accuracy</div></div>
+      </div>
+      <div class="daily-card ${dcDone?'done':''}" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="dc-ico">${dcDone?'✅':'🎯'}</div>
+          <div style="flex:1;"><div class="dc-name">Daily: ${dc.label}</div><div class="dc-sub">${dcDone?'Completed today!':'Complete for 2x XP'}</div></div>
+          <span class="dc-badge">2x XP</span>
+        </div>
+      </div>
+      <div class="qm-mode-title">Choose a Mode</div>
+      <div class="qm-modes" id="qmModes"></div>
+      <button class="btn-primary" id="qmGo" style="margin-top:18px;">Start ▶</button>
+    `;
+    body.appendChild(screen);
+    const modesEl=screen.querySelector('#qmModes');
+    ['easy','medium','hard','algebra','zen'].forEach(k=>{
+      const m=QM_MODES[k];
+      const card=$(`<button class="qm-mode ${k===mode?'sel':''}" data-m="${k}">
+        <div class="sm-top">${m.emoji} ${m.label}</div>
+        <div class="sm-grid">${m.zen?'No timer':(m.time/1000)+'s / question'}</div>
+        <div class="sm-sub">${m.sub}</div>
+      </button>`);
+      card.onclick=()=>{playSound('tap');mode=k;modesEl.querySelectorAll('.qm-mode').forEach(c=>c.classList.toggle('sel',c.dataset.m===k));};
+      modesEl.appendChild(card);
     });
+    screen.querySelector('#qmGo').onclick=()=>{playSound('tap');startClock&&startClock();startGame();};
   }
-  instrEl.querySelector('#mathStart').onclick=()=>{instrEl.remove();startClock&&startClock();next();};
+
+  function genQuestion(qn){
+    const m=QM_MODES[mode];
+    const sc=qmScale(qn);
+    const rnd=(n)=>Math.floor(Math.random()*n)+1;
+    if(m.ops[0]==='alg'){
+      const a=rnd(qn<=10?5:qn<=20?9:12)+1,x=rnd(qn<=20?9:15),b=rnd(qn<=10?9:20);
+      return{display:`${a}x + ${b} = ${a*x+b},  x = ?`,correct:x};
+    }
+    if(m.ops[0]==='2step'){
+      const a=rnd(Math.min(13,sc.b)),b=rnd(Math.min(13,sc.b)),c=rnd(sc.b);
+      const add=Math.random()>0.5;
+      const correct=add?a*b+c:a*b-c;
+      return{display:`${a} × ${b} ${add?'+':'−'} ${c}`,correct};
+    }
+    const op=m.ops[Math.floor(Math.random()*m.ops.length)];
+    if(op==='÷'){
+      const d=rnd(Math.min(12,sc.b))+1,q2=rnd(Math.min(12,sc.b));
+      return{display:`${d*q2} ÷ ${d}`,correct:q2};
+    }
+    if(op==='×'){
+      const a=rnd(Math.min(sc.big,qn<=10?6:qn<=20?12:20)),b=rnd(Math.min(15,sc.b));
+      return{display:`${a} × ${b}`,correct:a*b};
+    }
+    if(op==='-'){
+      const a=rnd(sc.a)+rnd(sc.a),b=rnd(sc.a);
+      const hi=Math.max(a,b),lo=Math.min(a,b);
+      return{display:`${hi} − ${lo}`,correct:hi-lo};
+    }
+    const a=rnd(sc.a),b=rnd(sc.a);
+    return{display:`${a} + ${b}`,correct:a+b};
+  }
+
+  function startGame(){
+    const m=QM_MODES[mode];
+    const zen=m.zen;
+    const best=S('nz_qm_best_score')||0;
+    let q=0,score=0,lives=zen?Infinity:3,streak=0,bestStreak=0,correctCount=0;
+    let comboMult=1,sdMode=false,sdCount=0,sdSurvived=0,barTimer=null;
+    body.innerHTML='';
+    const host=$(`<div class="qm-play" style="position:relative;"></div>`);
+    body.appendChild(host);
+
+    function heartsHtml(){
+      if(zen)return `<span class="qm-zen-tag">🧘 Zen — practice freely</span>`;
+      return `<div class="wc-hearts">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''} ${(lives===1&&i===0)?'mm-last':''}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>`;
+    }
+
+    function gameOver(){
+      _cti(barTimer);wrap.classList.remove('fire-glow');
+      const accuracy=q?Math.round(correctCount/q*100):0;
+      const prevBest=S('nz_qm_best_score')||0;
+      const newPB=score>prevBest;
+      if(newPB)setS('nz_qm_best_score',score);
+      setS('nz_qm_games',(S('nz_qm_games')||0)+1);
+      if(bestStreak>(S('nz_qm_best_streak')||0))setS('nz_qm_best_streak',bestStreak);
+      const accH=S('nz_qm_accuracy')||[];accH.push(accuracy);while(accH.length>10)accH.shift();setS('nz_qm_accuracy',accH);
+      // Daily challenge
+      const dc=qmDailyChallenge();
+      if(!qmDailyDone()){
+        const pass=dc.streak?bestStreak>=dc.target:(correctCount>=dc.target||score>=dc.target);
+        if(pass){setS('nz_qm_daily_date',todayKey());setS('nz_qm_daily_done',true);setTimeout(()=>toast('🎯 Daily Challenge complete! 2x XP'),700);}
+      }
+      const sdBonus=sdSurvived>=5?40:0;
+      const rank=qmRank(score);
+      setScore(score);
+      end({
+        title:`${rank.em} ${rank.txt}`,emoji:rank.em,
+        sub:`Score ${score}${newPB?' · 🏆 New Best!':''}${sdBonus?' · ⚡ +'+sdBonus+' SD bonus':''}`,
+        value:score,points:Math.max(5,score*3+sdBonus),starThresh:[10,20,35],
+        statsHtml:`<div class="end-stats">
+          <div class="row"><span>Questions Answered</span><span class="val">${q}</span></div>
+          <div class="row"><span>Accuracy</span><span class="val">${accuracy}% (${correctCount}/${q})</span></div>
+          <div class="row"><span>Best Streak</span><span class="val">${bestStreak} 🔥</span></div>
+          <div class="row"><span>Personal Best</span><span class="val">${Math.max(score,prevBest)}${newPB?' 🏆':''}</span></div>
+          <div class="row"><span>XP Earned</span><span class="val">+${Math.max(5,score*3+sdBonus)}</span></div>
+          ${sdBonus?'<div class="row"><span>⚡ Sudden Death Bonus</span><span class="val">+'+sdBonus+'</span></div>':''}
+        </div>${newPB?'<div class="rec">New Personal Best! 🎉</div>':''}`
+      });
+    }
+
+    function loseLife(){
+      if(zen)return;
+      if(sdMode){lives=0;}else{lives--;}
+      haptic([30,50,30]);
+      host.classList.add('shake-anim');_st(()=>host.classList.remove('shake-anim'),450);
+      streak=0;comboMult=1;wrap.classList.remove('fire-glow');
+    }
+
+    function next(){
+      if(!zen&&lives<=0){_st(gameOver,650);return;}
+      _cti(barTimer);
+      q++;
+      const qn=q;
+      const {display,correct}=genQuestion(qn);
+      // distractors
+      const range=Math.max(Math.ceil(Math.abs(correct)*0.2),3);
+      const used=new Set([correct]);const distract=[];let tries=0;
+      while(distract.length<3&&tries<100){tries++;const d=correct+Math.floor(Math.random()*range*2+1)-range;if(d!==correct&&!used.has(d)){used.add(d);distract.push(d);}}
+      while(distract.length<3)distract.push(correct+(distract.length+1)*2);
+      const opts=[correct,...distract].sort(()=>Math.random()-.5);
+      const timeMs=m.time;
+      const comboLabel=comboMult===3?'🔥 x3':comboMult===2?'⚡ x2':'';
+      host.innerHTML=`
+        ${zen?'':'<div class="timer-bar"><div class="timer-fill timer-green" id="mBar" style="width:100%"></div></div>'}
+        ${heartsHtml()}
+        <div class="qm-info">
+          <span>Q: ${q}</span>
+          <span>Best: ${Math.max(best,score)}</span>
+          ${sdMode?'<span class="qm-sd">💀 SUDDEN DEATH</span>':comboLabel?`<span class="qm-combo">${comboLabel}</span>`:`<span>🔥 ${streak}</span>`}
+        </div>
+        <div class="qm-question">${display}</div>
+        <div class="math-opts">${opts.map(v=>`<button class="math-opt" data-v="${v}">${v}</button>`).join('')}</div>`;
+      if(!zen&&timeMs){
+        let elapsed=0;
+        barTimer=_si(()=>{
+          elapsed+=100;
+          const pct=Math.max(0,100-elapsed/timeMs*100);
+          const bar=wrap.querySelector('#mBar');
+          if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
+          if(elapsed>=timeMs){_cti(barTimer);resolve(null,correct,opts);}
+        },100);
+      }
+      host.querySelectorAll('.math-opt').forEach(btn=>{
+        btn.onclick=()=>{_cti(barTimer);resolve(+btn.dataset.v,correct,opts,btn);};
+      });
+    }
+
+    function resolve(chosen,correct,opts,btn){
+      host.querySelectorAll('.math-opt').forEach(b=>b.disabled=true);
+      const right=chosen===correct;
+      if(right){
+        playSound('correct');haptic(10);
+        if(btn)btn.classList.add('correct-ans');
+        correctCount++;streak++;if(streak>bestStreak)bestStreak=streak;
+        const pts=comboMult;
+        score+=pts;setScore(score);
+        // combo tiers
+        if(streak===3){comboMult=2;showCombo('COMBO x2');}
+        if(streak===5){comboMult=3;wrap.classList.add('fire-glow');showCombo('ON FIRE 🔥');}
+        // sudden death unlock
+        if(streak===10&&!sdMode){sdMode=true;sdCount=0;toast('⚡ SUDDEN DEATH! One mistake = game over!');}
+        if(sdMode){sdCount++;sdSurvived=sdCount;if(sdCount>=5){sdMode=false;sdCount=0;toast('✅ Survived Sudden Death! Back to normal');}}
+        _st(next,zen?320:480);
+      } else {
+        playSound('wrong');
+        if(btn)btn.classList.add('wrong-ans');
+        host.querySelectorAll('.math-opt').forEach(b=>{if(+b.dataset.v===correct)b.classList.add('correct-ans');});
+        loseLife();
+        if(!zen&&lives<=0){_st(gameOver,800);return;}
+        _st(next,zen?500:800);
+      }
+    }
+
+    next();
+  }
 }
 
 /* ===================== STROOP X ===================== */
@@ -2161,6 +2268,7 @@ const SOUNDS=[
   {name:'Forest',emoji:'🌲',desc:'Wind + birdsong'},
   {name:'White Noise',emoji:'💨',desc:'Breathing rhythm'},
   {name:'Deep Focus',emoji:'🎯',desc:'40Hz binaural beats'},
+  {name:'432 Hz',emoji:'🎵',desc:'Natural healing tone'},
 ];
 let relaxAudio={ctx:null,master:null,nodes:[],timers:[],playing:-1,targetVol:0.7,paused:false};
 
@@ -2364,6 +2472,39 @@ function buildRelaxSound(idx,ac,master){
     const nf=ac.createBiquadFilter();nf.type='lowpass';nf.frequency.value=2800;
     const nsg=ac.createGain();nsg.gain.value=0.1;
     ns.connect(nf);nf.connect(nsg);nsg.connect(master);ns.start();addN(ns);
+  }else if(idx===5){
+    // 432Hz Healing: primary tone + harmonic + sub + shimmer + soft pink noise, all under a breathing master LFO
+    // 1. Primary 432Hz sine, gain 0.15, with slow vibrato (LFO 0.3Hz, depth ±2Hz)
+    const o1=ac.createOscillator();const g1=ac.createGain();
+    o1.type='sine';o1.frequency.value=432;g1.gain.value=0.15;
+    o1.connect(g1);g1.connect(master);o1.start();addN(o1);
+    const vib=ac.createOscillator();const vibG=ac.createGain();
+    vib.type='sine';vib.frequency.value=0.3;vibG.gain.value=2;
+    vib.connect(vibG);vibG.connect(o1.frequency);vib.start();addN(vib);addN(vibG);
+    // 2. Harmonic layer 864Hz, gain 0.06
+    const o2=ac.createOscillator();const g2=ac.createGain();
+    o2.type='sine';o2.frequency.value=864;g2.gain.value=0.06;
+    o2.connect(g2);g2.connect(master);o2.start();addN(o2);
+    // 3. Sub harmonic 216Hz, gain 0.08
+    const o3=ac.createOscillator();const g3=ac.createGain();
+    o3.type='sine';o3.frequency.value=216;g3.gain.value=0.08;
+    o3.connect(g3);g3.connect(master);o3.start();addN(o3);
+    // 4. Gentle shimmer 648Hz (3/2 harmonic), gain 0.04, own slow LFO 0.2Hz
+    const o4=ac.createOscillator();const g4=ac.createGain();
+    o4.type='sine';o4.frequency.value=648;g4.gain.value=0.04;
+    o4.connect(g4);g4.connect(master);o4.start();addN(o4);
+    const shim=ac.createOscillator();const shimG=ac.createGain();
+    shim.type='sine';shim.frequency.value=0.2;shimG.gain.value=0.025;
+    shim.connect(shimG);shimG.connect(g4.gain);shim.start();addN(shim);addN(shimG);
+    // 5. Soft pink noise underlayer, gain 0.03, lowpass 300Hz
+    const ns=ac.createBufferSource();ns.buffer=makeNoiseBuffer(ac,'pink');ns.loop=true;
+    const nf=ac.createBiquadFilter();nf.type='lowpass';nf.frequency.value=300;
+    const nsg=ac.createGain();nsg.gain.value=0.03;
+    ns.connect(nf);nf.connect(nsg);nsg.connect(master);ns.start();addN(ns);
+    // 6. Master breathing LFO: 0.04Hz, oscillates master gain between 0.7 and 1.0
+    const breath=ac.createOscillator();const breathG=ac.createGain();
+    breath.type='sine';breath.frequency.value=0.04;breathG.gain.value=0.15;
+    breath.connect(breathG);breathG.connect(master.gain);breath.start();addN(breath);addN(breathG);
   }
 }
 function renderRelax(){
@@ -2609,303 +2750,522 @@ function showOnboarding(){
   steps[0]();
 }
 
-/* ===================== REACTION LAB ===================== */
+/* ===================== REACTION LAB (endless survival) ===================== */
+const RL_MODES={
+  classic:{label:'Classic',emoji:'⚡',sub:'Tap circle fast',zen:false},
+  gonogo:{label:'Go / No-Go',emoji:'🚦',sub:'Red tap · Blue don\'t',zen:false},
+  target:{label:'Target',emoji:'🎯',sub:'Tap the larger one',zen:false},
+  zen:{label:'Zen',emoji:'🧘',sub:'No lives, practice',zen:true},
+};
+function rlReactPoints(rt){
+  if(rt<200)return{pts:5,em:'⚡',txt:'LIGHTNING!'};
+  if(rt<300)return{pts:4,em:'🔥',txt:'FAST'};
+  if(rt<450)return{pts:3,em:'👍',txt:'GOOD'};
+  if(rt<600)return{pts:2,em:'😐',txt:'OK'};
+  return{pts:1,em:'🐌',txt:'SLOW'};
+}
+function rlRank(avg){
+  if(avg<200)return{em:'👑',txt:'Superhuman'};
+  if(avg<250)return{em:'🔥',txt:'Elite Reflexes'};
+  if(avg<350)return{em:'⚡',txt:'Sharp Reflexes'};
+  if(avg<500)return{em:'👍',txt:'Decent Reflexes'};
+  return{em:'🐌',txt:'Keep Training'};
+}
+function rlDailyChallenge(){
+  const dayN=Math.floor(Date.now()/86400000);
+  const defs=[
+    {label:'Average reaction under 300ms',type:'avg',target:300},
+    {label:'Reach Round 15',type:'round',target:15},
+    {label:'Land a tap under 200ms',type:'fastest',target:200},
+    {label:'Average reaction under 350ms',type:'avg',target:350},
+    {label:'Reach Round 20',type:'round',target:20},
+  ];
+  return defs[dayN%defs.length];
+}
+function rlDailyDone(){return S('nz_rl_daily_date')===todayKey()&&!!S('nz_rl_daily_done');}
+const RL_DISAPPEAR=1000; // circle disappears after 1s if not tapped
 function playReactionLab(body,setScore,end,wrap,startClock){
-  const instrEl=$(`<div class="instr">Tap the circle the moment it appears!<br>
-    <span style="font-size:11px;color:var(--text2);">Rd 5+: 🔴=tap &nbsp;🔵=don't tap &nbsp;|&nbsp; Rd 8+: tap BIGGER circle</span><br>
-    <button style="margin-top:12px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="rlStart">▶ Start</button>
-  </div>`);
-  body.appendChild(instrEl);
-  const arena=$(`<div id="rlArena" style="position:relative;width:100%;height:220px;background:var(--card);border-radius:16px;overflow:hidden;display:none;margin-top:8px;box-shadow:var(--shadow);"></div>`);
-  body.appendChild(arena);
-  const infoBar=$(`<div id="rlInfo" style="text-align:center;font-size:12px;color:var(--text2);margin-top:6px;min-height:18px;"></div>`);
-  body.appendChild(infoBar);
-  const times=[];
-  let round=0,score=0,delayT=null,holdT=null,busy=false,gameActive=true;
+  let mode='classic';
+  renderStart();
 
-  instrEl.querySelector('#rlStart').onclick=()=>{
-    instrEl.style.display='none';arena.style.display='block';
-    startClock&&startClock();doRound();
-  };
-
-  function showFb(msg,color){
-    const old=arena.querySelector('.rl-fb');if(old)old.remove();
-    const el=$(`<div class="rl-fb" style="position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:13px;font-weight:700;color:${color};pointer-events:none;">${msg}</div>`);
-    arena.appendChild(el);
-  }
-
-  function advance(t,msg,color,pts){
-    if(!gameActive)return;
-    clearTimeout(holdT);busy=true;
-    times.push(t);
-    if(pts>0){score+=pts;setScore(score);}
-    showFb(msg,color);
-    round++;setTimeout(()=>{busy=false;doRound();},900);
-  }
-
-  function doRound(){
-    if(round>=10){showChart();return;}
-    const rnd=round;
-    const isNoGo=rnd>=4&&rnd<7;
-    const isBig=rnd>=7;
-    const info=body.querySelector('#rlInfo');
-    if(info)info.textContent=`Round ${rnd+1}/10${isNoGo?' · 🔴=tap  🔵=skip':''}${isBig?' · Tap BIGGER circle':''}`;
-    arena.innerHTML='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:14px;letter-spacing:.15em;">+ + +</div>';
-    const delay=1000+Math.random()*2500;
-    delayT=setTimeout(()=>{
-      if(!gameActive||round!==rnd)return;
-      arena.innerHTML='';
-      const aw=arena.clientWidth||300,ah=arena.clientHeight||220;
-      if(isBig){
-        let s1=30+Math.floor(Math.random()*22);
-        let s2=s1;while(Math.abs(s2-s1)<18)s2=30+Math.floor(Math.random()*22);
-        const bigS=Math.max(s1,s2),smallS=Math.min(s1,s2);
-        const sides=[{size:bigS,correct:true},{size:smallS,correct:false}];
-        if(Math.random()>0.5)sides.reverse();
-        const ts=Date.now();
-        sides.forEach((c,i)=>{
-          const hw=aw/2-c.size-6,hh=ah-c.size-10;
-          const x=(i===0?4:Math.floor(aw/2)+4)+Math.floor(Math.random()*Math.max(1,hw));
-          const y=10+Math.floor(Math.random()*Math.max(1,hh));
-          const col=['#7C3AED','#4F8EF7'][i];
-          const el=$(`<div style="position:absolute;left:${x}px;top:${y}px;width:${c.size}px;height:${c.size}px;border-radius:50%;background:${col};cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.22);transition:transform .08s;"></div>`);
-          el.onclick=()=>{
-            if(busy)return;
-            arena.querySelectorAll('div').forEach(d=>{d.style.pointerEvents='none';});
-            const rt=Date.now()-ts;
-            if(c.correct){
-              const pts=rt<200?5:rt<350?3:rt<500?2:1;
-              advance(rt,`+${pts} pts · ${rt}ms ✓`,'#22C55E',pts);
-            } else {
-              advance(rt,'Wrong circle! 0 pts','#EF4444',0);
-            }
-          };
-          arena.appendChild(el);
-        });
-        holdT=setTimeout(()=>{if(!busy)advance(2000,'Too slow! ⏱','#EF4444',0);},2000);
-      } else {
-        const goChance=isNoGo?0.62:1;
-        const isGo=Math.random()<goChance;
-        const col=isGo?'#EF4444':'#3B82F6';
-        const size=50;
-        const maxX=Math.max(0,aw-size-10),maxY=Math.max(0,ah-size-10);
-        const x=10+Math.floor(Math.random()*maxX);
-        const y=10+Math.floor(Math.random()*maxY);
-        const el=$(`<div style="position:absolute;left:${x}px;top:${y}px;width:${size}px;height:${size}px;border-radius:50%;background:${col};cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.22);transition:transform .08s;"></div>`);
-        const ts=Date.now();
-        arena.appendChild(el);
-        if(!isGo){
-          el.onclick=()=>{if(busy)return;advance(-1,"Don't tap blue! ❌",'#EF4444',0);};
-          holdT=setTimeout(()=>{if(!busy)advance(0,'+3 · Correctly ignored ✓','#22C55E',3);},1500);
-        } else {
-          el.onclick=()=>{
-            if(busy)return;
-            const rt=Date.now()-ts;
-            const pts=rt<200?5:rt<350?3:rt<500?2:1;
-            el.style.transform='scale(0.75)';
-            advance(rt,`+${pts} pts · ${rt}ms`,'#22C55E',pts);
-          };
-          holdT=setTimeout(()=>{if(!busy)advance(2000,'Too slow! ⏱','#EF4444',0);},1800);
-        }
-      }
-    },delay);
-  }
-
-  function showChart(){
-    const validTimes=times.filter(t=>t>0&&t<1999);
-    const avg=validTimes.length?Math.round(validTimes.reduce((a,b)=>a+b,0)/validTimes.length):999;
-    const ach=S('nz_achievements')||[];
-    if(avg<250&&!ach.includes('Lightning')){ach.push('Lightning');setS('nz_achievements',ach);playSound('achievement');}
-    if(score>=40&&!ach.includes('Robot')){ach.push('Robot');setS('nz_achievements',ach);playSound('achievement');}
-    const n=10,cw=24,gap=3,ph=64,pw=n*(cw+gap)+gap*2;
-    const maxMs=Math.max(...validTimes,300);
-    const bars=times.map((t,i)=>{
-      const x=gap+i*(cw+gap);
-      let bh,fc,lbl;
-      if(t===0){bh=10;fc='#22C55E';lbl='✓';}
-      else if(t<0){bh=10;fc='#EF4444';lbl='✗';}
-      else if(t>=1999){bh=ph;fc='#EF4444';lbl='⏱';}
-      else{bh=Math.max(8,Math.round(t/maxMs*ph));fc=t<200?'#7C3AED':t<350?'#34D399':t<500?'#FBBF24':'#F97316';lbl=t+'ms';}
-      return`<rect x="${x}" y="${ph-bh}" width="${cw}" height="${bh}" rx="3" fill="${fc}"/>
-<text x="${x+cw/2}" y="${ph+11}" text-anchor="middle" fill="var(--text2)" font-size="7">${lbl}</text>`;
-    }).join('');
-    const chartSvg=`<svg width="${pw}" height="${ph+14}" viewBox="0 0 ${pw} ${ph+14}" style="display:block;margin:0 auto;overflow:visible;">${bars}</svg>`;
-    end({
-      title:'Reaction Lab ⚡',emoji:'⚡',
-      sub:`Avg: ${avg}ms · Score: ${score}${avg<250?' · ⚡ Lightning':''}${score>=40?' · 🤖 Robot':''}`,
-      value:score,points:score*4,starThresh:[14,26,38],
-      statsHtml:`<div class="end-stats">
-        <div class="row"><span>Score</span><span class="val">${score} pts</span></div>
-        <div class="row"><span>Avg Reaction</span><span class="val">${avg}ms</span></div>
-        <div class="row"><span>Best Single</span><span class="val">${validTimes.length?Math.min(...validTimes)+'ms':'—'}</span></div>
-        ${avg<250?'<div class="row"><span>🏆 Achievement</span><span class="val">⚡ Lightning</span></div>':''}
-        ${score>=40?'<div class="row"><span>🏆 Achievement</span><span class="val">🤖 Robot</span></div>':''}
+  function renderStart(){
+    body.innerHTML='';
+    const bestRound=S('nz_rl_best_round')||0;
+    const avgTime=S('nz_rl_avg_time')||0;
+    const games=S('nz_rl_games')||0;
+    const dc=rlDailyChallenge();
+    const dcDone=rlDailyDone();
+    const screen=$(`<div class="rl-start"></div>`);
+    screen.innerHTML=`
+      <div class="rl-stats">
+        <div class="rl-stat"><div class="v">${bestRound}</div><div class="l">Best Round</div></div>
+        <div class="rl-stat"><div class="v">${avgTime?avgTime+'ms':'—'}</div><div class="l">Avg Reaction</div></div>
+        <div class="rl-stat"><div class="v">${games}</div><div class="l">Games</div></div>
       </div>
-      <div style="margin-top:14px;">
-        <div style="font-size:11px;color:var(--text2);text-align:center;margin-bottom:6px;">Reaction times — 10 rounds</div>
-        ${chartSvg}
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px;font-size:10px;">
-          <span style="color:#7C3AED;">■ &lt;200ms</span>
-          <span style="color:#34D399;">■ &lt;350ms</span>
-          <span style="color:#FBBF24;">■ &lt;500ms</span>
-          <span style="color:#F97316;">■ 500ms+</span>
-          <span style="color:#22C55E;">■ ✓ skipped</span>
+      <div class="daily-card ${dcDone?'done':''}" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="dc-ico">${dcDone?'✅':'🎯'}</div>
+          <div style="flex:1;"><div class="dc-name">Daily: ${dc.label}</div><div class="dc-sub">${dcDone?'Completed today!':'Complete for 2x XP'}</div></div>
+          <span class="dc-badge">2x XP</span>
         </div>
-      </div>`
+      </div>
+      <div class="rl-mode-title">Choose a Mode</div>
+      <div class="rl-modes" id="rlModes"></div>
+      <button class="btn-primary" id="rlGo" style="margin-top:18px;">Start ▶</button>
+    `;
+    body.appendChild(screen);
+    const modesEl=screen.querySelector('#rlModes');
+    ['classic','gonogo','target','zen'].forEach(k=>{
+      const m=RL_MODES[k];
+      const card=$(`<button class="rl-mode ${k===mode?'sel':''}" data-m="${k}">
+        <div class="sm-top">${m.emoji} ${m.label}</div>
+        <div class="sm-sub">${m.sub}</div>
+      </button>`);
+      card.onclick=()=>{playSound('tap');mode=k;modesEl.querySelectorAll('.rl-mode').forEach(c=>c.classList.toggle('sel',c.dataset.m===k));};
+      modesEl.appendChild(card);
     });
+    screen.querySelector('#rlGo').onclick=()=>{playSound('tap');startClock&&startClock();startGame();};
   }
-  wrap.addEventListener('remove_game',()=>{
-    gameActive=false;
-    clearTimeout(delayT);
-    clearTimeout(holdT);
-    busy=true;
-  });
+
+  function startGame(){
+    const m=RL_MODES[mode];
+    const zen=m.zen;
+    body.innerHTML='';
+    const stage=$(`<div class="rl-play"></div>`);
+    stage.innerHTML=`
+      <div id="rlHud" class="rl-hud"></div>
+      <div id="rlArena" class="rl-arena"></div>
+      <div id="rlInfo" class="rl-info-line"></div>`;
+    body.appendChild(stage);
+    const arena=stage.querySelector('#rlArena');
+    const hud=stage.querySelector('#rlHud');
+    const info=stage.querySelector('#rlInfo');
+    const times=[];
+    let round=0,score=0,lives=zen?Infinity:3,fastest=null,delayT=null,holdT=null,busy=false,active=true;
+
+    function heartsHtml(){
+      if(zen)return `<span class="qm-zen-tag">🧘 Zen — no lives</span>`;
+      return `<div class="wc-hearts">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''} ${(lives===1&&i===0)?'mm-last':''}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>`;
+    }
+    function drawHud(){
+      hud.innerHTML=`${heartsHtml()}
+        <div class="rl-roundrow"><span>Round <strong>${round+1}</strong></span><span>Score <strong>${score}</strong></span></div>`;
+    }
+    function showFb(msg,color){
+      const old=arena.querySelector('.rl-fb');if(old)old.remove();
+      const el=$(`<div class="rl-fb" style="color:${color};">${msg}</div>`);
+      arena.appendChild(el);
+    }
+
+    function roundType(rn){
+      if(mode==='gonogo')return 'gonogo';
+      if(mode==='target')return 'target';
+      if(mode==='zen')return rn<10?'single':rn<20?'gonogo':rn<30?'target':'odd';
+      if(rn<10)return 'single';
+      if(rn<20)return 'gonogo';
+      if(rn<30)return 'target';
+      return 'odd';
+    }
+
+    function loseLife(){
+      if(zen)return false;
+      lives--;
+      haptic([30,50,30]);
+      arena.classList.add('shake-anim');_st(()=>arena.classList.remove('shake-anim'),450);
+      return lives<=0;
+    }
+
+    function advance(t,msg,color,pts,dead){
+      if(!active)return;
+      clearTimeout(holdT);clearTimeout(delayT);busy=true;
+      if(t>0&&t<RL_DISAPPEAR){times.push(t);if(fastest===null||t<fastest)fastest=t;}
+      if(pts>0){score+=pts;setScore(score);}
+      showFb(msg,color);
+      if(dead){_st(gameOver,950);return;}
+      round++;
+      _st(()=>{busy=false;doRound();},850);
+    }
+
+    function doRound(){
+      if(!active)return;
+      drawHud();
+      const rn=round;
+      const type=roundType(rn);
+      info.textContent=`Round ${rn+1} · ${type==='single'?'Tap the circle!':type==='gonogo'?'🔴 tap · 🔵 don\'t tap':type==='target'?'Tap the LARGER circle':'Tap the ODD-colored circle'}`;
+      arena.innerHTML='<div class="rl-ready">+ + +</div>';
+      const delay=rn<10?(800+Math.random()*1700):(500+Math.random()*1000);
+      delayT=_st(()=>{
+        if(!active||round!==rn)return;
+        arena.innerHTML='';
+        const aw=arena.clientWidth||300,ah=arena.clientHeight||220;
+        const ts=Date.now();
+        const place=(size)=>{
+          const x=8+Math.floor(Math.random()*Math.max(1,aw-size-16));
+          const y=8+Math.floor(Math.random()*Math.max(1,ah-size-16));
+          return{x,y};
+        };
+        const circle=(size,color,onTap)=>{
+          const {x,y}=place(size);
+          const el=$(`<div class="rl-circle" style="left:${x}px;top:${y}px;width:${size}px;height:${size}px;background:${color};"></div>`);
+          el.onclick=()=>{if(busy)return;haptic(10);onTap(el);};
+          arena.appendChild(el);
+          return el;
+        };
+        const lockAll=()=>arena.querySelectorAll('.rl-circle').forEach(d=>d.style.pointerEvents='none');
+        const onCorrectTap=()=>{
+          const rt=Date.now()-ts;const r=rlReactPoints(rt);
+          lockAll();advance(rt,`${r.em} ${r.txt} +${r.pts} · ${rt}ms`,'#22C55E',r.pts,false);
+        };
+        const onMiss=()=>{const dead=loseLife();advance(0,zen?'⏱ Missed':'⏱ Too slow! -1 life','#EF4444',0,dead);};
+        const onWrongTap=(msg)=>{lockAll();const dead=loseLife();advance(0,zen?msg:msg+' -1 life','#EF4444',0,dead);};
+
+        if(type==='single'){
+          const col=['#7C3AED','#4F8EF7','#34D399','#F472B6','#F97316'][Math.floor(Math.random()*5)];
+          circle(54,col,()=>{onCorrectTap();});
+          holdT=_st(onMiss,RL_DISAPPEAR);
+        } else if(type==='gonogo'){
+          const isGo=Math.random()<0.6;
+          const col=isGo?'#EF4444':'#3B82F6';
+          circle(54,col,()=>{
+            if(isGo){onCorrectTap();}
+            else{onWrongTap('❌ Tapped blue!');}
+          });
+          if(isGo)holdT=_st(onMiss,RL_DISAPPEAR);
+          else holdT=_st(()=>{lockAll();advance(0,'👍 +3 · Correctly ignored','#22C55E',3,false);},RL_DISAPPEAR);
+        } else if(type==='target'){
+          let big=46+Math.floor(Math.random()*22);
+          let small=big-(18+Math.floor(Math.random()*12));
+          const arr=[{size:big,correct:true},{size:small,correct:false}].sort(()=>Math.random()-.5);
+          arr.forEach((c,i)=>{
+            const col=['#7C3AED','#4F8EF7'][i];
+            circle(c.size,col,()=>{c.correct?onCorrectTap():onWrongTap('❌ Smaller circle!');});
+          });
+          holdT=_st(onMiss,RL_DISAPPEAR);
+        } else {
+          const base=['#7C3AED','#4F8EF7','#34D399','#F97316'][Math.floor(Math.random()*4)];
+          let odd=base;while(odd===base)odd=['#7C3AED','#4F8EF7','#34D399','#F97316','#F472B6'][Math.floor(Math.random()*5)];
+          const oddIdx=Math.floor(Math.random()*3);
+          for(let i=0;i<3;i++){
+            const col=i===oddIdx?odd:base;
+            circle(48,col,()=>{i===oddIdx?onCorrectTap():onWrongTap('❌ Wrong color!');});
+          }
+          holdT=_st(onMiss,RL_DISAPPEAR);
+        }
+      },delay);
+    }
+
+    function gameOver(){
+      active=false;clearTimeout(delayT);clearTimeout(holdT);
+      const valid=times.filter(t=>t>0&&t<RL_DISAPPEAR);
+      const avg=valid.length?Math.round(valid.reduce((a,b)=>a+b,0)/valid.length):0;
+      const finalRound=round;
+      const prevBestRound=S('nz_rl_best_round')||0;
+      const newPB=finalRound>prevBestRound;
+      if(newPB)setS('nz_rl_best_round',finalRound);
+      setS('nz_rl_games',(S('nz_rl_games')||0)+1);
+      if(avg>0)setS('nz_rl_avg_time',avg);
+      const prevFast=S('nz_rl_fastest')||0;
+      if(fastest!==null&&(prevFast===0||fastest<prevFast))setS('nz_rl_fastest',fastest);
+      const dc=rlDailyChallenge();
+      if(!rlDailyDone()){
+        let pass=false;
+        if(dc.type==='avg')pass=avg>0&&avg<=dc.target;
+        else if(dc.type==='round')pass=finalRound>=dc.target;
+        else if(dc.type==='fastest')pass=fastest!==null&&fastest<=dc.target;
+        if(pass){setS('nz_rl_daily_date',todayKey());setS('nz_rl_daily_done',true);setTimeout(()=>toast('🎯 Daily Challenge complete! 2x XP'),700);}
+      }
+      const last=times.slice(-10);
+      const n=10,cw=24,gap=4,ph=64,pw=n*(cw+gap)+gap;
+      const maxMs=Math.max(...last,300);
+      const bars=last.map((t,i)=>{
+        const x=gap+i*(cw+gap);
+        const bh=Math.max(8,Math.round(t/maxMs*ph));
+        const fc=t<200?'#7C3AED':t<300?'#34D399':t<450?'#FBBF24':t<600?'#F59E0B':'#F97316';
+        return`<rect x="${x}" y="${ph-bh}" width="${cw}" height="${bh}" rx="3" fill="${fc}"/><text x="${x+cw/2}" y="${ph+11}" text-anchor="middle" fill="var(--text2)" font-size="7">${t}</text>`;
+      }).join('');
+      const chartSvg=last.length?`<svg width="${pw}" height="${ph+14}" viewBox="0 0 ${pw} ${ph+14}" style="display:block;margin:0 auto;overflow:visible;">${bars}</svg>`:'<div style="font-size:11px;color:var(--text2);">No timed taps yet</div>';
+      const rank=rlRank(avg||999);
+      const xp=Math.max(5,finalRound*6+score);
+      setScore(score);
+      if(newPB)confetti(50);
+      end({
+        title:`${rank.em} ${rank.txt}`,emoji:rank.em,
+        sub:`Round ${finalRound} · ${avg?avg+'ms avg':'—'}${newPB?' · 🏆 New Best!':''}`,
+        value:finalRound,points:xp,starThresh:[10,20,30],
+        statsHtml:`<div class="end-stats">
+          <div class="row"><span>Best Round</span><span class="val">${Math.max(finalRound,prevBestRound)}${newPB?' 🏆':''}</span></div>
+          <div class="row"><span>Avg Reaction Time</span><span class="val">${avg?avg+'ms':'—'}</span></div>
+          <div class="row"><span>Fastest Tap</span><span class="val">${fastest!==null?fastest+'ms':'—'}</span></div>
+          <div class="row"><span>XP Earned</span><span class="val">+${xp}</span></div>
+        </div>
+        <div style="margin-top:14px;">
+          <div style="font-size:11px;color:var(--text2);text-align:center;margin-bottom:6px;">Last ${last.length} reaction times</div>
+          ${chartSvg}
+          <div style="text-align:center;font-size:12px;font-weight:700;color:var(--primary);margin-top:6px;">Average: ${avg?avg+'ms':'—'}</div>
+        </div>${newPB?'<div class="rec">New Personal Best! 🎉</div>':''}`
+      });
+    }
+
+    wrap.addEventListener('remove_game',()=>{active=false;clearTimeout(delayT);clearTimeout(holdT);busy=true;});
+    doRound();
+  }
 }
 
-/* ===================== SPATIAL SPIN ===================== */
+/* ===================== SPATIAL SPIN (endless survival) ===================== */
+const SS_SHAPES={
+  L:[[0,0],[1,0],[2,0],[2,1]],
+  J:[[0,1],[1,1],[2,1],[2,0]],
+  T:[[0,0],[0,1],[0,2],[1,1]],
+  Z:[[0,0],[0,1],[1,1],[1,2]],
+  S:[[0,1],[0,2],[1,0],[1,1]],
+  Plus:[[0,1],[1,0],[1,1],[1,2],[2,1]],
+  Cross:[[0,0],[0,2],[1,1],[2,0],[2,2]],
+  Hook:[[0,0],[1,0],[2,0],[2,1],[2,2],[0,1]],
+  Chair:[[0,0],[1,0],[2,0],[2,1],[1,1],[0,2],[1,2]],
+};
+const SS_MODES={
+  easy:{label:'Easy',emoji:'🟢',sub:'Simple L-shapes',time:10000,zen:false,pool:['L','J']},
+  medium:{label:'Medium',emoji:'🟡',sub:'T and Z shapes',time:8000,zen:false,pool:['T','Z','S']},
+  hard:{label:'Hard',emoji:'🔴',sub:'Plus / cross shapes',time:6000,zen:false,pool:['Plus','Cross']},
+  speed:{label:'Speed',emoji:'🔄',sub:'All shapes, fast',time:4000,zen:false,pool:null},
+  zen:{label:'Zen',emoji:'🧘',sub:'No timer',time:0,zen:true,pool:null},
+};
+function ssRank(round){
+  if(round>=21)return{em:'👑',txt:'Spatial Master'};
+  if(round>=16)return{em:'⚡',txt:'Rotation Expert'};
+  if(round>=11)return{em:'🧠',txt:'Spatial Thinker'};
+  if(round>=6)return{em:'💪',txt:'Getting Oriented'};
+  return{em:'🌱',txt:'Spatial Beginner'};
+}
+function ssDailyChallenge(){
+  const dayN=Math.floor(Date.now()/86400000);
+  const defs=[
+    {label:'Get 10 correct rotations',target:10},
+    {label:'Reach Round 15',target:15},
+    {label:'Get 8 correct rotations',target:8},
+    {label:'Reach Round 20',target:20},
+    {label:'Get 12 correct rotations',target:12},
+  ];
+  return defs[dayN%defs.length];
+}
+function ssDailyDone(){return S('nz_ss_daily_date')===todayKey()&&!!S('nz_ss_daily_done');}
 function playSpatialSpin(body,setScore,end,wrap,startClock){
-  const SHAPES={
-    L:[[0,0],[1,0],[2,0],[2,1]],
-    T:[[0,0],[0,1],[0,2],[1,1]],
-    J:[[0,1],[1,1],[2,1],[2,0]],
-  };
+  let mode='easy';
+  function norm(cells){
+    const minR=Math.min(...cells.map(([r])=>r));
+    const minC=Math.min(...cells.map(([,c])=>c));
+    return cells.map(([r,c])=>[r-minR,c-minC]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  }
   function rotateCW(cells){
     const maxR=Math.max(...cells.map(([r])=>r));
-    const rotated=cells.map(([r,c])=>[c,maxR-r]);
-    const minR=Math.min(...rotated.map(([r])=>r));
-    const minC=Math.min(...rotated.map(([,c])=>c));
-    return rotated.map(([r,c])=>[r-minR,c-minC]);
+    return norm(cells.map(([r,c])=>[c,maxR-r]));
   }
-  function getRots(cells){
-    const rots=[cells];
+  function mirror(cells){
+    const maxC=Math.max(...cells.map(([,c])=>c));
+    return norm(cells.map(([r,c])=>[r,maxC-c]));
+  }
+  function key(cells){return norm(cells).map(p=>p.join('_')).join('|');}
+  function allRots(cells){
+    const rots=[norm(cells)];
     for(let i=0;i<3;i++)rots.push(rotateCW(rots[rots.length-1]));
     return rots;
   }
   function drawShapeSvg(cells,cs,color){
-    const maxR=Math.max(...cells.map(([r])=>r));
-    const maxC=Math.max(...cells.map(([,c])=>c));
+    const nc=norm(cells);
+    const maxR=Math.max(...nc.map(([r])=>r));
+    const maxC=Math.max(...nc.map(([,c])=>c));
     const p=2,w=(maxC+1)*cs+p*2,h=(maxR+1)*cs+p*2;
-    const rects=cells.map(([r,c])=>`<rect x="${c*cs+p}" y="${r*cs+p}" width="${cs-2}" height="${cs-2}" rx="3" fill="${color}"/>`).join('');
-    return{svg:`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${rects}</svg>`,w,h};
+    const rects=nc.map(([r,c])=>`<rect x="${c*cs+p}" y="${r*cs+p}" width="${cs-2}" height="${cs-2}" rx="3" fill="${color}"/>`).join('');
+    return`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${rects}</svg>`;
   }
-  const ROT_LABELS=['90° CW','180°','270° CW'];
-  const SHAPE_SEQ=['L','L','L','T','T','T','J','J','J','L','T','J'];
-  const questions=SHAPE_SEQ.map((type,i)=>({
-    type,dispRot:Math.floor(Math.random()*4),rotAmt:(i%3)+1,hint:i<2
-  }));
-  let qi=0,score=0,barT=null;
-  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Mental rotation challenge!<br>
-    <span style="font-size:11px;color:var(--text2);">Pick the correct rotation from 4 options. 8 seconds each.</span><br>
-    <button style="margin-top:10px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="ssStart">▶ Start</button>
-  </div>`);
-  body.appendChild(instrEl);
-  const host=$(`<div></div>`);body.appendChild(host);
+  function shapeForRound(rn){
+    const m=SS_MODES[mode];
+    if(m.pool)return m.pool[Math.floor(Math.random()*m.pool.length)];
+    let pool;
+    if(rn<5)pool=['L','J'];
+    else if(rn<10)pool=['T'];
+    else if(rn<15)pool=['Z','S'];
+    else if(rn<20)pool=['Plus','Cross'];
+    else pool=['Hook','Chair'];
+    return pool[Math.floor(Math.random()*pool.length)];
+  }
 
-  function nextQ(){
-    if(qi>=12){
-      const ach=S('nz_achievements')||[];
-      const gotCadet=score>=8&&!ach.includes('Space Cadet');
-      const gotAstro=score>=12&&!ach.includes('Astronaut');
-      if(gotCadet){ach.push('Space Cadet');setS('nz_achievements',ach);}
-      if(gotAstro){ach.push('Astronaut');setS('nz_achievements',ach);}
-      if(gotCadet||gotAstro)playSound('achievement');
-      end({
-        title:'Spatial Spin! 🔄',emoji:'🔄',
-        sub:`${score}/12 correct${score>=12?' 🚀 Astronaut!':score>=8?' 🛸 Space Cadet!':''}`,
-        value:score,points:score*8,starThresh:[5,8,11],
-        statsHtml:`<div class="end-stats">
-          <div class="row"><span>Correct</span><span class="val">${score} / 12</span></div>
-          <div class="row"><span>Accuracy</span><span class="val">${Math.round(score/12*100)}%</span></div>
-          ${score>=12?'<div class="row"><span>🏆 Achievement</span><span class="val">🚀 Astronaut</span></div>':
-            score>=8?'<div class="row"><span>🏆 Achievement</span><span class="val">🛸 Space Cadet</span></div>':''}
-        </div>`
-      });
-      return;
-    }
-    _cti(barT);
-    const {type,dispRot,rotAmt,hint}=questions[qi];
-    const cells=SHAPES[type];
-    const rots=getRots(cells);
-    const dispCells=rots[dispRot];
-    const targetRot=(dispRot+rotAmt)%4;
-    const label=ROT_LABELS[rotAmt-1];
-    const optColors=['#7C3AED','#4F8EF7','#34D399','#F97316'];
-    const optOrder=[0,1,2,3].sort(()=>Math.random()-.5);
-    const {svg:dispSvg,w:dw,h:dh}=drawShapeSvg(dispCells,26,'#7C3AED');
-    const optButtons=optOrder.map((r,i)=>{
-      const {svg:oSvg}=drawShapeSvg(rots[r],20,optColors[i]);
-      return`<button class="ss-opt" data-r="${r}" style="padding:10px;background:var(--card);border:2px solid var(--border);border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:64px;transition:border .12s;">${oSvg}</button>`;
-    }).join('');
-    host.innerHTML=`
-      <div class="timer-bar"><div class="timer-fill timer-green" id="ssBar" style="width:100%"></div></div>
-      <div style="text-align:center;font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px;">Q${qi+1}/12 · <span style="color:var(--primary);">Rotate ${label}</span></div>
-      <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:14px;">
-        <div style="text-align:center;">
-          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Original</div>
-          <div id="ssDisp" style="display:inline-flex;align-items:center;justify-content:center;padding:10px;background:var(--card);border-radius:12px;box-shadow:var(--shadow);">${dispSvg}</div>
-        </div>
-        <div style="font-size:20px;color:var(--text2);">→</div>
-        <div style="text-align:center;">
-          <div style="font-size:10px;color:var(--primary);font-weight:700;margin-bottom:4px;">${label}?</div>
-          <div style="width:${dw+20}px;height:${dh+20}px;background:var(--card);border-radius:12px;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--text2);">?</div>
+  renderStart();
+
+  function renderStart(){
+    body.innerHTML='';
+    const bestRound=S('nz_ss_best_round')||0;
+    const games=S('nz_ss_games')||0;
+    const accH=S('nz_ss_accuracy')||[];
+    const avgAcc=accH.length?Math.round(accH.reduce((a,b)=>a+b,0)/accH.length):0;
+    const dc=ssDailyChallenge();
+    const dcDone=ssDailyDone();
+    const screen=$(`<div class="ss-start"></div>`);
+    screen.innerHTML=`
+      <div class="ss-stats">
+        <div class="ss-stat"><div class="v">${bestRound}</div><div class="l">Best Round</div></div>
+        <div class="ss-stat"><div class="v">${avgAcc}%</div><div class="l">Accuracy</div></div>
+        <div class="ss-stat"><div class="v">${games}</div><div class="l">Games</div></div>
+      </div>
+      <div class="daily-card ${dcDone?'done':''}" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="dc-ico">${dcDone?'✅':'🎯'}</div>
+          <div style="flex:1;"><div class="dc-name">Daily: ${dc.label}</div><div class="dc-sub">${dcDone?'Completed today!':'Complete for 2x XP'}</div></div>
+          <span class="dc-badge">2x XP</span>
         </div>
       </div>
-      ${hint?'<div style="text-align:center;font-size:11px;color:#A78BFA;margin-bottom:8px;">💡 Hint: watch the shape animate!</div>':''}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:290px;margin:0 auto;" id="ssOpts">${optButtons}</div>
-      <div id="ssFb" style="text-align:center;font-size:13px;font-weight:700;min-height:22px;margin-top:8px;"></div>`;
-    if(hint){
-      const dispEl=host.querySelector('#ssDisp');
-      if(dispEl){
-        const deg=rotAmt*90;
-        setTimeout(()=>{
-          dispEl.style.transition='transform 0.9s ease-in-out';
-          dispEl.style.transform=`rotate(${deg}deg)`;
-          setTimeout(()=>{
-            dispEl.style.transition='transform 0.4s ease-in-out';
-            dispEl.style.transform='';
-          },950);
-        },350);
-      }
+      <div class="ss-mode-title">Choose a Mode</div>
+      <div class="ss-modes" id="ssModes"></div>
+      <button class="btn-primary" id="ssGo" style="margin-top:18px;">Start ▶</button>
+    `;
+    body.appendChild(screen);
+    const modesEl=screen.querySelector('#ssModes');
+    ['easy','medium','hard','speed','zen'].forEach(k=>{
+      const m=SS_MODES[k];
+      const card=$(`<button class="ss-mode ${k===mode?'sel':''}" data-m="${k}">
+        <div class="sm-top">${m.emoji} ${m.label}</div>
+        <div class="sm-grid">${m.zen?'No timer':(m.time/1000)+'s / question'}</div>
+        <div class="sm-sub">${m.sub}</div>
+      </button>`);
+      card.onclick=()=>{playSound('tap');mode=k;modesEl.querySelectorAll('.ss-mode').forEach(c=>c.classList.toggle('sel',c.dataset.m===k));};
+      modesEl.appendChild(card);
+    });
+    screen.querySelector('#ssGo').onclick=()=>{playSound('tap');startClock&&startClock();startGame();};
+  }
+
+  function startGame(){
+    const m=SS_MODES[mode];
+    const zen=m.zen;
+    body.innerHTML='';
+    const host=$(`<div class="ss-play"></div>`);
+    body.appendChild(host);
+    let round=0,lives=zen?Infinity:3,correctCount=0,attempts=0,barT=null;
+
+    function heartsHtml(){
+      if(zen)return `<span class="qm-zen-tag">🧘 Zen — no timer / lives</span>`;
+      return `<div class="wc-hearts">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''} ${(lives===1&&i===0)?'mm-last':''}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>`;
     }
-    let elapsed=0;
-    barT=_si(()=>{
-      elapsed+=100;
-      const pct=Math.max(0,100-elapsed/8000*100);
-      const bar=host.querySelector('#ssBar');
-      if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
-      if(elapsed>=8000){
-        _cti(barT);
-        host.querySelectorAll('.ss-opt').forEach(b=>{
-          if(+b.dataset.r===targetRot){b.style.border='3px solid #22C55E';b.style.background='rgba(52,211,153,.1)';}
-          b.disabled=true;
-        });
-        const fb=host.querySelector('#ssFb');if(fb){fb.style.color='#EF4444';fb.textContent='⏱ Time\'s up!';}
-        qi++;_st(nextQ,1000);
+
+    function gameOver(){
+      _cti(barT);
+      const finalRound=round;
+      const accuracy=attempts?Math.round(correctCount/attempts*100):0;
+      const prevBest=S('nz_ss_best_round')||0;
+      const newPB=finalRound>prevBest;
+      if(newPB)setS('nz_ss_best_round',finalRound);
+      setS('nz_ss_games',(S('nz_ss_games')||0)+1);
+      const accH=S('nz_ss_accuracy')||[];accH.push(accuracy);while(accH.length>10)accH.shift();setS('nz_ss_accuracy',accH);
+      const dc=ssDailyChallenge();
+      if(!ssDailyDone()){
+        const pass=correctCount>=dc.target||finalRound>=dc.target;
+        if(pass){setS('nz_ss_daily_date',todayKey());setS('nz_ss_daily_done',true);setTimeout(()=>toast('🎯 Daily Challenge complete! 2x XP'),700);}
       }
-    },100);
-    host.querySelectorAll('.ss-opt').forEach(btn=>{
-      btn.onclick=()=>{
+      const rank=ssRank(finalRound);
+      const xp=Math.max(5,finalRound*8);
+      setScore(finalRound);
+      if(newPB)confetti(50);
+      end({
+        title:`${rank.em} ${rank.txt}`,emoji:rank.em,
+        sub:`Round ${finalRound}${newPB?' · 🏆 New Best!':''}`,
+        value:finalRound,points:xp,starThresh:[6,12,20],
+        statsHtml:`<div class="end-stats">
+          <div class="row"><span>Round Reached</span><span class="val">${finalRound}</span></div>
+          <div class="row"><span>Accuracy</span><span class="val">${accuracy}% (${correctCount}/${attempts})</span></div>
+          <div class="row"><span>XP Earned</span><span class="val">+${xp}</span></div>
+          <div class="row"><span>Personal Best</span><span class="val">${Math.max(finalRound,prevBest)}${newPB?' 🏆':''}</span></div>
+        </div>${newPB?'<div class="rec">New Personal Best! 🎉</div>':''}`
+      });
+    }
+
+    function loseLife(){
+      if(zen)return false;
+      lives--;haptic([30,50,30]);
+      host.classList.add('shake-anim');_st(()=>host.classList.remove('shake-anim'),450);
+      return lives<=0;
+    }
+
+    function nextQ(){
+      _cti(barT);
+      const rn=round;
+      const type=shapeForRound(rn);
+      const base=SS_SHAPES[type];
+      const rots=allRots(base);
+      const dispRot=Math.floor(Math.random()*4);
+      const dispCells=rots[dispRot];
+      const dispKey=key(dispCells);
+      const candidateRots=rots.map((c,i)=>({c,i})).filter(o=>key(o.c)!==dispKey);
+      const answer=candidateRots[Math.floor(Math.random()*candidateRots.length)];
+      const trueKeys=new Set(rots.map(key));
+      const mirRots=allRots(mirror(base)).filter(c=>!trueKeys.has(key(c)));
+      const distractors=[];const usedKeys=new Set([key(answer.c)]);
+      mirRots.sort(()=>Math.random()-.5).forEach(c=>{const k=key(c);if(distractors.length<3&&!usedKeys.has(k)){usedKeys.add(k);distractors.push(c);}});
+      while(distractors.length<3){
+        const otherType=Object.keys(SS_SHAPES)[Math.floor(Math.random()*Object.keys(SS_SHAPES).length)];
+        const oc=allRots(SS_SHAPES[otherType])[Math.floor(Math.random()*4)];
+        const k=key(oc);
+        if(!usedKeys.has(k)&&!trueKeys.has(k)){usedKeys.add(k);distractors.push(oc);}
+      }
+      const optColors=['#7C3AED','#4F8EF7','#34D399','#F97316'];
+      const opts=[{cells:answer.c,correct:true},...distractors.map(c=>({cells:c,correct:false}))].sort(()=>Math.random()-.5);
+      const hint=rn<2;
+      const dispSvg=drawShapeSvg(dispCells,26,'#7C3AED');
+      const optButtons=opts.map((o,i)=>`<button class="ss-opt" data-i="${i}">${drawShapeSvg(o.cells,20,optColors[i])}</button>`).join('');
+      host.innerHTML=`
+        ${zen?'':'<div class="timer-bar"><div class="timer-fill timer-green" id="ssBar" style="width:100%"></div></div>'}
+        ${heartsHtml()}
+        <div class="ss-roundrow"><span>Round <strong>${rn+1}</strong></span><span>Correct <strong>${correctCount}</strong></span></div>
+        <div class="ss-prompt">Which is this shape <strong>rotated</strong> (not mirrored)?</div>
+        <div class="ss-disp-wrap"><div id="ssDisp" class="ss-disp">${dispSvg}</div></div>
+        ${hint?'<div class="ss-hint">💡 Watch it rotate — pick the matching shape</div>':''}
+        <div class="ss-opts" id="ssOpts">${optButtons}</div>
+        <div id="ssFb" class="ss-fb"></div>`;
+      if(hint){
+        const dispEl=host.querySelector('#ssDisp');
+        if(dispEl){
+          _st(()=>{dispEl.style.transition='transform 1s ease-in-out';dispEl.style.transform='rotate(360deg)';
+            _st(()=>{dispEl.style.transition='none';dispEl.style.transform='';},1050);},300);
+        }
+      }
+      const optEls=host.querySelectorAll('.ss-opt');
+      function resolve(picked){
         _cti(barT);
-        const chosen=+btn.dataset.r;
+        attempts++;
+        optEls.forEach(b=>b.disabled=true);
         const fb=host.querySelector('#ssFb');
-        host.querySelectorAll('.ss-opt').forEach(b=>b.disabled=true);
-        if(chosen===targetRot){
-          playSound('correct');score++;setScore(score);
-          btn.style.border='3px solid #22C55E';btn.style.background='rgba(52,211,153,.12)';
+        const correctIdx=opts.findIndex(o=>o.correct);
+        if(picked!==null&&opts[picked].correct){
+          playSound('correct');haptic(10);correctCount++;
+          optEls[picked].classList.add('ss-correct');
           if(fb){fb.style.color='#22C55E';fb.textContent='✅ Correct!';}
+          round++;
+          _st(nextQ,zen?500:650);
         } else {
           playSound('wrong');
-          btn.style.border='3px solid #EF4444';
-          host.querySelectorAll('.ss-opt').forEach(b=>{
-            if(+b.dataset.r===targetRot){b.style.border='3px solid #22C55E';b.style.background='rgba(52,211,153,.12)';}
-          });
-          if(fb){fb.style.color='#EF4444';fb.textContent='❌ Wrong!';}
+          if(picked!==null)optEls[picked].classList.add('ss-wrong');
+          optEls[correctIdx].classList.add('ss-correct');
+          if(fb){fb.style.color='#EF4444';fb.textContent=picked===null?'⏱ Time\'s up!':'❌ Wrong!';}
+          const dead=loseLife();
+          if(dead){_st(gameOver,950);return;}
+          round++;
+          _st(nextQ,zen?700:950);
         }
-        qi++;_st(nextQ,900);
-      };
-    });
+      }
+      optEls.forEach((btn,i)=>{btn.onclick=()=>{if(btn.disabled)return;resolve(i);};});
+      if(!zen&&m.time){
+        let elapsed=0;
+        barT=_si(()=>{
+          elapsed+=100;
+          const pct=Math.max(0,100-elapsed/m.time*100);
+          const bar=host.querySelector('#ssBar');
+          if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
+          if(elapsed>=m.time){_cti(barT);resolve(null);}
+        },100);
+      }
+    }
+
+    wrap.addEventListener('remove_game',()=>{_cti(barT);});
+    nextQ();
   }
-  instrEl.querySelector('#ssStart').onclick=()=>{instrEl.remove();startClock&&startClock();nextQ();};
 }
 
 /* ===================== WORKOUT ===================== */
