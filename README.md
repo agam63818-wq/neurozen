@@ -1,10 +1,10 @@
 # 🧠 NeuroZen — Train Your Brain
 
-A beautiful, mobile-first brain training web app with 8 science-inspired mini-games. No account, no server — all progress is saved locally in your browser.
+A beautiful, mobile-first brain training web app with 10 science-inspired mini-games. No account, no server — all progress is saved locally in your browser.
 
 ## ✨ Features
 
-- **8 Brain Games** — Schulte Table, Memory Matrix, Pattern IQ, Word Flash, Word Chain, Quick Math, Color Stroop Xtreme, and an IQ Test
+- **10 Brain Games** — Schulte Table, Memory Matrix, Pattern IQ, Word Flash, Word Chain, Quick Math, Color Stroop Xtreme, and an IQ Test
 - **Brain Score System** — earn points, level up from Beginner to Master (0–1000)
 - **Skill Tracking** — Memory, Focus, Logic & Speed bars that grow as you play
 - **Streaks & Daily Goals** — play every day to keep your 🔥 streak alive
