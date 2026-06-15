@@ -500,16 +500,18 @@ function openGame(id,wkCtx){
   const g=GAMES.find(x=>x.id===id);
   const wrap=$(`<div class="game-screen"></div>`);
   document.body.appendChild(wrap);
-  let state={score:0,timer:null,startTs:Date.now()};
+  let state={score:0,timer:null,startTs:Date.now(),_frozenTime:null,_frozenScore:undefined};
   function hdr(){
+    const _t=state._frozenTime?(state._frozenTime+'s'):state.startTs?(((Date.now()-state.startTs)/1000).toFixed(1)+'s'):'0.0s';
+    const _s=state._frozenScore!==undefined?state._frozenScore:(state.score||0);
     return `<div class="gs-hdr">
       <button class="gs-back">←</button>
       <div class="gs-title">${g.name}</div>
       <span class="gs-tag">${g.cat}</span>
     </div>
     <div class="gs-stats">
-      <div class="gs-stat"><div class="v" id="gsTime">0.0s</div><div class="l">Time</div></div>
-      <div class="gs-stat"><div class="v" id="gsScore">0</div><div class="l">Score</div></div>
+      <div class="gs-stat"><div class="v" id="gsTime">${_t}</div><div class="l">Time</div></div>
+      <div class="gs-stat"><div class="v" id="gsScore">${_s}</div><div class="l">Score</div></div>
     </div>`;
   }
   function closeGame(){
@@ -529,7 +531,9 @@ function openGame(id,wkCtx){
   function setScore(s){state.score=s;const el=wrap.querySelector('#gsScore');if(el)el.textContent=s;}
   function endGame(opts){
     clearInterval(state.timer);
-    const secs=((Date.now()-state.startTs)/1000).toFixed(1);
+    const secs=state.startTs?((Date.now()-state.startTs)/1000).toFixed(1):'0.0';
+    state._frozenTime=opts.timeOverride||secs;
+    state._frozenScore=state.score||0;
     const best=S('nz_best_scores');
     const isRec=opts.bestVal!==undefined?(!best[id]||opts.bestVal>best[id]):(!best[id]||opts.value>best[id]);
     const recVal=opts.bestVal!==undefined?opts.bestVal:opts.value;
