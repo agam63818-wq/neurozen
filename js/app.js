@@ -1137,37 +1137,40 @@ function playMemory(body,setScore,end,wrap,startClock){
 /* ===================== PATTERN IQ ===================== */
 const PAT_COLORS=['#7C3AED','#4F8EF7','#34D399','#F97316','#F472B6','#FBBF24','#EF4444','#06B6D4'];
 const PAT_SHAPES=['●','■','▲','◆','★','⬟','⬡','✦'];
+let _lastNumSeqIdx=-1,_lastSpecialIdx=-1,_lastLetterIdx=-1;
 function genNumSeq(){
   const types=[
     ()=>{const s=Math.floor(Math.random()*5)+1,a=Math.floor(Math.random()*10)+2;return{seq:[s,s+a,s+2*a,s+3*a],ans:s+4*a};},
     ()=>{const s=Math.floor(Math.random()*3)+2,a=Math.floor(Math.random()*3)+2;return{seq:[s,s*a,s*a*a,s*a*a*a],ans:s*a*a*a*a};},
     ()=>{const s1=Math.floor(Math.random()*5)+1,s2=Math.floor(Math.random()*5)+3;return{seq:[s1,s2,s1+s2,s1+2*s2],ans:2*s1+3*s2};},
     ()=>{const a=Math.floor(Math.random()*4)+2,b=Math.floor(Math.random()*3)+2;return{seq:[a,b,a+b,b*2],ans:a+b+b*2};},
+    ()=>{const d=Math.floor(Math.random()*3)+2,s=Math.floor(Math.random()*10)+25;const a1=s-d,a2=a1-(d+1),a3=a2-(d+2);return{seq:[s,a1,a2,a3],ans:a3-(d+3)};},
+    ()=>{const n=Math.floor(Math.random()*3)+1,f=k=>k*k-1;return{seq:[f(n),f(n+1),f(n+2),f(n+3)],ans:f(n+4)};},
+    ()=>{const ds=x=>String(x).split('').reduce((a,b)=>a+ +b,0);const seq=[Math.floor(Math.random()*8)+6];for(let i=0;i<3;i++)seq.push(seq[seq.length-1]+ds(seq[seq.length-1]));return{seq,ans:seq[3]+ds(seq[3])};},
   ];
-  return types[Math.floor(Math.random()*types.length)]();
+  let i=Math.floor(Math.random()*types.length);
+  if(types.length>1&&i===_lastNumSeqIdx)i=(i+1)%types.length;
+  _lastNumSeqIdx=i;
+  return types[i]();
 }
 function genSpecialSeq(){
-  const type=Math.floor(Math.random()*4);
-  if(type===0){
-    const a=Math.floor(Math.random()*3)+1,b=Math.floor(Math.random()*3)+2;
-    const s=[a,b,a+b,a+2*b,2*a+3*b];
-    return{seq:s.slice(0,4),ans:s[4],label:'Fibonacci-like'};
-  } else if(type===1){
-    const n=Math.floor(Math.random()*4)+1;
-    return{seq:[n*n,(n+1)*(n+1),(n+2)*(n+2),(n+3)*(n+3)],ans:(n+4)*(n+4),label:'Squares'};
-  } else if(type===2){
-    const primes=[2,3,5,7,11,13,17,19,23];
-    const start=Math.floor(Math.random()*5);
-    return{seq:primes.slice(start,start+4),ans:primes[start+4],label:'Primes'};
-  } else {
-    const a=Math.floor(Math.random()*5)+2,b=2;
-    const s=Math.floor(Math.random()*3)+2;
-    const seq=[s,s+a,(s+a)*b,(s+a)*b+a];
-    return{seq,ans:seq[3]*b,label:'Alternating ×/'};
-  }
+  const types=[
+    ()=>{const a=Math.floor(Math.random()*3)+1,b=Math.floor(Math.random()*3)+2;const s=[a,b,a+b,a+2*b,2*a+3*b];return{seq:s.slice(0,4),ans:s[4],label:'Fibonacci-like'};},
+    ()=>{const n=Math.floor(Math.random()*4)+1;return{seq:[n*n,(n+1)*(n+1),(n+2)*(n+2),(n+3)*(n+3)],ans:(n+4)*(n+4),label:'Squares'};},
+    ()=>{const primes=[2,3,5,7,11,13,17,19,23];const start=Math.floor(Math.random()*5);return{seq:primes.slice(start,start+4),ans:primes[start+4],label:'Primes'};},
+    ()=>{const a=Math.floor(Math.random()*5)+2,b=2;const s=Math.floor(Math.random()*3)+2;const seq=[s,s+a,(s+a)*b,(s+a)*b+a];return{seq,ans:seq[3]*b,label:'Alternating ×/'};},
+    ()=>{const n=Math.floor(Math.random()*3)+1,tri=k=>k*(k+1)/2;return{seq:[tri(n),tri(n+1),tri(n+2),tri(n+3)],ans:tri(n+4),label:'Triangular'};},
+    ()=>{const c=Math.floor(Math.random()*4),p=k=>Math.pow(2,k)+c,s=Math.floor(Math.random()*2)+1;return{seq:[p(s),p(s+1),p(s+2),p(s+3)],ans:p(s+4),label:'Powers of 2 +c'};},
+  ];
+  let i=Math.floor(Math.random()*types.length);
+  if(i===_lastSpecialIdx)i=(i+1)%types.length;
+  _lastSpecialIdx=i;
+  return types[i]();
 }
 function genLetterSeq(){
-  const type=Math.floor(Math.random()*2);
+  let type=Math.floor(Math.random()*3);
+  if(type===_lastLetterIdx)type=(type+1)%3;
+  _lastLetterIdx=type;
   if(type===0){
     const skip=Math.floor(Math.random()*3)+1;
     const start=Math.floor(Math.random()*8);
@@ -1178,7 +1181,7 @@ function genLetterSeq(){
     while(dist.length<3){const c=String.fromCharCode(65+Math.floor(Math.random()*26));if(!dist.includes(c)&&c!==ans)dist.push(c);}
     const opts=[ans,...dist].sort(()=>Math.random()-.5);
     return{seq,opts,answerIdx:opts.indexOf(ans)};
-  } else {
+  } else if(type===1){
     const startC=Math.floor(Math.random()*6)+16;
     const skip=Math.floor(Math.random()*2)+1;
     const seqR=Array.from({length:4},(_,i)=>String.fromCharCode(startC-i*skip));
@@ -1188,6 +1191,17 @@ function genLetterSeq(){
     while(dist.length<3){const c=String.fromCharCode(65+Math.floor(Math.random()*26));if(!dist.includes(c)&&c!==ansR)dist.push(c);}
     const opts=[ansR,...dist].sort(()=>Math.random()-.5);
     return{seq:seqR,opts,answerIdx:opts.indexOf(ansR)};
+  } else {
+    const d0=Math.floor(Math.random()*2)+2;
+    const start=Math.floor(Math.random()*3);
+    const p1=start+d0,p2=p1+d0+1,p3=p2+d0+2,ansP=p3+d0+3;
+    if(ansP>25)return genLetterSeq();
+    const seq=[start,p1,p2,p3].map(p=>String.fromCharCode(65+p));
+    const ans=String.fromCharCode(65+ansP);
+    const dist=[];
+    while(dist.length<3){const c=String.fromCharCode(65+Math.floor(Math.random()*26));if(!dist.includes(c)&&c!==ans&&!seq.includes(c))dist.push(c);}
+    const opts=[ans,...dist].sort(()=>Math.random()-.5);
+    return{seq,opts,answerIdx:opts.indexOf(ans)};
   }
 }
 function genRomanSeq(){
@@ -1213,6 +1227,17 @@ function playPattern(body,setScore,end,wrap,startClock){
   body.appendChild(instrEl);
   const host=$(`<div></div>`);body.appendChild(host);
   let q=0,score=0,bonus=0,arcTimer=null,qStartTs=0,lives=3,streak=0,bestStreak=0;
+  const typeHistory=[];
+  function pickType(){
+    const all=[0,1,2,3,4,5,6,7,8,9];
+    const recent=typeHistory.slice(-2);
+    let avail=all.filter(t=>!recent.includes(t));
+    if(avail.length===0)avail=all;
+    const t=avail[Math.floor(Math.random()*avail.length)];
+    typeHistory.push(t);
+    while(typeHistory.length>5)typeHistory.shift();
+    return t;
+  }
   function patHearts(){return `<div class="wc-hearts" style="margin-bottom:6px;">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''} ${(lives===1&&i===0)?'mm-last':''}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>`;}
   function patLoseLife(){
     lives--;streak=0;haptic([30,50,30]);toast('❌ -1 Life');
@@ -1248,7 +1273,7 @@ function playPattern(body,setScore,end,wrap,startClock){
       return;
     }
     _cti(arcTimer);
-    const type=q%6;
+    const type=pickType();
     let answerIdx=0,html='';
     if(type===0){
       const shape=PAT_SHAPES[Math.floor(Math.random()*PAT_SHAPES.length)];
@@ -1306,12 +1331,85 @@ function playPattern(body,setScore,end,wrap,startClock){
         <div style="font-size:10px;color:var(--text2);text-align:center;margin-bottom:4px;">${res.label}</div>
         <div class="pat-seq">${res.seq.map(n=>`<div class="pat-item" style="background:#34D399;font-size:20px;">${n}</div>`).join('')}<div class="pat-item q" style="font-size:20px;">?</div></div>
         <div class="pat-opts">${opts.map((v,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:22px;font-weight:800;">${v}</button>`).join('')}</div>`;
-    } else {
+    } else if(type===5){
       const res=genRomanSeq();
       answerIdx=res.answerIdx;
       html=`<div class="q-type-badge">ROMAN</div>
         <div class="pat-seq">${res.seq.map(r=>`<div class="pat-item" style="background:#F97316;font-size:16px;font-weight:900;">${r}</div>`).join('')}<div class="pat-item q" style="font-size:16px;">?</div></div>
         <div class="pat-opts">${res.opts.map((r,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:15px;font-weight:900;">${r}</button>`).join('')}</div>`;
+    } else if(type===6){
+      // Odd One Out: 3 share a property (color/shape/count), 1 differs
+      const oddIdx=Math.floor(Math.random()*4);
+      const baseSi=Math.floor(Math.random()*PAT_SHAPES.length);
+      const baseCi=Math.floor(Math.random()*PAT_COLORS.length);
+      const baseN=Math.floor(Math.random()*2)+1;
+      const items=[0,1,2,3].map(()=>({si:baseSi,ci:baseCi,n:baseN}));
+      const mode=Math.floor(Math.random()*3);
+      if(mode===0){let oc=baseCi;while(oc===baseCi)oc=Math.floor(Math.random()*PAT_COLORS.length);items[oddIdx]={...items[oddIdx],ci:oc};}
+      else if(mode===1){let os=baseSi;while(os===baseSi)os=Math.floor(Math.random()*PAT_SHAPES.length);items[oddIdx]={...items[oddIdx],si:os};}
+      else {let on=baseN;while(on===baseN)on=Math.floor(Math.random()*3)+1;items[oddIdx]={...items[oddIdx],n:on};}
+      answerIdx=oddIdx;
+      html=`<div class="q-type-badge">ODD ONE OUT</div>
+        <div style="font-size:11px;color:var(--text2);text-align:center;margin-bottom:10px;">Jo alag hai usse tap karo</div>
+        <div class="pat-opts">${items.map((it,i)=>`<button class="pat-opt" data-i="${i}" style="background:${PAT_COLORS[it.ci]};color:#fff;font-size:22px;letter-spacing:3px;">${PAT_SHAPES[it.si].repeat(it.n)}</button>`).join('')}</div>`;
+    } else if(type===7){
+      // Analogy: 2 known pairs + 1 to complete (rule: sides+1 OR color swap)
+      const ladder=['▲','■','⬟','⬡'];
+      const rule=Math.floor(Math.random()*2);
+      let pairs,opts;
+      if(rule===0){
+        const color='#7C3AED';
+        const starts=[0,1,2].sort(()=>Math.random()-.5);
+        pairs=starts.map(s=>[{g:ladder[s],c:color},{g:ladder[s+1],c:color}]);
+        const ansG=ladder[starts[2]+1];
+        pairs[2]=[{g:ladder[starts[2]],c:color},null];
+        const cand=ladder.filter(g=>g!==ansG);
+        opts=[ansG,...cand.sort(()=>Math.random()-.5).slice(0,3)].sort(()=>Math.random()-.5).map(g=>({g,c:color}));
+        answerIdx=opts.findIndex(o=>o.g===ansG);
+      } else {
+        const c1=Math.floor(Math.random()*PAT_COLORS.length);
+        let c2=c1;while(c2===c1)c2=Math.floor(Math.random()*PAT_COLORS.length);
+        const gl=[...ladder].sort(()=>Math.random()-.5).slice(0,3);
+        pairs=gl.map(g=>[{g,c:PAT_COLORS[c1]},{g,c:PAT_COLORS[c2]}]);
+        pairs[2]=[{g:gl[2],c:PAT_COLORS[c1]},null];
+        const cset=new Set([c2]);while(cset.size<4)cset.add(Math.floor(Math.random()*PAT_COLORS.length));
+        opts=[...cset].sort(()=>Math.random()-.5).map(ci=>({g:gl[2],c:PAT_COLORS[ci]}));
+        answerIdx=opts.findIndex(o=>o.c===PAT_COLORS[c2]);
+      }
+      const cell=(o)=>o?`<span class="pat-an-cell" style="background:${o.c};">${o.g}</span>`:`<span class="pat-an-cell q">?</span>`;
+      html=`<div class="q-type-badge">ANALOGY</div>
+        <div style="font-size:11px;color:var(--text2);text-align:center;margin-bottom:8px;">Rule samjho, '?' bharo</div>
+        <div class="pat-analogy">${pairs.map(pr=>`<div class="pat-an-row">${cell(pr[0])}<span class="pat-an-arrow">→</span>${cell(pr[1])}</div>`).join('')}</div>
+        <div class="pat-opts">${opts.map((o,i)=>`<button class="pat-opt" data-i="${i}" style="background:${o.c};color:#fff;">${o.g}</button>`).join('')}</div>`;
+    } else if(type===8){
+      // Grid Rotation: each row is the previous row rotated 90° (CW arrows)
+      const arrows=['↑','→','↓','←'];
+      const base=Math.floor(Math.random()*4);
+      const grid=[];
+      for(let r=0;r<3;r++)for(let c=0;c<3;c++)grid.push((base+r+c)%4);
+      const correct=arrows[grid[8]];
+      const opts=[0,1,2,3].sort(()=>Math.random()-.5).map(i=>arrows[i]);
+      answerIdx=opts.indexOf(correct);
+      const cellHTML=grid.map((v,i)=>i===8?`<div class="pm-cell missing">?</div>`:`<div class="pm-cell" style="background:#4F8EF7;color:#fff;font-size:26px;">${arrows[v]}</div>`).join('');
+      html=`<div class="q-type-badge">GRID ROTATION</div>
+        <div style="font-size:11px;color:var(--text2);text-align:center;margin-bottom:8px;">Har row pichhli row se 90° ghoomti hai</div>
+        <div class="pat-matrix">${cellHTML}</div>
+        <div class="pat-opts">${opts.map((a,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:30px;font-weight:800;">${a}</button>`).join('')}</div>`;
+    } else {
+      // Mixed Symbol-Number: number increases by step AND shape cycles in fixed order
+      const step=Math.floor(Math.random()*3)+2;
+      const start=Math.floor(Math.random()*4)+1;
+      const cyc=[...Array(PAT_SHAPES.length).keys()].sort(()=>Math.random()-.5).slice(0,3);
+      const terms=[0,1,2].map(i=>({num:start+i*step,si:cyc[i%cyc.length]}));
+      const nextNum=start+3*step;
+      const correct=cyc[3%cyc.length];
+      const optSet=new Set([correct]);while(optSet.size<4)optSet.add(Math.floor(Math.random()*PAT_SHAPES.length));
+      const opts=[...optSet].sort(()=>Math.random()-.5);
+      answerIdx=opts.indexOf(correct);
+      html=`<div class="q-type-badge">MIXED</div>
+        <div style="font-size:11px;color:var(--text2);text-align:center;margin-bottom:6px;">Number +${step}, shape cycle — agla shape?</div>
+        <div class="pat-seq">${terms.map(t=>`<div class="pat-item" style="background:#06B6D4;font-size:18px;font-weight:800;">${t.num}${PAT_SHAPES[t.si]}</div>`).join('')}<div class="pat-item q" style="font-size:18px;">${nextNum}?</div></div>
+        <div class="pat-opts">${opts.map((si,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:28px;">${PAT_SHAPES[si]}</button>`).join('')}</div>`;
     }
     const arcHtml=`<div class="arc-wrap">
       <svg id="arcSvg" width="70" height="70" viewBox="0 0 70 70">
@@ -1361,6 +1459,14 @@ const WF_T1=[
   ['DEAL','LEAD','DEAR','DENT'],['NOTE','TONE','NONE','NODE'],
   ['GAME','MAGE','GATE','GAZE'],['RICE','RACE','RIPE','RIDE'],
   ['SAND','SEND','BAND','SANE'],['WIND','WING','WINE','WIDE'],
+  ['LANE','LEAN','LAND','LACE'],['MEAT','MEAL','MEAN','TEAM'],
+  ['SEAT','SEAL','SEAM','EAST'],['POST','SPOT','STOP','POTS'],
+  ['CARE','CARD','CART','CANE'],['HEAT','HATE','HEAL','HEAP'],
+  ['LIVE','EVIL','VILE','LIME'],['DUSK','DESK','DISK','DUST'],
+  ['FAIL','FAIR','FALL','FILL'],['BOLT','BOOT','BOAT','BOLD'],
+  ['RAIN','RUIN','RAID','MAIN'],['SOUP','SOUR','SOUL','SPUR'],
+  ['MOON','MOOD','MOOR','NOON'],['GOLD','GOAL','GOLF','COLD'],
+  ['PINE','PINT','PILE','PANE'],
 ];
 const WF_T2=[
   ['SWIFT','SHIFT','SNIFF','SWIRL'],['QUIET','QUITE','QUOTE','QUILT'],
@@ -1371,6 +1477,14 @@ const WF_T2=[
   ['STEAM','STEAK','STEAL','STEEL'],['GLARE','LARGE','GLAZE','GRACE'],
   ['CRATE','CARET','CATER','TRACE'],['SPARE','SPEAR','PARSE','SPADE'],
   ['POSE','PROSE','POISE','PURSE'],['NIGHT','RIGHT','NIGHTLY','MIGHT'],
+  ['STONE','TONES','NOTES','STORE'],['BRAKE','BREAK','BAKER','BRACE'],
+  ['HEART','EARTH','HEARD','HEARS'],['PLANE','PLANT','PLATE','PLACE'],
+  ['SMILE','SLIME','MILES','SMITE'],['CHARM','MARCH','CHART','CHARS'],
+  ['DREAM','DRAMA','DREAD','CREAM'],['FROWN','CROWN','BROWN','FROND'],
+  ['GRAPE','GRADE','GRACE','GRAVE'],['SPILL','SPELL','SPILT','STILL'],
+  ['TRACK','TRICK','TRUCK','CRACK'],['BLOOM','BLOOD','BROOM','BROOD'],
+  ['SHEEP','SHEET','SHEER','SHEEN'],['CLOUD','CLOUT','ALOUD','CLOWN'],
+  ['STARE','RATES','TEARS','STARK'],
 ];
 const WF_T3=[
   ['THROUGH','TROUGH','THOROUGH','THOUGHT'],['PRECEDE','PROCEED','PRESIDE','PRECISE'],
@@ -1381,6 +1495,11 @@ const WF_T3=[
   ['ILLUSION','ALLUSION','ELUSION','EVASION'],['STATIONARY','STATIONERY','STATIONS','SITUATION'],
   ['ACCEPT','EXCEPT','EXPECT','ACCESS'],['AFFECT','EFFECT','AFFLICT','EFFORT'],
   ['PRINCIPAL','PRINCIPLE','PRINCESS','PRINTING'],['COMPLEMENT','COMPLIMENT','COMPONENT','COMPLETE'],
+  ['CAPITAL','CAPITOL','CAPITALS','CAPABLE'],['WEATHER','WHETHER','WREATHE','WEATHERS'],
+  ['QUIETLY','QUICKLY','QUAINTLY','QUALITY'],['THEATER','THEATRE','THEREAT','HEATERS'],
+  ['BEARING','BEATING','BEADING','READING'],['CAUTION','CAPTION','AUCTION','CAUSTIC'],
+  ['MEASURE','MEASURED','PLEASURE','TREASURE'],['DIAMOND','DIAGRAM','DIAGRAMS','DIAMONDS'],
+  ['STRANGE','STRANGER','STRANGLE','STRANDED'],['JOURNEY','JOURNAL','JOURNEYS','JOURNALS'],
 ];
 function playWordFlash(body,setScore,end,wrap,startClock){
   let q=0,score=0,streak=0,bestStreak=0,fastest=null,correctCount=0,lives=3;
@@ -1388,7 +1507,21 @@ function playWordFlash(body,setScore,end,wrap,startClock){
   // shuffled, recycling pools
   const pools={1:[...WF_T1].sort(()=>Math.random()-.5),2:[...WF_T2].sort(()=>Math.random()-.5),3:[...WF_T3].sort(()=>Math.random()-.5)};
   const used={1:0,2:0,3:0};
-  function takeGroup(tier){const p=pools[tier];const g=p[used[tier]%p.length];used[tier]++;if(used[tier]%p.length===0)p.sort(()=>Math.random()-.5);return g;}
+  const recentWords=[]; // last 8 correct answers shown across ALL tiers
+  function recordWord(w){recentWords.push(w);while(recentWords.length>8)recentWords.shift();}
+  function takeGroup(tier){
+    const p=pools[tier];
+    let g=p[used[tier]%p.length],tries=0;
+    while(recentWords.includes(g[0])&&tries<p.length){
+      used[tier]++;
+      if(used[tier]%p.length===0)p.sort(()=>Math.random()-.5);
+      g=p[used[tier]%p.length];tries++;
+    }
+    used[tier]++;
+    if(used[tier]%p.length===0)p.sort(()=>Math.random()-.5);
+    recordWord(g[0]);
+    return g;
+  }
   const instrEl=$(`<div class="instr" style="margin-bottom:14px;"><strong>Word Flash ♾️</strong><br>Word ek flash mein dikhega — distractors bilkul similar honge! Endless: jab tak 3 lives hain khelte raho.<br><span style="font-size:11px;color:var(--primary);">Q8+ DECOY MODE: 2 words · ⚡ &lt;500ms = bonus · ❌ galat = -1 life</span>${record?`<div style="margin-top:6px;font-size:12px;font-weight:700;color:var(--mint);">🏆 Best: ${record} pts</div>`:''}<br>
   <button style="margin-top:10px;padding:12px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="wfStart">▶ Start</button>
 </div>`);
@@ -1417,6 +1550,7 @@ function playWordFlash(body,setScore,end,wrap,startClock){
     const tier=q<5?1:q<11?2:3;
     const flashMs=Math.max(380,900-q*40);
     const decoy=q>=7;
+    const scramble=q>=11; // Round 12+ : visual scramble flair
     const group=takeGroup(tier);
     let words=[group[0]],askSide=0,group2=null;
     if(decoy){
@@ -1430,7 +1564,8 @@ function playWordFlash(body,setScore,end,wrap,startClock){
       ${heartsHtml()}
       <div class="wf-stage">
         <div class="wf-bar"><div class="wf-bar-fill" id="wfBar"></div></div>
-        <div class="wf-words">${words.map(w=>`<div class="wf-word" style="font-size:${decoy?'26px':'48px'};">${w}</div>`).join('')}</div>
+        <div class="wf-words${scramble?' wf-scramble':''}">${words.map(w=>`<div class="wf-word" style="font-size:${decoy?'26px':'48px'};">${w}</div>`).join('')}</div>
+        ${scramble?'<div style="font-size:10px;color:#FBBF24;margin-top:10px;letter-spacing:.12em;font-weight:700;">🔀 SCRAMBLE MODE</div>':''}
         ${decoy?'<div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:10px;letter-spacing:.12em;font-weight:700;">DECOY MODE — DONO YAAD RAKHO!</div>':''}
       </div>
       <div style="text-align:center;font-size:12px;color:var(--text2);margin-top:8px;">Round ${q+1} · ${flashMs}ms flash${streak>=3?' · 🔥 x1.5':''}</div>`;
@@ -3026,7 +3161,12 @@ const SS_SHAPES={
   Cross:[[0,0],[0,2],[1,1],[2,0],[2,2]],
   Hook:[[0,0],[1,0],[2,0],[2,1],[2,2],[0,1]],
   Chair:[[0,0],[1,0],[2,0],[2,1],[1,1],[0,2],[1,2]],
+  Staircase:[[3,0],[2,1],[1,2],[0,3]],
+  Arrow:[[0,2],[1,1],[1,3],[2,0],[2,4]],
+  'U-shape':[[0,0],[0,2],[1,0],[1,1],[1,2]],
+  'W-shape':[[0,0],[1,0],[1,1],[2,1],[2,2],[3,2]],
 };
+const SS_COLORS=['#7C3AED','#4F8EF7','#34D399','#F97316','#F472B6'];
 const SS_MODES={
   easy:{label:'Easy',emoji:'🟢',sub:'Simple L-shapes',time:10000,zen:false,pool:['L','J']},
   medium:{label:'Medium',emoji:'🟡',sub:'T and Z shapes',time:8000,zen:false,pool:['T','Z','S']},
@@ -3082,16 +3222,30 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const rects=nc.map(([r,c])=>`<rect x="${c*cs+p}" y="${r*cs+p}" width="${cs-2}" height="${cs-2}" rx="3" fill="${color}"/>`).join('');
     return`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${rects}</svg>`;
   }
+  let lastColor=null;
+  const shapeHist=[]; // last 2 shape types used this game (anti-repeat)
   function shapeForRound(rn){
     const m=SS_MODES[mode];
-    if(m.pool)return m.pool[Math.floor(Math.random()*m.pool.length)];
     let pool;
-    if(rn<5)pool=['L','J'];
-    else if(rn<10)pool=['T'];
-    else if(rn<15)pool=['Z','S'];
-    else if(rn<20)pool=['Plus','Cross'];
-    else pool=['Hook','Chair'];
-    return pool[Math.floor(Math.random()*pool.length)];
+    if(m.pool)pool=m.pool;
+    else if(rn<5)pool=['L','J'];
+    else if(rn<10)pool=['T','Staircase'];
+    else if(rn<15)pool=['Z','S','U-shape'];
+    else if(rn<20)pool=['Plus','Cross','Arrow'];
+    else pool=['Hook','Chair','W-shape'];
+    const prev=shapeHist[shapeHist.length-1];
+    let cand=pool;
+    if(pool.length>1&&prev)cand=pool.filter(s=>s!==prev);
+    if(cand.length===0)cand=pool;
+    const pick=cand[Math.floor(Math.random()*cand.length)];
+    shapeHist.push(pick);while(shapeHist.length>2)shapeHist.shift();
+    return pick;
+  }
+  function pickShapeColor(){
+    let c=SS_COLORS[Math.floor(Math.random()*SS_COLORS.length)];
+    if(SS_COLORS.length>1&&c===lastColor)c=SS_COLORS[(SS_COLORS.indexOf(c)+1)%SS_COLORS.length];
+    lastColor=c;
+    return c;
   }
 
   renderStart();
@@ -3140,6 +3294,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   function startGame(){
     const m=SS_MODES[mode];
     const zen=m.zen;
+    shapeHist.length=0;lastColor=null;
     body.innerHTML='';
     const host=$(`<div class="ss-play"></div>`);
     body.appendChild(host);
@@ -3198,7 +3353,9 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       const dispCells=rots[dispRot];
       const dispKey=key(dispCells);
       const candidateRots=rots.map((c,i)=>({c,i})).filter(o=>key(o.c)!==dispKey);
-      const answer=candidateRots[Math.floor(Math.random()*candidateRots.length)];
+      // fully rotationally-symmetric shapes (e.g. Plus/Cross) have no distinct rotation;
+      // fall back to the displayed orientation so the round stays solvable instead of crashing.
+      const answer=candidateRots.length?candidateRots[Math.floor(Math.random()*candidateRots.length)]:{c:dispCells,i:dispRot};
       const trueKeys=new Set(rots.map(key));
       const mirRots=allRots(mirror(base)).filter(c=>!trueKeys.has(key(c)));
       const distractors=[];const usedKeys=new Set([key(answer.c)]);
@@ -3212,7 +3369,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       const optColors=['#7C3AED','#4F8EF7','#34D399','#F97316'];
       const opts=[{cells:answer.c,correct:true},...distractors.map(c=>({cells:c,correct:false}))].sort(()=>Math.random()-.5);
       const hint=rn<2;
-      const dispSvg=drawShapeSvg(dispCells,26,'#7C3AED');
+      const dispSvg=drawShapeSvg(dispCells,26,pickShapeColor());
       const optButtons=opts.map((o,i)=>`<button class="ss-opt" data-i="${i}">${drawShapeSvg(o.cells,20,optColors[i])}</button>`).join('');
       host.innerHTML=`
         ${zen?'':'<div class="timer-bar"><div class="timer-fill timer-green" id="ssBar" style="width:100%"></div></div>'}
