@@ -879,26 +879,42 @@ function playSchulte(body,setScore,end,wrap,startClock){
   }
 }
 
-/* ===================== MEMORY MATRIX (endless survival) ===================== */
+/* ===================== MEMORY MATRIX v3 (fully rebuilt) ===================== */
 const MM_MODES={
-  easy:{label:'Easy',emoji:'🌱',sub:'3×3 → 5×5',start:3,max:12,ghost:false,zen:false},
-  medium:{label:'Medium',emoji:'⚡',sub:'5×5 → 6×6',start:4,max:15,ghost:false,zen:false},
-  hard:{label:'Hard',emoji:'🔥',sub:'6×6 → 7×7',start:5,max:18,ghost:false,zen:false},
-  ghost:{label:'Ghost',emoji:'👻',sub:'Cells vanish faster',start:3,max:14,ghost:true,zen:false},
-  zen:{label:'Zen',emoji:'🧘',sub:'No timer, relax',start:3,max:14,ghost:false,zen:true},
+  easy:{label:'Easy',emoji:'🌱',sub:'3×3 grid · Chill start',start:3,max:10,ghost:false,zen:false,color:false},
+  medium:{label:'Medium',emoji:'⚡',sub:'4×4 grid · More cells',start:4,max:14,ghost:false,zen:false,color:false},
+  hard:{label:'Hard',emoji:'🔥',sub:'5×5+ grid · Tough!',start:5,max:18,ghost:false,zen:false,color:false},
+  ghost:{label:'Ghost',emoji:'👻',sub:'Cells vanish — memory only!',start:3,max:12,ghost:true,zen:false,color:false},
+  color:{label:'Color',emoji:'🎨',sub:'Remember colors + positions',start:3,max:10,ghost:false,zen:false,color:true},
+  zen:{label:'Zen',emoji:'🧘',sub:'No pressure, just practice',start:3,max:12,ghost:false,zen:true,color:false},
 };
-const MM_COLORS=[{n:'red',hex:'#EF4444'},{n:'blue',hex:'#3B82F6'},{n:'green',hex:'#22C55E'},{n:'yellow',hex:'#EAB308'}];
-function mmGridSize(round){
-  if(round<=5)return 3;if(round<=10)return 4;if(round<=15)return 5;if(round<=20)return 6;return 7;
+const MM_COLORS=[
+  {n:'Red',hex:'#EF4444',light:'#FEE2E2'},
+  {n:'Blue',hex:'#3B82F6',light:'#DBEAFE'},
+  {n:'Green',hex:'#22C55E',light:'#DCFCE7'},
+  {n:'Yellow',hex:'#EAB308',light:'#FEF9C3'},
+  {n:'Purple',hex:'#A855F7',light:'#F3E8FF'},
+  {n:'Orange',hex:'#F97316',light:'#FFEDD5'},
+];
+function mmGridSize(round,mode){
+  if(mode==='easy'){if(round<=4)return 3;if(round<=10)return 4;return 5;}
+  if(mode==='medium'){if(round<=3)return 4;if(round<=8)return 5;return 6;}
+  if(mode==='hard'){if(round<=3)return 5;if(round<=7)return 6;return 7;}
+  if(mode==='ghost'){if(round<=5)return 3;if(round<=10)return 4;return 5;}
+  if(mode==='color'){if(round<=4)return 3;if(round<=9)return 4;return 5;}
+  // zen
+  if(round<=5)return 3;if(round<=10)return 4;return 5;
 }
-function mmFlashMs(round){
-  if(round<=5)return 2000;if(round<=10)return 1500;if(round<=15)return 1200;if(round<=20)return 900;return 700;
+function mmFlashMs(round,mode){
+  const base=mode==='ghost'?1800:mode==='hard'?2200:2400;
+  const decay=mode==='ghost'?120:mode==='hard'?80:60;
+  return Math.max(mode==='ghost'?500:600,base-round*decay);
 }
 function mmRank(round){
-  if(round<=5)return{em:'🌱',txt:'Keep Practicing'};
-  if(round<=10)return{em:'💪',txt:'Getting Better'};
-  if(round<=15)return{em:'🧠',txt:'Sharp Mind'};
-  if(round<=20)return{em:'⚡',txt:'Memory Expert'};
+  if(round<=4)return{em:'🌱',txt:'Keep Practicing'};
+  if(round<=8)return{em:'💪',txt:'Getting Better'};
+  if(round<=13)return{em:'🧠',txt:'Sharp Mind'};
+  if(round<=18)return{em:'⚡',txt:'Memory Expert'};
   if(round<=25)return{em:'🏆',txt:'Memory Master'};
   return{em:'👑',txt:'Legendary Memory'};
 }
@@ -906,10 +922,11 @@ function mmDailyChallenge(){
   const dayN=Math.floor(Date.now()/86400000);
   const defs=[
     {label:'Reach Round 10',type:'round',target:10},
-    {label:'Complete 5 rounds with no mistakes',type:'streak',target:5},
+    {label:'5 perfect rounds in a row',type:'streak',target:5},
     {label:'Survive Ghost mode 8 rounds',type:'ghost',target:8},
     {label:'Reach Round 15',type:'round',target:15},
-    {label:'Get a 7 correct streak',type:'streak',target:7},
+    {label:'7 correct streak',type:'streak',target:7},
+    {label:'Color mode Round 8+',type:'color',target:8},
   ];
   return defs[dayN%defs.length];
 }
@@ -917,7 +934,7 @@ function mmDailyDone(){return S('nz_mm_daily_date')===todayKey()&&!!S('nz_mm_dai
 function mmEdgeFlash(){
   let g=document.getElementById('mmEdgeGlow');
   if(!g){g=$(`<div id="mmEdgeGlow" class="mm-edge-glow"></div>`);document.body.appendChild(g);}
-  g.classList.add('show');_st(()=>g.classList.remove('show'),150);
+  g.classList.add('show');_st(()=>g.classList.remove('show'),200);
 }
 function playMemory(body,setScore,end,wrap,startClock){
   let mode='easy';
@@ -933,6 +950,11 @@ function playMemory(body,setScore,end,wrap,startClock){
     const dcDone=mmDailyDone();
     const screen=$(`<div class="mm-start"></div>`);
     screen.innerHTML=`
+      <div class="mm-hero">
+        <div style="font-size:52px;">🧠</div>
+        <h2 style="margin:8px 0 4px;font-size:20px;">Memory Matrix</h2>
+        <p style="font-size:12px;color:var(--text2);margin:0;">Memorize cells · Recall the pattern · Survive!</p>
+      </div>
       <div class="mm-stats">
         <div class="mm-stat"><div class="v">${bestRound}</div><div class="l">Best Round</div></div>
         <div class="mm-stat"><div class="v">${games}</div><div class="l">Games</div></div>
@@ -947,11 +969,11 @@ function playMemory(body,setScore,end,wrap,startClock){
       </div>
       <div class="mm-mode-title">Choose a Mode</div>
       <div class="mm-modes" id="mmModes"></div>
-      <button class="btn-primary" id="mmGo" style="margin-top:18px;">Start ▶</button>
+      <button class="btn-primary" id="mmGo" style="margin-top:18px;width:100%;padding:16px;">Start ▶</button>
     `;
     body.appendChild(screen);
     const modesEl=screen.querySelector('#mmModes');
-    ['easy','medium','hard','ghost','zen'].forEach(k=>{
+    ['easy','medium','hard','ghost','color','zen'].forEach(k=>{
       const m=MM_MODES[k];
       const card=$(`<button class="mm-mode ${k===mode?'sel':''}" data-m="${k}">
         <div class="sm-top">${m.emoji} ${m.label}</div>
@@ -966,7 +988,7 @@ function playMemory(body,setScore,end,wrap,startClock){
 
   function startGame(){
     const m=MM_MODES[mode];
-    let round=1,lives=3,cells=m.start,streak=0,bestStreak=0,correctRounds=0,totalRounds=0,speedBonus=0;
+    let round=1,lives=3,cells=m.start,streak=0,bestStreak=0,correctRounds=0,totalRounds=0;
     body.innerHTML='';
     const stage=$(`<div class="mm-stage${m.zen?' mm-zen':''}"></div>`);
     body.appendChild(stage);
@@ -976,133 +998,271 @@ function playMemory(body,setScore,end,wrap,startClock){
     }
     function hud(extra){
       const best=S('nz_mm_best_round')||0;
+      const modeTag=`<span class="mm-mode-tag">${m.emoji} ${m.label}</span>`;
       return `<div class="wc-hearts">${heartsHtml()}</div>
-        <div class="mm-roundrow"><span>Round <strong>${round}</strong></span><span>Best <strong>${Math.max(best,round-1)}</strong></span></div>
+        <div class="mm-roundrow">
+          <span>Round <strong>${round}</strong>${streak>=2?` · 🔥${streak}`:''}  </span>
+          <span>${modeTag}</span>
+          <span>Best <strong>${Math.max(best,round-1)}</strong></span>
+        </div>
         ${extra||''}`;
     }
 
     function showPhaseToast(){
       if(m.zen)return;
-      if(round===6)toast('⚡ Speed increases!');
-      else if(round===11)toast('👻 Interference mode!');
-      else if(round===16)toast('👁️ Ghost mode!');
-      else if(round===21)toast('🎨 Color memory!');
+      if(round===5)toast('⚡ Getting faster!');
+      else if(round===10)toast('🧠 Expert territory!');
+      else if(round===15)toast('👑 Legendary round!');
     }
 
     function doRound(){
-      const gsize=mmGridSize(round);
+      showPhaseToast();
+      const gsize=mmGridSize(round,mode);
       const cellCount=gsize*gsize;
       const n=Math.min(cells,cellCount-1,m.max);
-      const cellPx=Math.min(54,Math.floor(300/gsize));
-      let flashMs=mmFlashMs(round)-speedBonus*100;
-      if(flashMs<400)flashMs=400;
-      if(m.zen)flashMs=mmFlashMs(round<=10?round:10);
-      const colorMode=!m.zen&&round>=21;
-      const interference=!m.zen&&round>=11&&round<=15;
-      const ghostPhase=m.ghost||(!m.zen&&round>=16);
-      showPhaseToast();
-      // Fisher-Yates on indices
+      // Cell size: fit nicely
+      const maxW=Math.min(320,window.innerWidth-40);
+      const cellPx=Math.min(56,Math.floor((maxW-gsize*4)/gsize));
+      const flashMs=mmFlashMs(round,mode);
+      const isGhost=m.ghost;
+      const isColor=m.color;
+
+      // Pick random pattern indices
       const idxs=Array.from({length:cellCount},(_,i)=>i);
       for(let i=idxs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idxs[i],idxs[j]]=[idxs[j],idxs[i]];}
       const pattern=idxs.slice(0,n);
-      // Color order assignment (for color mode)
+
+      // Assign colors for color mode
       const colorOf={};
-      if(colorMode)pattern.forEach((idx,i)=>{colorOf[idx]=MM_COLORS[i%MM_COLORS.length];});
+      if(isColor){
+        const shuffled=[...MM_COLORS].sort(()=>Math.random()-.5);
+        pattern.forEach((idx,i)=>{colorOf[idx]=shuffled[i%shuffled.length];});
+      }
+
+      const phaseLabel=isGhost?'👻 Memorize fast!':(isColor?'🎨 Remember colors!':'🧠 Memorize!');
       stage.innerHTML=hud(`
-        <div class="mm-info" id="mmInfo">Memorize ${n} cell${n>1?'s':''}${colorMode?' (tap in color order: red→blue→green→yellow)':''}</div>
-        <div class="mm-gridwrap"><div class="schulte-grid mm-grid" id="mmGrid" style="grid-template-columns:repeat(${gsize},${cellPx}px);max-width:none;"></div></div>`);
+        <div class="mm-phase-label" id="mmPhase">${phaseLabel} (${n} cell${n>1?'s':''})</div>
+        <div class="mm-flash-bar"><div class="mm-flash-fill" id="mmFlashFill" style="width:100%;transition:width ${flashMs}ms linear;"></div></div>
+        <div class="mm-gridwrap">
+          <div class="mm-grid" id="mmGrid" style="grid-template-columns:repeat(${gsize},${cellPx}px);gap:4px;"></div>
+        </div>
+        ${isColor?`<div class="mm-color-guide" id="mmColorGuide"></div>`:''}
+      `);
+
       const grid=stage.querySelector('#mmGrid');
       const cellEls=[];
       for(let i=0;i<cellCount;i++){
-        const c=$(`<div class="mm-cell" style="width:${cellPx}px;height:${cellPx}px;"></div>`);
+        const c=$(`<div class="mm-cell" style="width:${cellPx}px;height:${cellPx}px;border-radius:${cellPx>44?'10px':'8px'};"></div>`);
         c.dataset.i=i;grid.appendChild(c);cellEls.push(c);
       }
-      // Show pattern
-      function reveal(){
-        pattern.forEach((idx,i)=>{
-          const c=cellEls[idx];
-          const col=colorMode?colorOf[idx].hex:null;
-          if(ghostPhase&&!m.zen&&round>=16){
-            // vanish one by one: stagger reveal + hide
-            _st(()=>{c.classList.add('mm-flash');if(col){c.style.background=col;c.style.boxShadow='0 0 18px '+col;}},i*Math.max(120,flashMs/n/1.5));
-            _st(()=>{c.classList.remove('mm-flash');c.style.background='';c.style.boxShadow='';},i*Math.max(120,flashMs/n/1.5)+flashMs/2);
-          } else {
-            c.classList.add('mm-flash');
-            if(col){c.style.background=col;c.style.boxShadow='0 0 18px '+col;}
-          }
+
+      // Start flash bar animation
+      requestAnimationFrame(()=>{
+        requestAnimationFrame(()=>{
+          const fb=stage.querySelector('#mmFlashFill');
+          if(fb){fb.style.width='0%';}
         });
-        const hideAt=(ghostPhase&&round>=16)?(flashMs+n*Math.max(120,flashMs/n/1.5)):flashMs;
-        _st(()=>{
-          cellEls.forEach(c=>{c.classList.remove('mm-flash');c.style.background='';c.style.boxShadow='';});
-          if(interference)showFakes();else beginRecall();
-        },hideAt);
+      });
+
+      // --- REVEAL PHASE ---
+      function reveal(){
+        const phaseEl=stage.querySelector('#mmPhase');
+
+        if(isGhost){
+          // Ghost: show all at once, then vanish one by one
+          pattern.forEach(idx=>{
+            cellEls[idx].classList.add('mm-flash');
+          });
+          // Stagger vanish
+          pattern.forEach((idx,i)=>{
+            _st(()=>{
+              cellEls[idx].classList.remove('mm-flash');
+              cellEls[idx].classList.add('mm-ghost-gone');
+            }, Math.floor(flashMs * (i+1) / (n+1)));
+          });
+          _st(()=>{
+            cellEls.forEach(c=>{c.classList.remove('mm-ghost-gone');});
+            if(phaseEl)phaseEl.textContent=`🎯 Tap the ${n} cell${n>1?'s':''}!`;
+            beginRecall();
+          }, flashMs+200);
+        } else if(isColor){
+          // Color mode: show all colored cells at once
+          pattern.forEach(idx=>{
+            const col=colorOf[idx];
+            cellEls[idx].classList.add('mm-flash');
+            cellEls[idx].style.background=col.hex;
+            cellEls[idx].style.boxShadow=`0 0 14px ${col.hex}88`;
+          });
+          // Build color guide
+          const guideEl=stage.querySelector('#mmColorGuide');
+          if(guideEl){
+            const uniqueCols=[...new Set(pattern.map(idx=>colorOf[idx].n))];
+            guideEl.innerHTML=uniqueCols.map(n=>{
+              const col=MM_COLORS.find(c=>c.n===n);
+              return`<span class="mm-col-pill" style="background:${col.hex};">${col.n}</span>`;
+            }).join('');
+          }
+          _st(()=>{
+            pattern.forEach(idx=>{
+              cellEls[idx].classList.remove('mm-flash');
+              cellEls[idx].style.background='';
+              cellEls[idx].style.boxShadow='';
+            });
+            if(phaseEl)phaseEl.textContent='🎨 Tap each cell in its color order!';
+            // Show which color to tap next
+            beginColorRecall();
+          },flashMs);
+        } else {
+          // Normal: show all, then hide
+          pattern.forEach(idx=>{cellEls[idx].classList.add('mm-flash');});
+          _st(()=>{
+            pattern.forEach(idx=>{cellEls[idx].classList.remove('mm-flash');});
+            if(phaseEl)phaseEl.textContent=`🎯 Tap the ${n} cell${n>1?'s':''}!`;
+            beginRecall();
+          },flashMs);
+        }
       }
-      function showFakes(){
-        const avail=Array.from({length:cellCount},(_,i)=>i).filter(i=>!pattern.includes(i));
-        for(let i=avail.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[avail[i],avail[j]]=[avail[j],avail[i]];}
-        const fakes=avail.slice(0,2);
-        fakes.forEach(i=>cellEls[i].classList.add('mm-fake'));
-        _st(()=>{fakes.forEach(i=>cellEls[i].classList.remove('mm-fake'));beginRecall();},400);
-      }
+
+      // --- NORMAL RECALL ---
       function beginRecall(){
-        const infoEl=stage.querySelector('#mmInfo');
-        if(infoEl)infoEl.textContent=colorMode?'Tap in color order: red→blue→green→yellow':`Tap the ${n} cell${n>1?'s':''}!`;
         const picked=[];
         let roundFailed=false;
-        const colorRank={red:0,blue:1,green:2,yellow:3};
-        const orderedPattern=colorMode?[...pattern].sort((a,b)=>colorRank[colorOf[a].n]-colorRank[colorOf[b].n]):null;
         cellEls.forEach(c=>{
           c.onclick=()=>{
             if(roundFailed)return;
             const idx=+c.dataset.i;
             if(picked.includes(idx))return;
-            let ok;
-            if(colorMode){ok=idx===orderedPattern[picked.length];}
-            else{ok=pattern.includes(idx);}
-            if(ok){
+            if(pattern.includes(idx)){
               picked.push(idx);
               c.classList.add('mm-correct');
-              if(colorMode){c.style.background=colorOf[idx].hex;c.style.color='#fff';}
-              playSound('correct');
-              if(picked.length>=n)roundComplete();
+              playSound('correct');haptic(10);
+              c.style.transform='scale(0.92)';
+              setTimeout(()=>{c.style.transform='';},150);
+              if(picked.length>=n){
+                // Success!
+                roundFailed=true;
+                _st(roundComplete,300);
+              }
             } else {
               roundFailed=true;
               c.classList.add('mm-wrong');
               playSound('wrong');haptic([30,50,30]);mmEdgeFlash();
-              loseLife();
+              // Reveal correct pattern
+              pattern.forEach(idx2=>{
+                if(!picked.includes(idx2))cellEls[idx2].classList.add('mm-reveal');
+              });
+              _st(()=>loseLife(),1000);
             }
           };
         });
       }
+
+      // --- COLOR RECALL (color mode) ---
+      function beginColorRecall(){
+        // Sort pattern by color order (Red→Blue→Green→Yellow→Purple→Orange)
+        const colorOrder=['Red','Blue','Green','Yellow','Purple','Orange'];
+        const orderedPattern=[...pattern].sort((a,b)=>{
+          const ai=colorOrder.indexOf(colorOf[a].n);
+          const bi=colorOrder.indexOf(colorOf[b].n);
+          return ai-bi;
+        });
+        let nextIdx=0;
+        let roundFailed=false;
+
+        // Update the color guide to show which to tap next
+        function updateColorGuide(){
+          const phaseEl=stage.querySelector('#mmPhase');
+          if(nextIdx<orderedPattern.length){
+            const nextCol=colorOf[orderedPattern[nextIdx]];
+            if(phaseEl)phaseEl.innerHTML=`Tap: <span style="color:${nextCol.hex};font-weight:700;">${nextCol.n}</span> (${nextIdx+1}/${n})`;
+          }
+        }
+        updateColorGuide();
+
+        cellEls.forEach(c=>{
+          c.onclick=()=>{
+            if(roundFailed)return;
+            const idx=+c.dataset.i;
+            if(!pattern.includes(idx)){
+              // Wrong — not even in pattern
+              roundFailed=true;
+              c.classList.add('mm-wrong');
+              playSound('wrong');haptic([30,50,30]);mmEdgeFlash();
+              orderedPattern.forEach(pi=>cellEls[pi].classList.add('mm-reveal'));
+              _st(()=>loseLife(),1000);
+              return;
+            }
+            if(idx!==orderedPattern[nextIdx]){
+              // In pattern but wrong order
+              roundFailed=true;
+              c.classList.add('mm-wrong');
+              playSound('wrong');haptic([30,50,30]);mmEdgeFlash();
+              orderedPattern.forEach(pi=>{
+                const col=colorOf[pi];
+                cellEls[pi].classList.add('mm-reveal');
+                cellEls[pi].style.background=col.hex;
+                cellEls[pi].style.opacity='0.5';
+              });
+              _st(()=>loseLife(),1000);
+              return;
+            }
+            // Correct
+            const col=colorOf[idx];
+            c.classList.add('mm-correct');
+            c.style.background=col.hex;
+            c.style.color='#fff';
+            playSound('correct');haptic(10);
+            nextIdx++;
+            updateColorGuide();
+            if(nextIdx>=orderedPattern.length){
+              roundFailed=true;
+              _st(roundComplete,300);
+            }
+          };
+        });
+      }
+
       function roundComplete(){
         correctRounds++;totalRounds++;streak++;if(streak>bestStreak)bestStreak=streak;
-        if(streak>0&&streak%3===0)speedBonus++;
-        haptic(10);
-        pattern.forEach((idx,i)=>_st(()=>{cellEls[idx].classList.add('mm-wave');_st(()=>cellEls[idx].classList.remove('mm-wave'),350);},i*60));
-        toast(`✅ Round ${round} Complete!`);
+        haptic(20);
+        // Wave animation on correct cells
+        pattern.forEach((idx,i)=>_st(()=>{
+          cellEls[idx].classList.add('mm-wave');
+          _st(()=>cellEls[idx].classList.remove('mm-wave'),350);
+        },i*50));
+        // Streak milestone messages
+        if(streak===3)showCombo('🔥 3 STREAK!');
+        else if(streak===5)showCombo('⚡ HOT STREAK × 5!');
+        else if(streak===10)showCombo('👑 LEGEND!');
+        else toast(`✅ Round ${round}!`);
         cells=Math.min(cells+1,m.max);
         round++;
-        _st(doRound,800);
+        setScore(round-1);
+        _st(doRound,900);
       }
+
       reveal();
     }
 
     function loseLife(){
-      lives--;totalRounds++;
+      lives--;totalRounds++;streak=0;
+      // Update hearts in DOM immediately
       const hearts=stage.querySelectorAll('.wc-heart');
-      const h=hearts[lives];
-      if(h){h.textContent='💔';h.classList.add('crack','lost');}
-      toast('❌ -1 Life');
-      if(lives<=0){_st(gameOver,1100);return;}
-      _st(doRound,1100);
+      if(hearts[lives]){
+        hearts[lives].textContent='💔';
+        hearts[lives].classList.add('crack','lost');
+      }
+      toast(`❌ Wrong! ${lives} lives left`);
+      if(lives<=0){_st(gameOver,1200);return;}
+      _st(doRound,1200);
     }
 
     function gameOver(){
-      const finalRound=round; // round in progress when last life was lost
+      const finalRound=round;
       const accuracy=totalRounds?Math.round(correctRounds/totalRounds*100):0;
       const prevBest=S('nz_mm_best_round')||0;
       const newPB=finalRound>prevBest;
-      if(finalRound>prevBest)setS('nz_mm_best_round',finalRound);
+      if(newPB)setS('nz_mm_best_round',finalRound);
       setS('nz_mm_games',(S('nz_mm_games')||0)+1);
       const accH=S('nz_mm_accuracy')||[];accH.push(accuracy);while(accH.length>10)accH.shift();setS('nz_mm_accuracy',accH);
       if(bestStreak>(S('nz_mm_best_streak')||0))setS('nz_mm_best_streak',bestStreak);
@@ -1112,20 +1272,22 @@ function playMemory(body,setScore,end,wrap,startClock){
         if(dc.type==='round')pass=finalRound>=dc.target;
         else if(dc.type==='streak')pass=bestStreak>=dc.target;
         else if(dc.type==='ghost')pass=(mode==='ghost'&&finalRound>=dc.target);
-        if(pass){setS('nz_mm_daily_date',todayKey());setS('nz_mm_daily_done',true);setTimeout(()=>toast('🎯 Daily Challenge complete! 2x XP'),700);}
+        else if(dc.type==='color')pass=(mode==='color'&&finalRound>=dc.target);
+        if(pass){setS('nz_mm_daily_date',todayKey());setS('nz_mm_daily_done',true);setTimeout(()=>toast('🎯 Daily Challenge done! 2x XP'),700);}
       }
       const rank=mmRank(finalRound);
+      if(newPB)confetti(60);
       setScore(finalRound);
       end({
         title:`${rank.em} ${rank.txt}`,emoji:rank.em,
-        sub:`Reached Round ${finalRound}${newPB?' · 🏆 New Best!':''}`,
-        value:finalRound,points:finalRound*2.7,starThresh:[8,15,22],
+        sub:`Round ${finalRound} · ${m.emoji} ${m.label} Mode${newPB?' · 🏆 New Best!':''}`,
+        value:finalRound,points:Math.round(finalRound*2.8),starThresh:[6,12,20],
         statsHtml:`<div class="end-stats">
           <div class="row"><span>Round Reached</span><span class="val">${finalRound}</span></div>
           <div class="row"><span>Personal Best</span><span class="val">${Math.max(finalRound,prevBest)}${newPB?' 🏆':''}</span></div>
-          <div class="row"><span>Accuracy</span><span class="val">${accuracy}%</span></div>
-          <div class="row"><span>Longest Streak</span><span class="val">${bestStreak}</span></div>
-          <div class="row"><span>XP Earned</span><span class="val">+${Math.round(finalRound*2.7)}</span></div>
+          <div class="row"><span>Accuracy</span><span class="val">${accuracy}% (${correctRounds}/${totalRounds})</span></div>
+          <div class="row"><span>Best Streak</span><span class="val">${bestStreak} 🔥</span></div>
+          <div class="row"><span>Mode</span><span class="val">${m.emoji} ${m.label}</span></div>
         </div>${newPB?'<div class="rec">New Personal Best! 🎉</div>':''}`
       });
     }
@@ -1134,98 +1296,215 @@ function playMemory(body,setScore,end,wrap,startClock){
   }
 }
 
-/* ===================== PATTERN IQ ===================== */
+/* ===================== PATTERN IQ (v3 — fully rebuilt) ===================== */
 const PAT_COLORS=['#7C3AED','#4F8EF7','#34D399','#F97316','#F472B6','#FBBF24','#EF4444','#06B6D4'];
+const PAT_COLOR_NAMES=['Purple','Blue','Green','Orange','Pink','Yellow','Red','Cyan'];
 const PAT_SHAPES=['●','■','▲','◆','★','⬟','⬡','✦'];
+const PAT_SHAPE_NAMES=['Circle','Square','Triangle','Diamond','Star','Hexagon','Hex2','Sparkle'];
+
+/* --- Number sequence generators (8 types) --- */
 function genNumSeq(){
+  const rnd=n=>Math.floor(Math.random()*n)+1;
   const types=[
-    ()=>{const s=Math.floor(Math.random()*5)+1,a=Math.floor(Math.random()*10)+2;return{seq:[s,s+a,s+2*a,s+3*a],ans:s+4*a};},
-    ()=>{const s=Math.floor(Math.random()*3)+2,a=Math.floor(Math.random()*3)+2;return{seq:[s,s*a,s*a*a,s*a*a*a],ans:s*a*a*a*a};},
-    ()=>{const s1=Math.floor(Math.random()*5)+1,s2=Math.floor(Math.random()*5)+3;return{seq:[s1,s2,s1+s2,s1+2*s2],ans:2*s1+3*s2};},
-    ()=>{const a=Math.floor(Math.random()*4)+2,b=Math.floor(Math.random()*3)+2;return{seq:[a,b,a+b,b*2],ans:a+b+b*2};},
-    ()=>{const s=Math.floor(Math.random()*3)+1;return{seq:[s,s*2,s*4,s*8],ans:s*16};},
-    ()=>{const a=Math.floor(Math.random()*10)+5,x=Math.floor(Math.random()*4)+2,y=Math.floor(Math.random()*3)+1;return{seq:[a,a+x,a+x-y,a+2*x-y],ans:a+2*x-2*y};},
-    ()=>{const a=Math.floor(Math.random()*4)+1,b=Math.floor(Math.random()*3)+2;return{seq:[a,a+b,a+3*b,a+6*b],ans:a+10*b};},
-    ()=>{const a=Math.floor(Math.random()*8)+10,d=Math.floor(Math.random()*3)+1;return{seq:[a,a-d,a-2*d,a-3*d],ans:a-4*d};},
+    ()=>{const a=rnd(8)+1,d=rnd(9)+2;return{seq:[a,a+d,a+2*d,a+3*d],ans:a+4*d,hint:'+'+d+' each step'};},
+    ()=>{const a=rnd(4)+2,r=rnd(3)+2;return{seq:[a,a*r,a*r*r,a*r*r*r],ans:a*r*r*r*r,hint:'×'+r+' each step'};},
+    ()=>{const a=rnd(6)+1,b=rnd(6)+2;const s=[a,b,a+b,a+2*b,2*a+3*b];return{seq:s.slice(0,4),ans:s[4],hint:'Fibonacci-like'};},
+    ()=>{const n=rnd(5)+1;return{seq:[n*n,(n+1)*(n+1),(n+2)*(n+2),(n+3)*(n+3)],ans:(n+4)*(n+4),hint:'Perfect squares'};},
+    ()=>{const primes=[2,3,5,7,11,13,17,19,23,29];const s=rnd(5);return{seq:primes.slice(s,s+4),ans:primes[s+4],hint:'Prime numbers'};},
+    ()=>{const a=rnd(15)+5,d=rnd(5)+1;return{seq:[a,a-d,a-2*d,a-3*d],ans:a-4*d,hint:'-'+d+' each step'};},
+    ()=>{const a=rnd(6)+2,b=rnd(4)+2;return{seq:[a,a+b,a+3*b,a+6*b],ans:a+10*b,hint:'Gaps: +b,+2b,+3b,+4b'};},
+    ()=>{const a=rnd(4)+2,b=rnd(3)+2;const s=[a,a*b,a*b+a,a*b+a*b];return{seq:s,ans:s[3]+a,hint:'Alternate +,×'};},
   ];
-  return types[Math.floor(Math.random()*types.length)]();
+  const t=types[Math.floor(Math.random()*types.length)]();
+  const dist=new Set([t.ans]);
+  while(dist.size<4){const d=t.ans+Math.floor(Math.random()*22)-11;if(d>0&&d!==t.ans)dist.add(d);}
+  const opts=[...dist].sort(()=>Math.random()-.5);
+  return{...t,opts,answerIdx:opts.indexOf(t.ans)};
 }
-function genSpecialSeq(){
-  const type=Math.floor(Math.random()*4);
-  if(type===0){
-    const a=Math.floor(Math.random()*3)+1,b=Math.floor(Math.random()*3)+2;
-    const s=[a,b,a+b,a+2*b,2*a+3*b];
-    return{seq:s.slice(0,4),ans:s[4],label:'Fibonacci-like'};
-  } else if(type===1){
-    const n=Math.floor(Math.random()*4)+1;
-    return{seq:[n*n,(n+1)*(n+1),(n+2)*(n+2),(n+3)*(n+3)],ans:(n+4)*(n+4),label:'Squares'};
-  } else if(type===2){
-    const primes=[2,3,5,7,11,13,17,19,23];
-    const start=Math.floor(Math.random()*5);
-    return{seq:primes.slice(start,start+4),ans:primes[start+4],label:'Primes'};
-  } else {
-    const a=Math.floor(Math.random()*5)+2,b=2;
-    const s=Math.floor(Math.random()*3)+2;
-    const seq=[s,s+a,(s+a)*b,(s+a)*b+a];
-    return{seq,ans:seq[3]*b,label:'Alternating ×/'};
-  }
-}
+
+/* --- Letter sequence generators --- */
 function genLetterSeq(){
-  const type=Math.floor(Math.random()*2);
+  const rnd=n=>Math.floor(Math.random()*n);
+  const type=rnd(4);
   if(type===0){
-    const skip=Math.floor(Math.random()*3)+1;
-    const start=Math.floor(Math.random()*8);
+    const skip=rnd(3)+1,start=rnd(6);
     const seq=Array.from({length:4},(_,i)=>String.fromCharCode(65+start+i*(skip+1)));
     const ans=String.fromCharCode(65+start+4*(skip+1));
     if(ans.charCodeAt(0)>90)return genLetterSeq();
     const dist=[];
-    while(dist.length<3){const c=String.fromCharCode(65+Math.floor(Math.random()*26));if(!dist.includes(c)&&c!==ans)dist.push(c);}
+    while(dist.length<3){const c=String.fromCharCode(65+rnd(26));if(!dist.includes(c)&&c!==ans)dist.push(c);}
     const opts=[ans,...dist].sort(()=>Math.random()-.5);
-    return{seq,opts,answerIdx:opts.indexOf(ans)};
-  } else {
-    const startC=Math.floor(Math.random()*6)+16;
-    const skip=Math.floor(Math.random()*2)+1;
-    const seqR=Array.from({length:4},(_,i)=>String.fromCharCode(startC-i*skip));
-    const ansR=String.fromCharCode(startC-4*skip);
-    if(ansR.charCodeAt(0)<65)return genLetterSeq();
+    return{seq,opts,answerIdx:opts.indexOf(ans),hint:'Skip +'+skip+' letters forward'};
+  } else if(type===1){
+    const start=rnd(6)+18,skip=rnd(2)+1;
+    const seq=Array.from({length:4},(_,i)=>String.fromCharCode(start-i*skip));
+    const ans=String.fromCharCode(start-4*skip);
+    if(ans.charCodeAt(0)<65)return genLetterSeq();
     const dist=[];
-    while(dist.length<3){const c=String.fromCharCode(65+Math.floor(Math.random()*26));if(!dist.includes(c)&&c!==ansR)dist.push(c);}
-    const opts=[ansR,...dist].sort(()=>Math.random()-.5);
-    return{seq:seqR,opts,answerIdx:opts.indexOf(ansR)};
+    while(dist.length<3){const c=String.fromCharCode(65+rnd(26));if(!dist.includes(c)&&c!==ans)dist.push(c);}
+    const opts=[ans,...dist].sort(()=>Math.random()-.5);
+    return{seq,opts,answerIdx:opts.indexOf(ans),hint:'Going backward -'+skip};
+  } else if(type===2){
+    // alternating skip: +1,+2,+1,+2...
+    const start=rnd(8);
+    const gaps=[1,2,1,2,1];
+    const positions=[start];
+    for(let i=0;i<4;i++)positions.push(positions[i]+gaps[i]);
+    const seq=positions.slice(0,4).map(p=>String.fromCharCode(65+p));
+    const ans=String.fromCharCode(65+positions[4]);
+    if(positions[4]>25||positions[4]<0)return genLetterSeq();
+    const dist=[];
+    while(dist.length<3){const c=String.fromCharCode(65+rnd(26));if(!dist.includes(c)&&c!==ans)dist.push(c);}
+    const opts=[ans,...dist].sort(()=>Math.random()-.5);
+    return{seq,opts,answerIdx:opts.indexOf(ans),hint:'Alternating +1,+2 gaps'};
+  } else {
+    // number+letter pairs
+    const pairs=[['A',1],['C',3],['E',5],['G',7],['I',9]];
+    const start=rnd(3);
+    const seq=pairs.slice(start,start+4).map(p=>p[0]+p[1]);
+    const ans=pairs[start+4]?pairs[start+4][0]+pairs[start+4][1]:'K11';
+    const dist=['B2','D4','F6','J10'].filter(x=>x!==ans).slice(0,3);
+    if(dist.length<3)return genLetterSeq();
+    const opts=[ans,...dist].sort(()=>Math.random()-.5);
+    return{seq,opts,answerIdx:opts.indexOf(ans),hint:'Letter+number both increment'};
   }
 }
-function genRomanSeq(){
-  const toRoman=n=>{
-    const vals=[1000,900,500,400,100,90,50,40,10,9,5,4,1];
-    const syms=['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];
-    let r='';vals.forEach((v,i)=>{while(n>=v){r+=syms[i];n-=v;}});return r;
-  };
-  const step=Math.floor(Math.random()*4)+1;
-  const start=Math.floor(Math.random()*8)+1;
-  const nums=[start,start+step,start+2*step,start+3*step];
-  const ans=start+4*step;
-  const dist=new Set([ans]);
-  while(dist.size<4){const d=ans+Math.floor(Math.random()*6)-3;if(d>0)dist.add(d);}
-  const opts=[...dist].sort(()=>Math.random()-.5);
-  return{seq:nums.map(toRoman),opts:opts.map(toRoman),answerIdx:opts.indexOf(ans)};
+
+/* --- Matrix 3×3 generator (smarter, not always bottom-right missing) --- */
+function genMatrixQ(){
+  const rowShapes=[0,1,2].map(()=>Math.floor(Math.random()*PAT_SHAPES.length));
+  const rowCols=[0,1,2].map(()=>Math.floor(Math.random()*PAT_COLORS.length));
+  // randomly pick which cell is missing (not always index 8)
+  const missingPos=Math.floor(Math.random()*9);
+  const grid=[];
+  for(let r=0;r<3;r++)for(let c=0;c<3;c++)grid.push({s:rowShapes[r],c:rowCols[c]});
+  const missingCell=grid[missingPos];
+  const correct=`${missingCell.s}_${missingCell.c}`;
+  const wrongOpts=new Set();
+  while(wrongOpts.size<3){
+    const ws=(missingCell.s+(Math.floor(Math.random()*4)+1))%PAT_SHAPES.length;
+    const wc=(missingCell.c+(Math.floor(Math.random()*4)+1))%PAT_COLORS.length;
+    const k=`${ws}_${wc}`;
+    if(k!==correct)wrongOpts.add(k);
+  }
+  const opts=[correct,...wrongOpts].sort(()=>Math.random()-.5);
+  const answerIdx=opts.indexOf(correct);
+  const cellHTML=grid.map((cell,i)=>i===missingPos?
+    `<div class="pm-cell missing">?</div>`:
+    `<div class="pm-cell" style="background:${PAT_COLORS[cell.c]};color:#fff;">${PAT_SHAPES[cell.s]}</div>`
+  ).join('');
+  const hint=`Row has same shape, column has same color`;
+  return{cellHTML,opts,answerIdx,hint};
 }
+
+/* --- Color sequence generator (longer, more interesting) --- */
+function genColorSeq(){
+  const shape=PAT_SHAPES[Math.floor(Math.random()*PAT_SHAPES.length)];
+  const type=Math.floor(Math.random()*3);
+  if(type===0){
+    // ABAB pattern - find C in ABCA?BC
+    const a=Math.floor(Math.random()*PAT_COLORS.length);
+    let b=a;while(b===a)b=Math.floor(Math.random()*PAT_COLORS.length);
+    const seq=[a,b,a,b,a];const ans=b;
+    const missingPos=4; // show 4 items, ask 5th
+    const dist=Array.from({length:PAT_COLORS.length},(_,i)=>i).filter(i=>i!==ans).sort(()=>Math.random()-.5).slice(0,3);
+    const opts=[ans,...dist].sort(()=>Math.random()-.5);
+    return{seq:seq.slice(0,4),opts,answerIdx:opts.indexOf(ans),shape,hint:'ABAB repeating pattern'};
+  } else if(type===1){
+    // ABCABC repeating
+    const pool=Array.from({length:PAT_COLORS.length},(_,i)=>i).sort(()=>Math.random()-.5).slice(0,3);
+    const [a,b,c]=pool;
+    const seq=[a,b,c,a,b];const ans=c;
+    const dist=Array.from({length:PAT_COLORS.length},(_,i)=>i).filter(i=>i!==ans&&i!==a&&i!==b).slice(0,3);
+    const opts=[ans,...dist].sort(()=>Math.random()-.5);
+    return{seq,opts,answerIdx:opts.indexOf(ans),shape,hint:'ABC repeating — find next in cycle'};
+  } else {
+    // Rainbow-like: advancing through color wheel
+    const start=Math.floor(Math.random()*PAT_COLORS.length);
+    const seq=Array.from({length:4},(_,i)=>(start+i)%PAT_COLORS.length);
+    const ans=(start+4)%PAT_COLORS.length;
+    const dist=Array.from({length:PAT_COLORS.length},(_,i)=>i).filter(i=>i!==ans).sort(()=>Math.random()-.5).slice(0,3);
+    const opts=[ans,...dist].sort(()=>Math.random()-.5);
+    return{seq,opts,answerIdx:opts.indexOf(ans),shape,hint:'Sequential color progression'};
+  }
+}
+
+/* --- Shape rule question --- */
+function genShapeRuleQ(){
+  // Each row: shapes increase in count 1,2,3 or rotate through types
+  const type=Math.floor(Math.random()*2);
+  if(type===0){
+    // Count pattern: row1→[1,2,3] shapes of same color, find missing count
+    const shape=PAT_SHAPES[Math.floor(Math.random()*4)];
+    const col=PAT_COLORS[Math.floor(Math.random()*PAT_COLORS.length)];
+    const make=(n,s,c)=>Array(n).fill(0).map(()=>`<span style="color:${c};font-size:20px;">${s}</span>`).join('');
+    // 3×3: col increases 1→3, row uses different shapes
+    const shapes3=[0,1,2].map(()=>Math.floor(Math.random()*PAT_SHAPES.length));
+    const cols3=[0,1,2].map(()=>Math.floor(Math.random()*PAT_COLORS.length));
+    const missingRow=Math.floor(Math.random()*3);
+    const missingCol2=Math.floor(Math.random()*3);
+    const correct=`${shapes3[missingRow]}_${cols3[missingCol2]}`;
+    const wrongOpts=new Set();
+    while(wrongOpts.size<3){
+      const ws=(shapes3[missingRow]+(Math.floor(Math.random()*3)+1))%PAT_SHAPES.length;
+      const wc=(cols3[missingCol2]+(Math.floor(Math.random()*3)+1))%PAT_COLORS.length;
+      wrongOpts.add(`${ws}_${wc}`);
+    }
+    const opts=[correct,...wrongOpts].sort(()=>Math.random()-.5);
+    const answerIdx=opts.indexOf(correct);
+    const grid=[];
+    for(let r=0;r<3;r++)for(let c=0;c<3;c++){
+      const isMissing=(r===missingRow&&c===missingCol2);
+      grid.push(isMissing?`<div class="pm-cell missing">?</div>`:
+        `<div class="pm-cell" style="background:${PAT_COLORS[cols3[c]]};color:#fff;font-size:20px;">${PAT_SHAPES[shapes3[r]]}</div>`);
+    }
+    return{cellHTML:grid.join(''),opts,answerIdx,hint:'Same shape per row, same color per column'};
+  } else {
+    return genMatrixQ();
+  }
+}
+
 function playPattern(body,setScore,end,wrap,startClock){
   const record=S('nz_pattern_best')||0;
-  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">Pattern dhundo aur sahi answer chunno! Endless — 3 lives ❤️ jab tak khatam na ho.<br><span style="font-size:11px;color:var(--primary);">⚡ 2 seconds mein jawab = Speed Bonus +1 · ❌ galat/timeout = -1 life</span>${record?`<div style="margin-top:6px;font-size:12px;font-weight:700;color:var(--mint);">🏆 Best: ${record}</div>`:''}<br>
-  <button style="margin-top:10px;padding:10px 24px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="patStart">▶ Start</button>
-</div>`);
-  body.appendChild(instrEl);
-  const host=$(`<div></div>`);body.appendChild(host);
-  let q=0,score=0,bonus=0,arcTimer=null,qStartTs=0,lives=3,streak=0,bestStreak=0;
-  function patHearts(){return `<div class="wc-hearts" style="margin-bottom:6px;">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''} ${(lives===1&&i===0)?'mm-last':''}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>`;}
-  function patLoseLife(){
-    lives--;streak=0;haptic([30,50,30]);toast('❌ -1 Life');
+  // Start screen
+  const screen=$(`<div class="pat-start-screen"></div>`);
+  screen.innerHTML=`
+    <div class="pat-start-hero">
+      <div style="font-size:64px;margin-bottom:8px;">💡</div>
+      <h2 style="margin:0 0 6px;font-size:22px;">Pattern IQ</h2>
+      <p style="font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.5;">
+        Color · Number · Matrix · Letter · Shape patterns<br>
+        <strong>6 types</strong> of questions · Endless with 3 lives
+      </p>
+      ${record?`<div class="pat-best-chip">🏆 Best Score: ${record}</div>`:''}
+    </div>
+    <div class="pat-rules">
+      <div class="pat-rule"><span>⚡</span><span>Answer in 3s = Speed Bonus +1</span></div>
+      <div class="pat-rule"><span>🔥</span><span>Streak × 1.5 multiplier at 3+</span></div>
+      <div class="pat-rule"><span>💡</span><span>Wrong = hint revealed, -1 life</span></div>
+      <div class="pat-rule"><span>🎯</span><span>Harder rounds = more points</span></div>
+    </div>
+    <button class="btn-primary" id="patStart" style="width:100%;margin-top:18px;padding:16px;">Start Game ▶</button>
+  `;
+  body.appendChild(screen);
+
+  const host=$(`<div class="pat-host"></div>`);body.appendChild(host);
+  let q=0,score=0,bonus=0,arcTimer=null,qStartTs=0,lives=3,streak=0,bestStreak=0,combo=1;
+  let lastExplanation='';
+
+  function patHearts(){
+    return `<div class="pat-hud">
+      <div class="wc-hearts">${[0,1,2].map(i=>`<span class="wc-heart ${i>=lives?'lost':''} ${(lives===1&&i===0)?'mm-last':''}">${i>=lives?'💔':'❤️'}</span>`).join('')}</div>
+      <div class="pat-hud-right">
+        <span class="pat-score-badge">${score} pts</span>
+        ${streak>=2?`<span class="pat-streak-badge">🔥${streak}</span>`:''}
+      </div>
+    </div>`;
   }
+
   function showArc(secs,onDone){
     _cti(arcTimer);
     const circ=2*Math.PI*30;
-    const arcEl=host.querySelector('#arcSvg');
-    if(!arcEl)return;
     let remaining=secs*10;
     arcTimer=_si(()=>{
       remaining--;
@@ -1234,130 +1513,193 @@ function playPattern(body,setScore,end,wrap,startClock){
       if(!fg||!num){_cti(arcTimer);return;}
       const pct=remaining/(secs*10);
       fg.style.strokeDashoffset=circ*(1-pct);
-      fg.setAttribute('stroke',remaining<15?'#EF4444':remaining<30?'#F59E0B':'#7C3AED');
+      fg.setAttribute('stroke',remaining<10?'#EF4444':remaining<20?'#F59E0B':'#7C3AED');
       num.textContent=Math.ceil(remaining/10);
       if(remaining<=0){_cti(arcTimer);onDone();}
     },100);
   }
+
+  function getTimerSecs(){
+    // Timer gets shorter as score increases
+    if(score<5)return 7;
+    if(score<12)return 6;
+    if(score<20)return 5;
+    return 4;
+  }
+
+  function getDifficultyLabel(){
+    if(score<5)return{label:'🟢 Easy',color:'#22C55E'};
+    if(score<12)return{label:'🟡 Medium',color:'#EAB308'};
+    if(score<20)return{label:'🔴 Hard',color:'#EF4444'};
+    return{label:'💀 Expert',color:'#7C3AED'};
+  }
+
   function next(){
     if(lives<=0){
       const total=score+bonus;
       const newPB=score>record;
       if(newPB)setS('nz_pattern_best',score);
       setS('nz_pattern_games',(S('nz_pattern_games')||0)+1);
-      if(newPB)confetti(50);
+      if(newPB)confetti(60);
       const acc=q?Math.round(score/q*100):0;
-      end({title:newPB?'New Best! 🏆':'Pattern Master! 💡',emoji:'💡',sub:`${score} correct · ${q} attempted${newPB?' · 🏆':''}`,value:total,points:Math.max(2,total*1.6),starThresh:[8,15,25],
-        statsHtml:`<div class="end-stats"><div class="row"><span>Correct</span><span class="val">${score}</span></div><div class="row"><span>Attempted</span><span class="val">${q}</span></div><div class="row"><span>Speed Bonus</span><span class="val">+${bonus}</span></div><div class="row"><span>Accuracy</span><span class="val">${acc}%</span></div><div class="row"><span>Longest Streak</span><span class="val">${bestStreak} 🔥</span></div><div class="row"><span>Personal Best</span><span class="val">${Math.max(score,record)}${newPB?' 🏆':''}</span></div></div>${newPB?'<div class="rec">New Personal Best! 🎉</div>':''}`});
+      end({
+        title:newPB?'New Best! 🏆':'Pattern Master! 💡',
+        emoji:'💡',
+        sub:`${score} correct · ${q} attempted${newPB?' · 🏆':''}`,
+        value:total,points:Math.max(2,total*1.8),starThresh:[8,18,30],
+        statsHtml:`<div class="end-stats">
+          <div class="row"><span>Correct Answers</span><span class="val">${score}</span></div>
+          <div class="row"><span>Total Attempted</span><span class="val">${q}</span></div>
+          <div class="row"><span>Speed Bonuses</span><span class="val">+${bonus} ⚡</span></div>
+          <div class="row"><span>Accuracy</span><span class="val">${acc}%</span></div>
+          <div class="row"><span>Best Streak</span><span class="val">${bestStreak} 🔥</span></div>
+          <div class="row"><span>Personal Best</span><span class="val">${Math.max(score,record)}${newPB?' 🏆':''}</span></div>
+        </div>${newPB?'<div class="rec">New Personal Best! 🎉</div>':''}`
+      });
       return;
     }
     _cti(arcTimer);
+
+    // Prevent same type 2× in a row
     if(!window._patLastTypes)window._patLastTypes=[];
     const _allTypes=[0,1,2,3,4,5];
-    const _avail=_allTypes.filter(t=>!window._patLastTypes.slice(-2).includes(t));
+    const _avail=_allTypes.filter(t=>!window._patLastTypes.slice(-1).includes(t));
     const type=_avail[Math.floor(Math.random()*_avail.length)];
     window._patLastTypes.push(type);
-    if(window._patLastTypes.length>4)window._patLastTypes.shift();
-    let answerIdx=0,html='';
+    if(window._patLastTypes.length>6)window._patLastTypes.shift();
+
+    const diff=getDifficultyLabel();
+    const timerSecs=getTimerSecs();
+    let answerIdx=0,html='',hint='';
+
     if(type===0){
-      const shape=PAT_SHAPES[Math.floor(Math.random()*PAT_SHAPES.length)];
-      const cidx1=Math.floor(Math.random()*PAT_COLORS.length);
-      let cidx2=cidx1;while(cidx2===cidx1)cidx2=Math.floor(Math.random()*PAT_COLORS.length);
-      const seq=[cidx1,cidx2,cidx1];const ans=cidx2;
-      const allCols=Array.from({length:PAT_COLORS.length},(_,i)=>i).filter(i=>i!==ans);
-      const opts=[ans,...allCols.sort(()=>Math.random()-.5).slice(0,3)].sort(()=>Math.random()-.5);
-      answerIdx=opts.indexOf(ans);
-      html=`<div class="q-type-badge">COLOR</div>
-        <div class="pat-seq">${seq.map(c=>`<div class="pat-item" style="background:${PAT_COLORS[c]}">${shape}</div>`).join('')}<div class="pat-item q">?</div></div>
-        <div class="pat-opts">${opts.map((c,i)=>`<button class="pat-opt" data-i="${i}" style="background:${PAT_COLORS[c]};color:#fff;">${shape}</button>`).join('')}</div>`;
+      // COLOR SEQUENCE — longer, more interesting
+      const res=genColorSeq();
+      answerIdx=res.answerIdx;hint=res.hint;
+      html=`<div class="q-type-badge" style="background:linear-gradient(135deg,#7C3AED,#F472B6);">🎨 COLOR SEQUENCE</div>
+        <div class="pat-instruction">Jo pattern hai, uska agla color kya hoga?</div>
+        <div class="pat-seq pat-seq-lg">${res.seq.map(c=>`<div class="pat-item pat-item-lg" style="background:${PAT_COLORS[c]};box-shadow:0 4px 16px ${PAT_COLORS[c]}55;">${res.shape}</div>`).join('')}<div class="pat-item pat-item-lg pat-q">?</div></div>
+        <div class="pat-opts">${res.opts.map((c,i)=>`<button class="pat-opt pat-opt-color" data-i="${i}" style="background:${PAT_COLORS[c]};box-shadow:0 4px 12px ${PAT_COLORS[c]}44;">${res.shape}<span style="font-size:10px;display:block;margin-top:2px;">${PAT_COLOR_NAMES[c]}</span></button>`).join('')}</div>`;
     } else if(type===1){
-      const {seq,ans}=genNumSeq();
-      const distractors=new Set([ans]);
-      while(distractors.size<4){const d=ans+Math.floor(Math.random()*20)-10;if(d>0)distractors.add(d);}
-      const opts=[...distractors].sort(()=>Math.random()-.5);
-      answerIdx=opts.indexOf(ans);
-      html=`<div class="q-type-badge">NUMBER</div>
-        <div class="pat-seq">${seq.map(n=>`<div class="pat-item" style="background:#7C3AED;font-size:22px;">${n}</div>`).join('')}<div class="pat-item q" style="font-size:22px;">?</div></div>
-        <div class="pat-opts">${opts.map((v,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:24px;font-weight:800;">${v}</button>`).join('')}</div>`;
+      // NUMBER SEQUENCE
+      const res=genNumSeq();
+      answerIdx=res.answerIdx;hint=res.hint;
+      html=`<div class="q-type-badge" style="background:linear-gradient(135deg,#4F8EF7,#7C3AED);">🔢 NUMBER SEQUENCE</div>
+        <div class="pat-instruction">Is number sequence mein agla number kya hai?</div>
+        <div class="pat-seq">${res.seq.map(n=>`<div class="pat-item pat-num" style="background:linear-gradient(135deg,#7C3AED,#4F8EF7);">${n}</div>`).join('')}<div class="pat-item pat-num pat-q">?</div></div>
+        <div class="pat-opts">${res.opts.map((v,i)=>`<button class="pat-opt pat-opt-num" data-i="${i}">${v}</button>`).join('')}</div>`;
     } else if(type===2){
-      const rowShapes=[0,1,2].map(()=>Math.floor(Math.random()*PAT_SHAPES.length));
-      const rowCols=[0,1,2].map(()=>Math.floor(Math.random()*PAT_COLORS.length));
-      const grid=[];
-      for(let r=0;r<3;r++)for(let c=0;c<3;c++)grid.push({s:rowShapes[r],c:rowCols[c]});
-      const missingS=rowShapes[2],missingC=rowCols[2];
-      const correct=`${missingS}_${missingC}`;
-      const wrongOpts=[];
-      while(wrongOpts.length<3){
-        const ws=(missingS+(Math.floor(Math.random()*4)+1))%PAT_SHAPES.length;
-        const wc=(missingC+(Math.floor(Math.random()*4)+1))%PAT_COLORS.length;
-        const k=`${ws}_${wc}`;
-        if(!wrongOpts.includes(k)&&k!==correct)wrongOpts.push(k);
-      }
-      const opts=[correct,...wrongOpts].sort(()=>Math.random()-.5);
-      answerIdx=opts.indexOf(correct);
-      const cellHTML=grid.map((cell,i)=>i===8?`<div class="pm-cell missing">?</div>`:`<div class="pm-cell" style="background:${PAT_COLORS[cell.c]};color:#fff;">${PAT_SHAPES[cell.s]}</div>`).join('');
-      html=`<div class="q-type-badge">MATRIX</div>
-        <div class="pat-matrix">${cellHTML}</div>
-        <div class="pat-opts">${opts.map((k,i)=>{const[s,c]=k.split('_').map(Number);return`<button class="pat-opt" data-i="${i}" style="background:${PAT_COLORS[c]};color:#fff;">${PAT_SHAPES[s]}</button>`;}).join('')}</div>`;
+      // MATRIX — smarter, random missing position
+      const res=genMatrixQ();
+      answerIdx=res.answerIdx;hint=res.hint;
+      html=`<div class="q-type-badge" style="background:linear-gradient(135deg,#F472B6,#F97316);">🔲 MATRIX PATTERN</div>
+        <div class="pat-instruction">"?" wali jagah kaunsa symbol hona chahiye?</div>
+        <div class="pat-matrix-wrap"><div class="pat-matrix">${res.cellHTML}</div></div>
+        <div class="pat-opts">${res.opts.map((k,i)=>{const[s,c]=k.split('_').map(Number);return`<button class="pat-opt" data-i="${i}" style="background:${PAT_COLORS[c]};color:#fff;font-size:22px;box-shadow:0 4px 12px ${PAT_COLORS[c]}44;">${PAT_SHAPES[s]}</button>`;}).join('')}</div>`;
     } else if(type===3){
+      // LETTER SEQUENCE
       const res=genLetterSeq();
-      answerIdx=res.answerIdx;
-      html=`<div class="q-type-badge">LETTER</div>
-        <div class="pat-seq">${res.seq.map(l=>`<div class="pat-item" style="background:#F472B6;font-size:22px;font-weight:900;">${l}</div>`).join('')}<div class="pat-item q" style="font-size:22px;">?</div></div>
-        <div class="pat-opts">${res.opts.map((l,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:24px;font-weight:900;">${l}</button>`).join('')}</div>`;
+      answerIdx=res.answerIdx;hint=res.hint;
+      html=`<div class="q-type-badge" style="background:linear-gradient(135deg,#F472B6,#EC4899);">🔤 LETTER SEQUENCE</div>
+        <div class="pat-instruction">Is letter sequence mein agla letter kya hai?</div>
+        <div class="pat-seq">${res.seq.map(l=>`<div class="pat-item pat-letter">${l}</div>`).join('')}<div class="pat-item pat-letter pat-q">?</div></div>
+        <div class="pat-opts">${res.opts.map((l,i)=>`<button class="pat-opt pat-opt-letter" data-i="${i}">${l}</button>`).join('')}</div>`;
     } else if(type===4){
-      const res=genSpecialSeq();
-      const dist=new Set([res.ans]);
-      while(dist.size<4){const d=res.ans+Math.floor(Math.random()*20)-10;if(d>0)dist.add(d);}
-      const opts=[...dist].sort(()=>Math.random()-.5);
-      answerIdx=opts.indexOf(res.ans);
-      html=`<div class="q-type-badge">SEQUENCE</div>
-        <div style="font-size:10px;color:var(--text2);text-align:center;margin-bottom:4px;">${res.label}</div>
-        <div class="pat-seq">${res.seq.map(n=>`<div class="pat-item" style="background:#34D399;font-size:20px;">${n}</div>`).join('')}<div class="pat-item q" style="font-size:20px;">?</div></div>
-        <div class="pat-opts">${opts.map((v,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:22px;font-weight:800;">${v}</button>`).join('')}</div>`;
+      // SPECIAL SEQUENCE (Fibonacci, Squares, Primes)
+      const res=genNumSeq();
+      answerIdx=res.answerIdx;hint=res.hint;
+      html=`<div class="q-type-badge" style="background:linear-gradient(135deg,#34D399,#059669);">🧮 SPECIAL SEQUENCE</div>
+        <div class="pat-instruction">Mathematical pattern dekho — agla number?</div>
+        <div class="pat-seq">${res.seq.map(n=>`<div class="pat-item pat-special">${n}</div>`).join('')}<div class="pat-item pat-special pat-q">?</div></div>
+        <div class="pat-opts">${res.opts.map((v,i)=>`<button class="pat-opt pat-opt-special" data-i="${i}">${v}</button>`).join('')}</div>`;
     } else {
-      const res=genRomanSeq();
-      answerIdx=res.answerIdx;
-      html=`<div class="q-type-badge">ROMAN</div>
-        <div class="pat-seq">${res.seq.map(r=>`<div class="pat-item" style="background:#F97316;font-size:16px;font-weight:900;">${r}</div>`).join('')}<div class="pat-item q" style="font-size:16px;">?</div></div>
-        <div class="pat-opts">${res.opts.map((r,i)=>`<button class="pat-opt" data-i="${i}" style="font-size:15px;font-weight:900;">${r}</button>`).join('')}</div>`;
+      // SHAPE RULE MATRIX
+      const res=genShapeRuleQ();
+      answerIdx=res.answerIdx;hint=res.hint;
+      html=`<div class="q-type-badge" style="background:linear-gradient(135deg,#F97316,#FBBF24);">🔷 SHAPE MATRIX</div>
+        <div class="pat-instruction">Har row aur column ka rule follow karo — "?" kya hai?</div>
+        <div class="pat-matrix-wrap"><div class="pat-matrix">${res.cellHTML}</div></div>
+        <div class="pat-opts">${res.opts.map((k,i)=>{const[s,c]=k.split('_').map(Number);return`<button class="pat-opt" data-i="${i}" style="background:${PAT_COLORS[c]};color:#fff;font-size:22px;box-shadow:0 4px 12px ${PAT_COLORS[c]}44;">${PAT_SHAPES[s]}</button>`;}).join('')}</div>`;
     }
+
     const arcHtml=`<div class="arc-wrap">
-      <svg id="arcSvg" width="70" height="70" viewBox="0 0 70 70">
-        <circle cx="35" cy="35" r="30" fill="none" stroke="var(--border)" stroke-width="5"/>
+      <svg id="arcSvg" width="66" height="66" viewBox="0 0 70 70">
+        <circle cx="35" cy="35" r="30" fill="none" stroke="rgba(124,58,237,0.15)" stroke-width="5"/>
         <circle id="arcFg" cx="35" cy="35" r="30" fill="none" stroke="#7C3AED" stroke-width="5" stroke-linecap="round" transform="rotate(-90 35 35)" stroke-dasharray="${2*Math.PI*30}" stroke-dashoffset="0"/>
       </svg>
-      <div class="arc-num" id="arcNum">4</div>
+      <div class="arc-num" id="arcNum">${timerSecs}</div>
     </div>`;
-    host.innerHTML=patHearts()+arcHtml+html+`<div style="text-align:center;margin-top:8px;color:var(--text2);font-size:12px;">Round ${q+1} · ❤️ ${lives}${streak>=2?' · 🔥 '+streak:''}</div>`;
+
+    host.innerHTML=`
+      ${patHearts()}
+      <div class="pat-diff-row">
+        <span class="pat-diff-chip" style="color:${diff.color}">${diff.label}</span>
+        ${arcHtml}
+        <span style="font-size:12px;color:var(--text2);">Q${q+1}</span>
+      </div>
+      ${html}
+    `;
+
     qStartTs=Date.now();
-    showArc(4,()=>{playSound('wrong');patLoseLife();q++;_st(next,700);});
+    showArc(timerSecs,()=>{
+      // Timeout — show hint and lose life
+      playSound('wrong');
+      const hintEl=document.createElement('div');
+      hintEl.className='pat-hint-box';
+      hintEl.innerHTML=`⏱ Time's up! · <span>💡 Hint: ${hint}</span>`;
+      host.appendChild(hintEl);
+      lives--;streak=0;combo=1;
+      toast('⏱ Too slow! -1 life');
+      q++;_st(next,1500);
+    });
+
     host.querySelectorAll('.pat-opt').forEach(btn=>{
       btn.onclick=()=>{
         _cti(arcTimer);
+        host.querySelectorAll('.pat-opt').forEach(b=>b.disabled=true);
         const chosen=+btn.dataset.i;
         const elapsed=Date.now()-qStartTs;
         if(chosen===answerIdx){
-          playSound('correct');score++;setScore(score);streak++;if(streak>bestStreak)bestStreak=streak;
+          playSound('correct');
           btn.classList.add('correct-ans');
-          if(elapsed<2000){
-            bonus++;
-            const bEl=document.createElement('div');
-            bEl.style.cssText='text-align:center;font-size:12px;font-weight:700;color:#F59E0B;margin-top:4px;';
-            bEl.textContent='⚡ Speed Bonus! +1';
-            host.appendChild(bEl);
-          }
+          streak++;if(streak>bestStreak)bestStreak=streak;
+          if(streak===3){combo=1.5;showCombo('🔥 STREAK x1.5');}
+          if(streak===6){combo=2;showCombo('⚡ ON FIRE x2!');}
+          const pts=Math.round((elapsed<3000?2:1)*combo);
+          score+=pts;setScore(score);
+          const fast=elapsed<3000;
+          if(fast){bonus++;showCombo('⚡ SPEED +1');}
+          // Show score popup
+          const popup=document.createElement('div');
+          popup.className='pat-pts-popup';
+          popup.textContent=`+${pts}${fast?' ⚡':''}`;
+          host.appendChild(popup);
+          setTimeout(()=>popup.remove(),700);
+          q++;_st(next,500);
         } else {
           playSound('wrong');
           btn.classList.add('wrong-ans');
+          // Highlight correct answer
           host.querySelectorAll('.pat-opt')[answerIdx].classList.add('correct-ans');
-          patLoseLife();
+          // Show hint
+          const hintEl=document.createElement('div');
+          hintEl.className='pat-hint-box pat-hint-wrong';
+          hintEl.innerHTML=`❌ Wrong! · <span>💡 Hint: ${hint}</span>`;
+          host.appendChild(hintEl);
+          lives--;streak=0;combo=1;
+          toast('❌ Wrong! -1 life');
+          q++;_st(next,1200);
         }
-        setTimeout(()=>{q++;next();},600);
       };
     });
   }
-  instrEl.querySelector('#patStart').onclick=()=>{instrEl.remove();startClock&&startClock();next();};
+
+  screen.querySelector('#patStart').onclick=()=>{
+    screen.remove();
+    startClock&&startClock();
+    window._patLastTypes=[];
+    next();
+  };
 }
 
 /* ===================== WORD FLASH (endless) ===================== */
@@ -2030,159 +2372,325 @@ function playStroopX(body,setScore,end,wrap,startClock){
   }
 }
 
-/* ===================== IQ TEST (redesigned) ===================== */
+/* ===================== IQ TEST v3 (completely rebuilt — 15 Qs, 60 pool, fair IQ) ===================== */
 const IQ_POOL=[
-  {q:'Sequence: 2, 4, 8, 16, __. Agla number?',opts:['24','32','20','28'],ans:1,cat:'numerical',diff:'easy',exp:'Geometric ×2: 16×2 = 32.'},
-  {q:'Sequence: 2, 6, 12, 20, 30, __',opts:['40','42','44','38'],ans:1,cat:'numerical',diff:'medium',exp:'Differences 4,6,8,10,12 → 30+12 = 42.'},
-  {q:'Fibonacci: 1, 1, 2, 3, 5, 8, __',opts:['11','13','12','14'],ans:1,cat:'numerical',diff:'easy',exp:'Pichle 2 ka sum: 5+8 = 13.'},
-  {q:'450 ka 10% kitna hai?',opts:['40','45','50','55'],ans:1,cat:'numerical',diff:'easy',exp:'450÷10 = 45.'},
-  {q:'100 − 17 − 23 − 15 = ?',opts:['45','50','55','42'],ans:0,cat:'numerical',diff:'easy',exp:'83→60→45.'},
-  {q:'Kaunsa number 4 aur 6 dono se divisible hai?',opts:['10','14','12','16'],ans:2,cat:'numerical',diff:'easy',exp:'LCM(4,6)=12.'},
-  {q:'Sequence: 1, 4, 9, 16, 25, __',opts:['30','36','35','49'],ans:1,cat:'numerical',diff:'medium',exp:'Squares: 6² = 36.'},
-  {q:'Sequence: 3, 6, 11, 18, 27, __',opts:['36','38','40','35'],ans:1,cat:'numerical',diff:'medium',exp:'Differences 3,5,7,9,11 → 27+11 = 38.'},
-  {q:'Sequence: 1, 2, 6, 24, 120, __',opts:['600','720','480','240'],ans:1,cat:'numerical',diff:'hard',exp:'Factorials ×n: 120×6 = 720.'},
-  {q:'25% of 240 = ?',opts:['48','60','50','72'],ans:1,cat:'numerical',diff:'easy',exp:'240÷4 = 60.'},
-  {q:'Average of 10, 20, 30, 40 = ?',opts:['20','25','30','22'],ans:1,cat:'numerical',diff:'easy',exp:'100÷4 = 25.'},
-  {q:'Ek train 60km/h se 2 ghante chalti hai. Doori?',opts:['60km','100km','120km','180km'],ans:2,cat:'numerical',diff:'easy',exp:'60×2 = 120km.'},
-  {q:'Koi 90km 1.5 ghante mein. Speed?',opts:['45km/h','60km/h','90km/h','30km/h'],ans:1,cat:'numerical',diff:'medium',exp:'90÷1.5 = 60.'},
-  {q:'3 hafte mein kitne din?',opts:['18','21','24','28'],ans:1,cat:'numerical',diff:'easy',exp:'3×7 = 21.'},
-  {q:'6×4=24, 5×3=15, to 7×5=?',opts:['30','35','40','45'],ans:1,cat:'numerical',diff:'easy',exp:'7×5 = 35.'},
-  {q:'5 logon ki line mein Rahul 3rd hai. Uske baad kitne log?',opts:['1','2','3','4'],ans:1,cat:'logic',diff:'easy',exp:'5−3 = 2.'},
-  {q:'Neha, Priya se 3 saal badi. 5 saal baad Priya 20. Abhi Neha?',opts:['18','23','22','20'],ans:0,cat:'logic',diff:'medium',exp:'Priya=15, Neha=18.'},
-  {q:'3 cats 3 mice ko 3 min mein pakadti hain. 100 mice ke liye kitni cats?',opts:['100','33','3','10'],ans:2,cat:'logic',diff:'medium',exp:'1 cat=1 mouse/3min, to 3 cats kaafi.'},
-  {q:'A ki umar B se double. Dono ka sum 36. B ki umar?',opts:['9','10','12','14'],ans:2,cat:'logic',diff:'medium',exp:'3B=36 → B=12.'},
-  {q:'Aaj Wednesday hai. 10 din baad kaunsa din?',opts:['Monday','Friday','Saturday','Sunday'],ans:2,cat:'logic',diff:'medium',exp:'Wed+7=Wed, +3=Saturday.'},
-  {q:'Algebra: 3x − 7 = 14. x = ?',opts:['5','6','7','8'],ans:2,cat:'logic',diff:'hard',exp:'3x=21 → x=7.'},
-  {q:'Sab roses flowers hain. Kuch flowers fade jaate hain. To?',opts:['Sab roses fade','Kuch roses fade ho sakte','Koi rose fade nahi','Roses flowers nahi'],ans:1,cat:'logic',diff:'hard',exp:'Sirf kuch roses fade ho sakte hain — valid.'},
-  {q:'Ek ghadi roz 5 min slow hoti hai. 12 ghante mein kitni slow?',opts:['2.5 min','5 min','1 min','10 min'],ans:0,cat:'logic',diff:'hard',exp:'5min/24h → 12h mein 2.5 min.'},
-  {q:'Agar MANGO ka code 50 hai (A=1..). APPLE ka code?',opts:['50','51','52','53'],ans:0,cat:'verbal',diff:'medium',exp:'1+16+16+12+5 = 50.'},
-  {q:'Odd one out: Cat, Dog, Rose, Lion',opts:['Cat','Dog','Rose','Lion'],ans:2,cat:'verbal',diff:'easy',exp:'Rose plant hai.'},
-  {q:'BOOK : READING :: FORK : ?',opts:['Kitchen','Eating','Spoon','Metal'],ans:1,cat:'verbal',diff:'easy',exp:'Book reading ke liye, fork eating ke liye.'},
-  {q:'Ephemeral ka matlab?',opts:['Permanent','Short-lived','Heavy','Bright'],ans:1,cat:'verbal',diff:'hard',exp:'Ephemeral = bahut short-lived.'},
-  {q:'Odd one out: Apple, Mango, Carrot, Banana',opts:['Apple','Mango','Carrot','Banana'],ans:2,cat:'verbal',diff:'easy',exp:'Carrot vegetable hai.'},
-  {q:'HOT : COLD :: UP : ?',opts:['Sky','Down','High','Top'],ans:1,cat:'verbal',diff:'easy',exp:'Opposites: up↔down.'},
-  {q:'Agar CIPHER reverse karo to?',opts:['REHPIC','REPHIC','RHEPIC','REHPCI'],ans:0,cat:'verbal',diff:'medium',exp:'C-I-P-H-E-R → R-E-H-P-I-C.'},
-  {q:'Benevolent ka matlab?',opts:['Cruel','Kind','Lazy','Angry'],ans:1,cat:'verbal',diff:'medium',exp:'Benevolent = kind/generous.'},
-  {q:'Letter sequence: A, C, E, G, __',opts:['H','I','J','K'],ans:1,cat:'pattern',diff:'easy',exp:'+2 har baar → I.'},
-  {q:'Letter sequence: Z, X, V, T, __',opts:['P','Q','R','S'],ans:2,cat:'pattern',diff:'medium',exp:'−2 har baar → R.'},
-  {q:'Series: AZ, BY, CX, __',opts:['DV','DW','EW','DX'],ans:1,cat:'pattern',diff:'medium',exp:'Aage A,B,C,D; peeche Z,Y,X,W → DW.'},
-  {q:'Series: J, F, M, A, M, __ (mahine)',opts:['J','A','S','O'],ans:0,cat:'pattern',diff:'medium',exp:'Jan..May,June → J.'},
-  {q:'Pattern: 1A, 2B, 3C, 4D, __',opts:['5E','5F','6E','4E'],ans:0,cat:'pattern',diff:'easy',exp:'Number+1, letter next → 5E.'},
-  {q:'Series: 2, A, 4, B, 6, C, 8, __',opts:['D','E','9','10'],ans:0,cat:'pattern',diff:'medium',exp:'Even numbers + A,B,C,D → D.'},
-  {q:'Ghadi mein 3:15 hain. Hour aur minute hand ke beech angle?',opts:['0°','7.5°','15°','30°'],ans:1,cat:'spatial',diff:'hard',exp:'Hour=97.5°, Minute=90° → 7.5°.'},
-  {q:'Ek square ka perimeter 40cm. Area?',opts:['80cm²','100cm²','160cm²','40cm²'],ans:1,cat:'spatial',diff:'medium',exp:'Side 10 → 100cm².'},
-  {q:'Mirror image mein REPLIT?',opts:['TILPER','TILEPR','TIRPLE','TIPREL'],ans:0,cat:'spatial',diff:'medium',exp:'Reverse → TILPER.'},
-  {q:'Ek triangle ke angles 60° aur 70°. Teesra?',opts:['40°','50°','60°','70°'],ans:1,cat:'spatial',diff:'easy',exp:'180−60−70 = 50°.'},
-  {q:'Ek cube ki kitni faces?',opts:['4','8','6','12'],ans:2,cat:'spatial',diff:'easy',exp:'Cube = 6 faces.'},
-  {q:'Ek cube ke kitne edges hote hain?',opts:['8','10','12','6'],ans:2,cat:'spatial',diff:'medium',exp:'Cube = 12 edges.'},
-  {q:'Circle ko 4 baar half-fold karo to kitne layers?',opts:['8','16','4','12'],ans:1,cat:'spatial',diff:'hard',exp:'2⁴ = 16 layers.'},
-  {q:'Rectangle 8×6. Diagonal kitni?',opts:['10','12','14','9'],ans:0,cat:'spatial',diff:'medium',exp:'√(64+36)=√100=10.'},
+  /* ---- NUMERICAL (14 questions) ---- */
+  {q:'🔢 Series: 2, 4, 8, 16, __ = ?',opts:['24','32','20','28'],ans:1,cat:'numerical',diff:'easy',exp:'×2 har baar: 16×2 = 32'},
+  {q:'🔢 Series: 1, 4, 9, 16, 25, __ = ?',opts:['30','36','35','49'],ans:1,cat:'numerical',diff:'easy',exp:'Perfect squares: 6² = 36'},
+  {q:'🔢 Series: 3, 6, 11, 18, 27, __ = ?',opts:['36','38','40','35'],ans:1,cat:'numerical',diff:'medium',exp:'Differences +3,+5,+7,+9,+11 → 27+11 = 38'},
+  {q:'🔢 Fibonacci: 1, 1, 2, 3, 5, 8, 13, __ = ?',opts:['18','21','20','19'],ans:1,cat:'numerical',diff:'easy',exp:'8+13 = 21 (sum of previous two)'},
+  {q:'🔢 Series: 1, 2, 6, 24, 120, __ = ?',opts:['600','720','480','240'],ans:1,cat:'numerical',diff:'hard',exp:'Factorials! 120×6 = 720'},
+  {q:'🔢 Series: 100, 50, 25, 12.5, __ = ?',opts:['5','6.25','8','10'],ans:1,cat:'numerical',diff:'medium',exp:'÷2 har baar: 12.5÷2 = 6.25'},
+  {q:'🔢 25% of 480 = ?',opts:['96','120','100','112'],ans:1,cat:'numerical',diff:'easy',exp:'480÷4 = 120'},
+  {q:'🔢 Ek train 75 km/h se 3 ghante chalti hai. Total doori?',opts:['200km','225km','250km','300km'],ans:1,cat:'numerical',diff:'easy',exp:'75×3 = 225 km'},
+  {q:'🔢 Ek kaam 12 aadmi 10 din mein karte hain. 15 aadmi kitne din mein?',opts:['6','7','8','9'],ans:2,cat:'numerical',diff:'hard',exp:'12×10 = 120 man-days; 120÷15 = 8 din'},
+  {q:'🔢 Kaunse number ka cube 125 hai?',opts:['3','4','5','6'],ans:2,cat:'numerical',diff:'easy',exp:'5³ = 5×5×5 = 125'},
+  {q:'🔢 Ek circular track ka circumference 440m. Diameter kitna? (π=22/7)',opts:['100m','120m','140m','160m'],ans:2,cat:'numerical',diff:'hard',exp:'C=πd → d=440×7/22 = 140m'},
+  {q:'🔢 3x + 5 = 20. x = ?',opts:['3','4','5','6'],ans:2,cat:'numerical',diff:'easy',exp:'3x=15 → x=5'},
+  {q:'🔢 Series: 5, 10, 20, 40, __ = ?',opts:['60','70','80','90'],ans:2,cat:'numerical',diff:'easy',exp:'×2 each: 40×2 = 80'},
+  {q:'🔢 Agar 15% discount hai ₹800 pe, to price?',opts:['₹660','₹680','₹700','₹640'],ans:1,cat:'numerical',diff:'medium',exp:'800×0.15=120; 800-120=₹680'},
+
+  /* ---- LOGIC (12 questions) ---- */
+  {q:'🧠 Neha, Priya se 3 saal badi hai. 5 saal baad Priya 20 saal hogi. Abhi Neha ki umar?',opts:['15','16','18','20'],ans:2,cat:'logic',diff:'medium',exp:'Priya abhi=15; Neha=15+3=18'},
+  {q:'🧠 3 cats 3 mice 3 minutes mein pakadti hain. 9 mice 9 minutes mein — kitni cats chahiye?',opts:['9','3','6','1'],ans:1,cat:'logic',diff:'medium',exp:'1 cat=1 mouse/3min, so 3 cats kaafi hain'},
+  {q:'🧠 Sab roses flowers hain. Kuch flowers jaldi fade ho jaate hain. Isliye:',opts:['Sab roses fade honge','Koi rose fade nahi hoga','Kuch roses fade ho sakti hain','Roses flowers nahi hain'],ans:2,cat:'logic',diff:'hard',exp:'Valid inference: kuch roses fade ho sakti hain'},
+  {q:'🧠 Aaj Monday hai. 100 din baad kaunsa day hoga?',opts:['Tuesday','Wednesday','Thursday','Friday'],ans:1,cat:'logic',diff:'medium',exp:'100 = 14×7 + 2; Mon+2 = Wednesday'},
+  {q:'🧠 Ek ghadi din mein 4 min fast ho jaati hai. Agar 6:00 AM pe sahi thi, to kaun se real time pe 6:08 AM dikhayegi?',opts:['6:05 AM','6:06 AM','6:07 AM','6:08 AM'],ans:1,cat:'logic',diff:'hard',exp:'4min/1440min×real mins; real time=6:06 AM approx'},
+  {q:'🧠 5 logon ki row mein Ram 2nd aur right se 4th hai. Row mein kitne log hain?',opts:['5','6','7','8'],ans:0,cat:'logic',diff:'medium',exp:'Left se 2nd + Right se 4th - 1 = 2+4-1 = 5'},
+  {q:'🧠 Agar "PENCIL" ko GDQFLP likhte hain, to "PAPER" ka code?',opts:['SDQHU','SDSHQ','SDSHV','SDQHV'],ans:0,cat:'logic',diff:'hard',exp:'+3 each letter: P+3=S, A+3=D, P+3=S, E+3=H, R+3=U = SDSHU'},
+  {q:'🧠 Ek shop mein 40% discount hai. Original price ₹1500. Discounted price?',opts:['₹850','₹900','₹950','₹1050'],ans:1,cat:'logic',diff:'medium',exp:'1500×0.40=600; 1500-600=₹900'},
+  {q:'🧠 Ek number ko 5 se multiply karo, phir 8 ghataao, to 42. Number?',opts:['8','9','10','11'],ans:2,cat:'logic',diff:'easy',exp:'5n-8=42 → 5n=50 → n=10'},
+  {q:'🧠 24 June ka age se 7 days pehle wala day?',opts:['16 June','17 June','18 June','19 June'],ans:1,cat:'logic',diff:'easy',exp:'24-7=17 June'},
+  {q:'🧠 A, B se tez hai. C, A se tez hai. Sabse tez kaun?',opts:['A','B','C','Sab equal'],ans:2,cat:'logic',diff:'easy',exp:'C > A > B; C sabse tez hai'},
+  {q:'🧠 2 pipes ek tank bharte hain. Pipe A 6h mein, Pipe B 4h mein. Dono saath mein?',opts:['2h','2.4h','3h','3.6h'],ans:1,cat:'logic',diff:'hard',exp:'1/6+1/4=5/12; 12/5=2.4 hours'},
+
+  /* ---- VERBAL (10 questions) ---- */
+  {q:'📚 BOOK : READING :: FORK : ?',opts:['Kitchen','Eating','Spoon','Metal'],ans:1,cat:'verbal',diff:'easy',exp:'Book reading ke liye hai, fork eating ke liye'},
+  {q:'📚 HOT : COLD :: DARK : ?',opts:['Night','Black','Light','Moon'],ans:2,cat:'verbal',diff:'easy',exp:'Opposites: hot↔cold, dark↔light'},
+  {q:'📚 Odd one out: Apple, Mango, Carrot, Banana',opts:['Apple','Mango','Carrot','Banana'],ans:2,cat:'verbal',diff:'easy',exp:'Carrot ek sabzi hai, baaki fruits'},
+  {q:'📚 Odd one out: Violin, Guitar, Flute, Sitar',opts:['Violin','Guitar','Flute','Sitar'],ans:2,cat:'verbal',diff:'medium',exp:'Flute wind instrument hai; baki string instruments'},
+  {q:'📚 "Ephemeral" ka matlab?',opts:['Permanent','Very brief','Heavy','Brilliant'],ans:1,cat:'verbal',diff:'hard',exp:'Ephemeral = lasting a very short time (kuch ghante/din)'},
+  {q:'📚 "Benevolent" ka matlab?',opts:['Angry','Mean','Kind/Generous','Lazy'],ans:2,cat:'verbal',diff:'medium',exp:'Benevolent = well-meaning, generous, kind'},
+  {q:'📚 Agar CIPHER ko reverse karo to?',opts:['REHPIC','REPHIC','RHEPIC','REPIHC'],ans:0,cat:'verbal',diff:'medium',exp:'C-I-P-H-E-R reversed = R-E-H-P-I-C'},
+  {q:'📚 PEN : INK :: LAMP : ?',opts:['Switch','Bulb','Light','Electricity'],ans:3,cat:'verbal',diff:'medium',exp:'Pen ink se chalta hai, lamp electricity se'},
+  {q:'📚 DOCTOR : HOSPITAL :: TEACHER : ?',opts:['Student','Book','School','Class'],ans:2,cat:'verbal',diff:'easy',exp:'Doctor hospital mein kaam karta, teacher school mein'},
+  {q:'📚 "Laconic" ka matlab?',opts:['Talkative','Very brief','Funny','Serious'],ans:1,cat:'verbal',diff:'hard',exp:'Laconic = using very few words, concise'},
+
+  /* ---- PATTERN (12 questions) ---- */
+  {q:'🔡 Letter series: A, C, E, G, __ = ?',opts:['H','I','J','K'],ans:1,cat:'pattern',diff:'easy',exp:'+2 skip har baar: G ke baad I'},
+  {q:'🔡 Letter series: Z, X, V, T, __ = ?',opts:['P','Q','R','S'],ans:2,cat:'pattern',diff:'medium',exp:'-2 har baar: T ke baad R'},
+  {q:'🔡 Series: AZ, BY, CX, __ = ?',opts:['DV','DW','EW','DX'],ans:1,cat:'pattern',diff:'medium',exp:'Aage A→D; Peeche Z→W → DW'},
+  {q:'🔡 Pattern: 1A, 2B, 3C, 4D, __ = ?',opts:['5E','5F','6E','4E'],ans:0,cat:'pattern',diff:'easy',exp:'Number +1, letter next → 5E'},
+  {q:'🔡 Series: J, F, M, A, M, J, J, __ (months)',opts:['A','S','O','N'],ans:0,cat:'pattern',diff:'medium',exp:'Jan,Feb,Mar,Apr,May,Jun,Jul → August = A'},
+  {q:'🔡 Number+letter: 2B, 4D, 6F, 8H, __ = ?',opts:['9I','10I','10J','12J'],ans:2,cat:'pattern',diff:'medium',exp:'+2 number, +2 letter: 8+2=10, H+2=J → 10J'},
+  {q:'🔡 Series: 1, 1, 2, 3, 5, 8, 13, 21, __ = ?',opts:['30','34','32','28'],ans:1,cat:'pattern',diff:'medium',exp:'Fibonacci: 13+21 = 34'},
+  {q:'🔡 Letter-number: A1, C3, E5, G7, __ = ?',opts:['H8','I8','I9','J10'],ans:2,cat:'pattern',diff:'medium',exp:'+2 letter, +2 number: G+2=I, 7+2=9 → I9'},
+  {q:'🔡 Series: ▲□▲▲□□▲▲▲□□□ __ = ?',opts:['▲▲▲▲','□□□□','▲□□□','□▲▲▲'],ans:0,cat:'pattern',diff:'hard',exp:'1,2,3,4 pattern: 4 triangles come next'},
+  {q:'🔡 Series: 2, 3, 5, 7, 11, 13, __ = ?',opts:['15','17','14','16'],ans:1,cat:'pattern',diff:'medium',exp:'Prime numbers series: next prime after 13 = 17'},
+  {q:'🔡 Series: Monday, Wednesday, Friday, __ = ?',opts:['Saturday','Sunday','Tuesday','Thursday'],ans:1,cat:'pattern',diff:'easy',exp:'Skip 1 day: +2 each time → Sunday'},
+  {q:'🔡 Code: if 3→9, 4→16, 5→25, then 7→?',opts:['42','47','49','56'],ans:2,cat:'pattern',diff:'easy',exp:'n² pattern: 7² = 49'},
+
+  /* ---- SPATIAL (12 questions) ---- */
+  {q:'📐 Ek square ka perimeter 48cm hai. Area kitna?',opts:['96cm²','128cm²','144cm²','196cm²'],ans:2,cat:'spatial',diff:'medium',exp:'Side=48÷4=12; Area=12²=144cm²'},
+  {q:'📐 Ek triangle ke 2 angles 60° aur 75° hain. Teesra angle?',opts:['35°','40°','45°','50°'],ans:2,cat:'spatial',diff:'easy',exp:'180-60-75 = 45°'},
+  {q:'📐 Ek cube ke kitne faces hote hain?',opts:['4','6','8','12'],ans:1,cat:'spatial',diff:'easy',exp:'Cube = 6 faces (top, bottom, front, back, left, right)'},
+  {q:'📐 Ek cube ke kitne vertices (corners)?',opts:['6','8','10','12'],ans:1,cat:'spatial',diff:'easy',exp:'Cube = 8 corners (vertices)'},
+  {q:'📐 Ek rectangle 12×5 ka diagonal kitna?',opts:['11','12','13','14'],ans:2,cat:'spatial',diff:'medium',exp:'√(12²+5²) = √(144+25) = √169 = 13'},
+  {q:'📐 Ghadi mein 6:00 baje hour aur minute hand ke beech angle?',opts:['90°','120°','150°','180°'],ans:3,cat:'spatial',diff:'easy',exp:'6:00 pe dono ek doosre ke opposite = 180°'},
+  {q:'📐 Ek cylinder ki height 10cm, radius 7cm. Volume? (π=22/7)',opts:['1540cm³','1520cm³','1460cm³','1610cm³'],ans:0,cat:'spatial',diff:'hard',exp:'πr²h = 22/7×49×10 = 1540cm³'},
+  {q:'📐 "MAPS" ka mirror image kya hoga?',opts:['SPAM','SPAM','SMAP','MAPS'],ans:1,cat:'spatial',diff:'medium',exp:'Mirror image = reverse: M-A-P-S → S-P-A-M'},
+  {q:'📐 Ek kagaz ko 3 baar fold karo. Kitni layers?',opts:['6','8','9','12'],ans:1,cat:'spatial',diff:'medium',exp:'2³ = 8 layers'},
+  {q:'📐 Ghadi mein 3:00 baje hour aur minute hand ke beech angle?',opts:['60°','75°','90°','120°'],ans:2,cat:'spatial',diff:'easy',exp:'3:00 pe = 3×30° = 90°'},
+  {q:'📐 Ek hexagon ke kitne sides?',opts:['5','6','7','8'],ans:1,cat:'spatial',diff:'easy',exp:'Hexagon = 6 sides (hexa = 6)'},
+  {q:'📐 Ek regular octagon ke interior angles ka sum?',opts:['900°','1080°','1260°','720°'],ans:1,cat:'spatial',diff:'hard',exp:'(n-2)×180 = 6×180 = 1080°'},
 ];
-const IQ_CATS={logic:{label:'Logic',color:'#7C3AED'},numerical:{label:'Numerical',color:'#4F8EF7'},verbal:{label:'Verbal',color:'#34D399'},spatial:{label:'Spatial',color:'#F97316'},pattern:{label:'Pattern',color:'#F472B6'}};
-const IQ_DIFF_W={easy:1,medium:1.5,hard:2.2};
-const IQ_TIMER={easy:25000,medium:20000,hard:14000};
-const IQ_N=10;
+const IQ_CATS={
+  logic:{label:'🧠 Logic',color:'#7C3AED'},
+  numerical:{label:'🔢 Numerical',color:'#4F8EF7'},
+  verbal:{label:'📚 Verbal',color:'#34D399'},
+  spatial:{label:'📐 Spatial',color:'#F97316'},
+  pattern:{label:'🔡 Pattern',color:'#F472B6'}
+};
+const IQ_DIFF_W={easy:1,medium:1.8,hard:3.0};
+const IQ_TIMER={easy:30000,medium:22000,hard:16000};
+const IQ_N=15; // 15 questions per test, from pool of 60
+
 function iqClassify(iq){
-  if(iq>=140)return{label:'Genius',pct:99};
-  if(iq>=130)return{label:'Very Superior',pct:98};
-  if(iq>=120)return{label:'Superior',pct:91};
-  if(iq>=110)return{label:'Above Average',pct:75};
-  if(iq>=90)return{label:'Average',pct:50};
-  if(iq>=80)return{label:'Below Average',pct:25};
-  return{label:'Keep Practicing',pct:9};
+  if(iq>=145)return{label:'🌟 Genius',pct:99,color:'#F97316'};
+  if(iq>=130)return{label:'⚡ Very Superior',pct:98,color:'#7C3AED'};
+  if(iq>=120)return{label:'🏆 Superior',pct:91,color:'#4F8EF7'};
+  if(iq>=110)return{label:'🧠 Above Average',pct:75,color:'#34D399'};
+  if(iq>=90)return{label:'💪 Average',pct:50,color:'#22C55E'};
+  if(iq>=80)return{label:'📈 Below Average',pct:25,color:'#EAB308'};
+  return{label:'🌱 Keep Practicing',pct:10,color:'#94A3B8'};
 }
+
 function playIQTest(body,setScore,end,wrap,startClock){
-  const pool=[...IQ_POOL];
-  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
-  const QS=pool.slice(0,IQ_N);
+  // Shuffle pool and pick balanced 15 Qs (3 easy, 7 medium, 5 hard across categories)
+  function buildTestSet(){
+    const byDiff={easy:[],medium:[],hard:[]};
+    IQ_POOL.forEach(q=>{const d=q.diff||'medium';if(byDiff[d])byDiff[d].push(q);});
+    byDiff.easy.sort(()=>Math.random()-.5);
+    byDiff.medium.sort(()=>Math.random()-.5);
+    byDiff.hard.sort(()=>Math.random()-.5);
+    return [...byDiff.easy.slice(0,3),...byDiff.medium.slice(0,7),...byDiff.hard.slice(0,5)].sort(()=>Math.random()-.5);
+  }
+  const QS=buildTestSet();
   let qi=0,correct=0,weightSum=0,weightGot=0,speedSum=0,speedCount=0,fastest=null;
   const catStats={};
   Object.keys(IQ_CATS).forEach(c=>catStats[c]={got:0,total:0});
-  const host=$(`<div style="padding:0 4px;"></div>`);
-  body.appendChild(host);
+
   const bestIQ=S('nz_iq_best')||0;
-  const intro=$(`<div class="instr" style="margin-bottom:14px;"><strong>🧩 IQ Test</strong><br>${IQ_N} random reasoning questions — Logic, Numerical, Verbal, Spatial & Pattern.<br><span style="font-size:11px;color:var(--primary);">Faster + harder correct answers = higher IQ.</span>${bestIQ?`<div style="margin-top:6px;font-size:12px;font-weight:700;color:var(--mint);">🏆 Best IQ: ${bestIQ}</div>`:''}<br><button class="start-btn" id="iqStart" style="margin-top:10px;">Start Test ▶</button></div>`);
-  body.appendChild(intro);
-  intro.querySelector('#iqStart').onclick=()=>{intro.remove();startClock&&startClock();showQ();};
+
+  // ---- Intro screen ----
+  const introEl=$(`<div class="iq-intro"></div>`);
+  introEl.innerHTML=`
+    <div class="iq-intro-hero">
+      <div style="font-size:60px;margin-bottom:8px;">🧩</div>
+      <h2 style="margin:0 0 8px;">IQ Test</h2>
+      <p style="font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.5;">
+        ${IQ_N} questions · Logic · Numerical · Verbal · Spatial · Pattern
+      </p>
+      ${bestIQ?`<div class="iq-best-chip">🏆 Your Best IQ: ${bestIQ}</div>`:''}
+    </div>
+    <div class="iq-intro-rules">
+      <div class="iq-rule"><span>⏱</span><span>Timer per question (faster = better score)</span></div>
+      <div class="iq-rule"><span>🎯</span><span>Hard questions = 3× more IQ points</span></div>
+      <div class="iq-rule"><span>💡</span><span>Explanation shown after every answer</span></div>
+      <div class="iq-rule"><span>📊</span><span>Category breakdown at the end</span></div>
+    </div>
+    <div class="iq-cat-preview">
+      ${Object.entries(IQ_CATS).map(([,v])=>`<span class="iq-cat-chip-sm" style="background:${v.color}22;color:${v.color};border:1px solid ${v.color}44;">${v.label}</span>`).join('')}
+    </div>
+    <button class="btn-primary" id="iqStart" style="width:100%;margin-top:20px;padding:16px;font-size:16px;">
+      Start Test ▶
+    </button>
+  `;
+  body.appendChild(introEl);
+
+  const host=$(`<div class="iq-host"></div>`);
+  body.appendChild(host);
+
+  introEl.querySelector('#iqStart').onclick=()=>{
+    introEl.style.animation='fadeOut .2s ease forwards';
+    setTimeout(()=>{introEl.remove();startClock&&startClock();showQ();},200);
+  };
+
   function finish(){
     const wAcc=weightSum?weightGot/weightSum:0;
+    // Speed factor: how fast relative to timer
     const speedFactor=speedCount?Math.max(0,Math.min(1,1-(speedSum/speedCount))):0.5;
-    let iq=Math.round(60+wAcc*80+(speedFactor-0.5)*16);
-    iq=Math.max(55,Math.min(160,iq));
+    // IQ formula: base 70, accuracy contributes 0-70 pts, speed contributes 0-20 pts
+    let iq=Math.round(70+wAcc*70+speedFactor*20);
+    iq=Math.max(60,Math.min(155,iq));
     const cls=iqClassify(iq);
     const prevBest=S('nz_iq_best')||0;
     const newPB=iq>prevBest;
     if(newPB)setS('nz_iq_best',iq);
     setS('nz_iq_games',(S('nz_iq_games')||0)+1);
     setScore(iq);
-    if(newPB)confetti(60);
+    if(newPB||iq>=120)confetti(70);
+
     const catRows=Object.keys(catStats).filter(c=>catStats[c].total>0).map(c=>{
-      const st=catStats[c];const pctv=Math.round(st.got/st.total*100);
-      return `<div class="iq-cat-row"><span class="iq-cat-name" style="color:${IQ_CATS[c].color}">${IQ_CATS[c].label}</span><span class="iq-cat-bar"><span class="iq-cat-fill" style="width:${pctv}%;background:${IQ_CATS[c].color}"></span></span><span class="iq-cat-val">${st.got}/${st.total}</span></div>`;
+      const st=catStats[c];
+      const pctv=Math.round(st.got/st.total*100);
+      const col=IQ_CATS[c].color;
+      return`<div class="iq-cat-row">
+        <span class="iq-cat-name" style="color:${col}">${IQ_CATS[c].label}</span>
+        <span class="iq-cat-bar"><span class="iq-cat-fill" style="width:${pctv}%;background:${col}"></span></span>
+        <span class="iq-cat-val">${st.got}/${st.total}</span>
+      </div>`;
     }).join('');
-    const gPct=Math.round((iq-55)/(160-55)*100);
+
+    const gPct=Math.round((iq-60)/(155-60)*100);
     const circ=Math.round(2*Math.PI*52);
-    const gauge=`<div class="iq-gauge"><svg width="150" height="150" viewBox="0 0 120 120" style="transform:rotate(-90deg);"><circle cx="60" cy="60" r="52" fill="none" stroke="var(--border)" stroke-width="10"/><circle id="iqArc" cx="60" cy="60" r="52" fill="none" stroke="url(#iqG)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${circ}"/><defs><linearGradient id="iqG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C3AED"/><stop offset="1" stop-color="#34D399"/></linearGradient></defs></svg><div class="iq-gauge-inner"><div class="iq-gauge-num" id="iqNum">0</div><div class="iq-gauge-lbl">IQ</div></div></div>`;
+    const gauge=`<div class="iq-gauge">
+      <svg width="150" height="150" viewBox="0 0 120 120" style="transform:rotate(-90deg);">
+        <circle cx="60" cy="60" r="52" fill="none" stroke="var(--border)" stroke-width="10"/>
+        <circle id="iqArc" cx="60" cy="60" r="52" fill="none" stroke="url(#iqG)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${circ}"/>
+        <defs><linearGradient id="iqG" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="${cls.color}"/>
+          <stop offset="1" stop-color="#34D399"/>
+        </linearGradient></defs>
+      </svg>
+      <div class="iq-gauge-inner">
+        <div class="iq-gauge-num" id="iqNum">0</div>
+        <div class="iq-gauge-lbl">IQ</div>
+      </div>
+    </div>`;
+
     end({
       title:cls.label,emoji:'🧩',
       sub:`Top ${100-cls.pct}% · ${correct}/${IQ_N} correct${newPB?' · 🏆 New Best!':''}`,
-      value:iq,points:Math.max(3,Math.round((iq-55)*0.3)),starThresh:[90,110,130],
-      statsHtml:`${gauge}<div class="end-stats"><div class="row"><span>Estimated IQ</span><span class="val">${iq}</span></div><div class="row"><span>Classification</span><span class="val">${cls.label}</span></div><div class="row"><span>Percentile</span><span class="val">Top ${100-cls.pct}%</span></div><div class="row"><span>Correct</span><span class="val">${correct}/${IQ_N}</span></div><div class="row"><span>Fastest Answer</span><span class="val">${fastest!=null?(fastest/1000).toFixed(1)+'s':'—'}</span></div><div class="row"><span>Personal Best</span><span class="val">${Math.max(iq,prevBest)}${newPB?' 🏆':''}</span></div></div><div class="iq-cats"><div class="iq-cats-title">Category Breakdown</div>${catRows}</div>${newPB?'<div class="rec">New Best IQ! 🎉</div>':''}`
+      value:iq,points:Math.max(3,Math.round((iq-60)*0.35)),starThresh:[90,110,130],
+      statsHtml:`
+        ${gauge}
+        <div class="end-stats">
+          <div class="row"><span>Estimated IQ</span><span class="val" style="color:${cls.color};font-weight:800;">${iq}</span></div>
+          <div class="row"><span>Classification</span><span class="val">${cls.label}</span></div>
+          <div class="row"><span>Percentile</span><span class="val">Top ${100-cls.pct}%</span></div>
+          <div class="row"><span>Correct</span><span class="val">${correct}/${IQ_N}</span></div>
+          <div class="row"><span>Fastest Answer</span><span class="val">${fastest!=null?(fastest/1000).toFixed(1)+'s':'—'}</span></div>
+          <div class="row"><span>Personal Best</span><span class="val">${Math.max(iq,prevBest)}${newPB?' 🏆':''}</span></div>
+        </div>
+        <div class="iq-cats">
+          <div class="iq-cats-title">📊 Category Performance</div>
+          ${catRows}
+        </div>
+        ${newPB?'<div class="rec">🎉 New Best IQ Score!</div>':''}
+      `
     });
+
     _st(()=>{
-      const arc=wrap.querySelector('#iqArc');const num=wrap.querySelector('#iqNum');
-      if(arc){arc.style.transition='stroke-dashoffset 1.4s cubic-bezier(.22,1,.36,1)';arc.style.strokeDashoffset=circ*(1-gPct/100);}
-      if(num){const start=performance.now();const tick=t=>{const k=Math.min(1,(t-start)/1400);const e=1-Math.pow(1-k,3);num.textContent=Math.round(iq*e);if(k<1)requestAnimationFrame(tick);};requestAnimationFrame(tick);}
-    },60);
+      const arc=wrap.querySelector('#iqArc');
+      const num=wrap.querySelector('#iqNum');
+      if(arc){arc.style.transition='stroke-dashoffset 1.6s cubic-bezier(.22,1,.36,1)';arc.style.strokeDashoffset=circ*(1-gPct/100);}
+      if(num){
+        const start=performance.now();
+        const tick=t=>{const k=Math.min(1,(t-start)/1600);const e=1-Math.pow(1-k,3);num.textContent=Math.round(iq*e);if(k<1)requestAnimationFrame(tick);};
+        requestAnimationFrame(tick);
+      }
+    },80);
   }
+
   function showQ(){
     if(qi>=QS.length){finish();return;}
     const {q,opts,ans,diff,exp,cat}=QS[qi];
     const w=IQ_DIFF_W[diff]||1;
-    weightSum+=w;catStats[cat].total++;
+    weightSum+=w;
+    catStats[cat]=catStats[cat]||{got:0,total:0};
+    catStats[cat].total++;
+
     const timeMs=IQ_TIMER[diff]||20000;
-    const lvl=diff==='easy'?{label:'🟢 Easy',color:'#22C55E'}:diff==='medium'?{label:'🟡 Medium',color:'#EAB308'}:{label:'🔴 Hard',color:'#EF4444'};
-    const catInfo=IQ_CATS[cat];
+    const diffInfo=diff==='easy'?{label:'🟢 Easy',color:'#22C55E'}:diff==='medium'?{label:'🟡 Medium',color:'#EAB308'}:{label:'🔴 Hard',color:'#EF4444'};
+    const catInfo=IQ_CATS[cat]||{label:cat,color:'#888'};
+
     let barT=null,elapsed=0,answered=false;
     const tsStart=Date.now();
-    host.innerHTML=`<div class="timer-bar"><div class="timer-fill timer-green" id="iqBar" style="width:100%"></div></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="font-size:12px;font-weight:700;color:${lvl.color}">${lvl.label}</span><span class="iq-cat-chip" style="background:${catInfo.color}">${catInfo.label}</span><span style="font-size:12px;font-weight:700;color:var(--text2)">Q${qi+1}/${IQ_N}</span></div><div style="font-size:15px;font-weight:600;margin-bottom:14px;line-height:1.5;">${q}</div><div style="display:flex;flex-direction:column;gap:8px;" id="iqOpts">${opts.map((o,i)=>`<button class="math-opt iq-opt" style="text-align:left;padding:12px 14px;font-size:13px;min-height:44px;" data-i="${i}">${String.fromCharCode(65+i)}. ${o}</button>`).join('')}</div>`;
-    function showExp(msg,color){
-      const el=document.createElement('div');
-      el.style.cssText='margin-top:10px;padding:8px 12px;background:var(--card);border-radius:10px;font-size:12px;line-height:1.5;border-left:3px solid '+color+';';
-      el.innerHTML=`<span style="color:${color};font-weight:700;">${msg}</span><br><span style="color:var(--text2);">💡 ${exp}</span>`;
-      host.appendChild(el);
+
+    // Progress dots
+    const progressDots=Array.from({length:IQ_N},(_,i)=>{
+      if(i<qi)return'<span class="iq-dot iq-dot-done"></span>';
+      if(i===qi)return'<span class="iq-dot iq-dot-active"></span>';
+      return'<span class="iq-dot"></span>';
+    }).join('');
+
+    host.innerHTML=`
+      <div class="iq-progress-bar-wrap">
+        <div class="iq-progress-bar" style="width:${(qi/IQ_N)*100}%;"></div>
+      </div>
+      <div class="iq-q-header">
+        <span class="iq-diff-tag" style="color:${diffInfo.color};border-color:${diffInfo.color}44;">${diffInfo.label}</span>
+        <span class="iq-cat-chip" style="background:${catInfo.color}22;color:${catInfo.color};">${catInfo.label}</span>
+        <span class="iq-q-num">Q${qi+1}/${IQ_N}</span>
+      </div>
+      <div class="iq-dots">${progressDots}</div>
+      <div class="timer-bar" style="margin-bottom:14px;"><div class="timer-fill timer-green" id="iqBar" style="width:100%"></div></div>
+      <div class="iq-question">${q}</div>
+      <div class="iq-opts" id="iqOpts">
+        ${opts.map((o,i)=>`<button class="iq-opt" data-i="${i}">
+          <span class="iq-opt-letter">${String.fromCharCode(65+i)}</span>
+          <span class="iq-opt-text">${o}</span>
+        </button>`).join('')}
+      </div>
+    `;
+
+    function showExp(correct,msg){
+      const expEl=document.createElement('div');
+      expEl.className=`iq-exp-box ${correct?'iq-exp-correct':'iq-exp-wrong'}`;
+      expEl.innerHTML=`
+        <div class="iq-exp-icon">${correct?'✅':'❌'}</div>
+        <div>
+          <div style="font-weight:700;font-size:13px;">${msg}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:3px;">💡 ${exp}</div>
+        </div>
+      `;
+      host.appendChild(expEl);
     }
+
     barT=_si(()=>{
       elapsed+=100;
       const pct=Math.max(0,100-elapsed/timeMs*100);
       const bar=wrap.querySelector('#iqBar');
-      if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
+      if(bar){
+        bar.style.width=pct+'%';
+        bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');
+      }
       if(elapsed>=timeMs&&!answered){
         _cti(barT);answered=true;
         speedSum+=1;speedCount++;
-        host.querySelectorAll('.iq-opt').forEach((b,i)=>{if(i===ans)b.classList.add('correct-ans');b.disabled=true;});
-        showExp("⏱ Time's up!",'#EF4444');
-        qi++;_st(showQ,1700);
+        host.querySelectorAll('.iq-opt').forEach((b,i)=>{
+          if(i===ans)b.classList.add('correct-ans');
+          b.disabled=true;
+        });
+        showExp(false,"⏱ Time's up!");
+        playSound('wrong');
+        qi++;_st(showQ,2000);
       }
     },100);
+
     host.querySelectorAll('.iq-opt').forEach(b=>{
       b.onclick=()=>{
         if(answered)return;
         _cti(barT);answered=true;
         const elapsedMs=Date.now()-tsStart;
-        speedSum+=Math.min(1,elapsedMs/timeMs);speedCount++;
+        speedSum+=Math.min(1,elapsedMs/timeMs);
+        speedCount++;
         if(fastest==null||elapsedMs<fastest)fastest=elapsedMs;
         const chosen=+b.dataset.i;
-        if(chosen===ans){
-          playSound('correct');correct++;weightGot+=w;catStats[cat].got++;setScore(correct);
-          b.classList.add('correct-ans');showExp('✅ Correct!','#22C55E');
-        } else {
-          playSound('wrong');b.classList.add('wrong-ans');
-          host.querySelectorAll('.iq-opt').forEach((x,i)=>{if(i===ans)x.classList.add('correct-ans');});
-          showExp('❌ Wrong!','#EF4444');
-        }
         host.querySelectorAll('.iq-opt').forEach(x=>x.disabled=true);
-        qi++;_st(showQ,1700);
+        if(chosen===ans){
+          playSound('correct');haptic(15);
+          correct++;weightGot+=w;catStats[cat].got++;setScore(correct);
+          b.classList.add('correct-ans');
+          showExp(true,'Correct!');
+        } else {
+          playSound('wrong');haptic([20,40,20]);
+          b.classList.add('wrong-ans');
+          host.querySelectorAll('.iq-opt').forEach((x,i)=>{if(i===ans)x.classList.add('correct-ans');});
+          showExp(false,'Wrong!');
+        }
+        qi++;_st(showQ,2200);
       };
     });
   }
