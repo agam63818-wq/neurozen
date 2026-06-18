@@ -2784,12 +2784,12 @@ function drawLineChart(host,data){
 
 /* ===================== RELAX ===================== */
 const SOUNDS=[
-  {name:'Rain',emoji:'🌧',desc:'Rainfall + thunder'},
-  {name:'Ocean',emoji:'🌊',desc:'Waves + seagulls'},
-  {name:'Forest',emoji:'🌲',desc:'Wind + birdsong'},
-  {name:'White Noise',emoji:'💨',desc:'Breathing rhythm'},
-  {name:'Deep Focus',emoji:'🎯',desc:'40Hz binaural beats'},
-  {name:'432 Hz',emoji:'🎵',desc:'Natural healing tone'},
+  {name:'528 Hz Healing',emoji:'🧬',desc:'Cellular repair frequency'},
+  {name:'Deep Theta',emoji:'🌊',desc:'6Hz meditation waves'},
+  {name:'Study Focus',emoji:'📚',desc:'Alpha waves for concentration'},
+  {name:'Singing Bowl',emoji:'🔔',desc:'Tibetan bowl resonance'},
+  {name:'Soft Piano Drone',emoji:'🎹',desc:'Ambient harmonic pad'},
+  {name:'Om Tone',emoji:'🕉️',desc:'136.1Hz sacred frequency'},
 ];
 let relaxAudio={ctx:null,master:null,nodes:[],timers:[],playing:-1,targetVol:0.7,paused:false};
 
@@ -2825,6 +2825,7 @@ function makeNoiseBuffer(ac,type){
   return buf;
 }
 
+/* birdChirp retained for potential future use */
 function birdChirp(ac,dest){
   try{
     const o=ac.createOscillator(),g=ac.createGain();
@@ -2864,168 +2865,157 @@ function playRelaxSound(idx,vol){
 function buildRelaxSound(idx,ac,master){
   function addN(n){relaxAudio.nodes.push(n);return n;}
   function addT(t){relaxAudio.timers.push(t);return t;}
+
   if(idx===0){
-    // Rain: pink noise + raindrop spikes + low thunder
-    const src=ac.createBufferSource();src.buffer=makeNoiseBuffer(ac,'pink');src.loop=true;
-    const flt=ac.createBiquadFilter();flt.type='lowpass';flt.frequency.value=3800;flt.Q.value=0.5;
-    src.connect(flt);flt.connect(master);src.start();addN(src);
-    addT(setInterval(()=>{
-      if(relaxAudio.playing!==0)return;
-      try{
-        const d=ac.createBufferSource();d.buffer=makeNoiseBuffer(ac,'white');
-        const df=ac.createBiquadFilter();df.type='bandpass';df.frequency.value=800+Math.random()*4000;df.Q.value=8;
-        const dg=ac.createGain();const t=ac.currentTime;
-        dg.gain.setValueAtTime(0,t);dg.gain.linearRampToValueAtTime(0.04+Math.random()*0.09,t+0.008);
-        dg.gain.exponentialRampToValueAtTime(0.0001,t+0.05+Math.random()*0.09);
-        d.onended=()=>{try{d.disconnect();}catch(e){}};
-        d.connect(df);df.connect(dg);dg.connect(master);d.start(t);d.stop(t+0.18);
-      }catch(e){}
-    },120));
-    function thunder(){
-      addT(setTimeout(()=>{
-        if(relaxAudio.playing!==0)return;
-        try{
-          const r=ac.createOscillator();r.type='sawtooth';r.frequency.value=35+Math.random()*45;
-          const rg=ac.createGain();const t=ac.currentTime;
-          rg.gain.setValueAtTime(0,t);rg.gain.linearRampToValueAtTime(0.18,t+0.6);
-          rg.gain.setValueAtTime(0.18,t+1.8);rg.gain.linearRampToValueAtTime(0,t+3.2);
-          r.connect(rg);rg.connect(master);r.start(t);r.stop(t+3.5);
-        }catch(e){}
-        thunder();
-      },30000+Math.random()*40000));
-    }
-    thunder();
+    /* ── 528 Hz HEALING ─────────────────────────────────────────────────────
+       Pure 528Hz sine + slow tremolo LFO (0.15Hz, 15% depth) + 264Hz sub
+       ──────────────────────────────────────────────────────────────────── */
+    // Primary 528Hz tone
+    const oMain=ac.createOscillator();const gMain=ac.createGain();
+    oMain.type='sine';oMain.frequency.value=528;gMain.gain.value=0.30;
+    oMain.connect(gMain);gMain.connect(master);oMain.start();addN(oMain);
+    // Tremolo LFO — 0.15Hz, depth 15% of gain (oscillates ±0.045 around 0.30)
+    const tLfo=ac.createOscillator();const tLfoG=ac.createGain();
+    tLfo.type='sine';tLfo.frequency.value=0.15;tLfoG.gain.value=0.045;
+    tLfo.connect(tLfoG);tLfoG.connect(gMain.gain);tLfo.start();addN(tLfo);
+    // Sub-harmonic 264Hz at 20% of main (0.30 × 0.20 = 0.06)
+    const oSub=ac.createOscillator();const gSub=ac.createGain();
+    oSub.type='sine';oSub.frequency.value=264;gSub.gain.value=0.06;
+    oSub.connect(gSub);gSub.connect(master);oSub.start();addN(oSub);
+
   }else if(idx===1){
-    // Ocean: brown noise + 0.08Hz LFO sweeping lowpass 200-800Hz + crashes + seagulls
-    const src=ac.createBufferSource();src.buffer=makeNoiseBuffer(ac,'brown');src.loop=true;
-    const flt=ac.createBiquadFilter();flt.type='lowpass';flt.frequency.value=500;
-    const lfo=ac.createOscillator();const lg=ac.createGain();
-    lfo.type='sine';lfo.frequency.value=0.08;lg.gain.value=300;
-    lfo.connect(lg);lg.connect(flt.frequency);
-    const ng=ac.createGain();ng.gain.value=0.7;
-    src.connect(flt);flt.connect(ng);ng.connect(master);
-    src.start();lfo.start();addN(src);addN(lfo);
-    function crash(){
-      addT(setTimeout(()=>{
-        if(relaxAudio.playing!==1)return;
-        try{
-          const c=ac.createBufferSource();c.buffer=makeNoiseBuffer(ac,'white');
-          const cf=ac.createBiquadFilter();cf.type='lowpass';cf.frequency.value=1400;
-          const cg=ac.createGain();const t=ac.currentTime;
-          cg.gain.setValueAtTime(0,t);cg.gain.linearRampToValueAtTime(0.35,t+0.4);cg.gain.exponentialRampToValueAtTime(0.0001,t+2.8);
-          c.onended=()=>{try{c.disconnect();}catch(e){}};
-          c.connect(cf);cf.connect(cg);cg.connect(master);c.start(t);c.stop(t+3.2);
-        }catch(e){}
-        crash();
-      },5000+Math.random()*6000));
-    }
-    crash();
-    function seagull(){
-      addT(setTimeout(()=>{
-        if(relaxAudio.playing!==1)return;
-        if(Math.random()<0.35){
-          try{
-            const o=ac.createOscillator();const sg=ac.createGain();
-            const t=ac.currentTime;const f=700+Math.random()*700;
-            o.type='sine';o.frequency.setValueAtTime(f,t);o.frequency.linearRampToValueAtTime(f*1.4,t+0.3);o.frequency.linearRampToValueAtTime(f*0.75,t+0.8);
-            sg.gain.setValueAtTime(0,t);sg.gain.linearRampToValueAtTime(0.06,t+0.12);sg.gain.linearRampToValueAtTime(0,t+1);
-            o.connect(sg);sg.connect(master);o.start(t);o.stop(t+1.1);
-          }catch(e){}
-        }
-        seagull();
-      },18000+Math.random()*55000));
-    }
-    seagull();
-  }else if(idx===2){
-    // Forest: bandpass wind noise + slow swell LFO + 5 bird generators + cricket bursts
-    const src=ac.createBufferSource();src.buffer=makeNoiseBuffer(ac,'white');src.loop=true;
-    const flt=ac.createBiquadFilter();flt.type='bandpass';flt.frequency.value=650;flt.Q.value=0.35;
-    const wg=ac.createGain();wg.gain.value=0.38;
-    src.connect(flt);flt.connect(wg);wg.connect(master);src.start();addN(src);
-    const wlfo=ac.createOscillator();const wlg=ac.createGain();
-    wlfo.type='sine';wlfo.frequency.value=0.12;wlg.gain.value=0.14;
-    wlfo.connect(wlg);wlg.connect(wg.gain);wlfo.start();addN(wlfo);
-    for(let bi=0;bi<5;bi++){
-      const bFn=()=>{
-        if(relaxAudio.playing!==2)return;
-        birdChirp(ac,master);
-        addT(setTimeout(bFn,3000+Math.random()*7000));
-      };
-      addT(setTimeout(bFn,Math.random()*6000));
-    }
-    addT(setInterval(()=>{
-      if(relaxAudio.playing!==2)return;
-      if(Math.random()<0.55){
-        try{
-          const o=ac.createOscillator();const cg=ac.createGain();
-          o.type='square';o.frequency.value=3200+Math.random()*1800;
-          const t=ac.currentTime;
-          cg.gain.setValueAtTime(0,t);cg.gain.linearRampToValueAtTime(0.018,t+0.008);
-          cg.gain.setValueAtTime(0.018,t+0.04);cg.gain.linearRampToValueAtTime(0,t+0.06);
-          o.connect(cg);cg.connect(master);o.start(t);o.stop(t+0.07);
-        }catch(e){}
-      }
-    },300));
-  }else if(idx===3){
-    // White noise with 0.05Hz breathing LFO on gain
-    const src=ac.createBufferSource();src.buffer=makeNoiseBuffer(ac,'white');src.loop=true;
-    const flt=ac.createBiquadFilter();flt.type='lowpass';flt.frequency.value=14000;
-    const ng=ac.createGain();ng.gain.value=0.48;
-    src.connect(flt);flt.connect(ng);ng.connect(master);src.start();addN(src);
-    const lfo=ac.createOscillator();const lg=ac.createGain();
-    lfo.type='sine';lfo.frequency.value=0.05;lg.gain.value=0.14;
-    lfo.connect(lg);lg.connect(ng.gain);lfo.start();addN(lfo);
-  }else if(idx===4){
-    // Deep Focus: 200Hz left ear + 240Hz right ear binaural + quiet pink noise
+    /* ── DEEP THETA 6Hz ──────────────────────────────────────────────────────
+       Binaural: 200Hz left, 206Hz right → 6Hz theta perceived beat
+       Underlay: pink noise at 8% through lowpass 800Hz
+       ──────────────────────────────────────────────────────────────────── */
     try{
       const oL=ac.createOscillator();const pL=ac.createStereoPanner();const gL=ac.createGain();
-      oL.type='sine';oL.frequency.value=200;pL.pan.value=-1;gL.gain.value=0.28;
+      oL.type='sine';oL.frequency.value=200;pL.pan.value=-1;gL.gain.value=0.26;
       oL.connect(gL);gL.connect(pL);pL.connect(master);oL.start();addN(oL);
       const oR=ac.createOscillator();const pR=ac.createStereoPanner();const gR=ac.createGain();
-      oR.type='sine';oR.frequency.value=240;pR.pan.value=1;gR.gain.value=0.28;
+      oR.type='sine';oR.frequency.value=206;pR.pan.value=1;gR.gain.value=0.26;
       oR.connect(gR);gR.connect(pR);pR.connect(master);oR.start();addN(oR);
     }catch(e){
-      const o=ac.createOscillator();const g=ac.createGain();
-      o.type='sine';o.frequency.value=220;g.gain.value=0.18;
-      o.connect(g);g.connect(master);o.start();addN(o);
+      // Fallback (no StereoPanner): single 203Hz tone
+      const oF=ac.createOscillator();const gF=ac.createGain();
+      oF.type='sine';oF.frequency.value=203;gF.gain.value=0.22;
+      oF.connect(gF);gF.connect(master);oF.start();addN(oF);
     }
+    // Pink noise underlay at 8%, lowpass 800Hz
     const ns=ac.createBufferSource();ns.buffer=makeNoiseBuffer(ac,'pink');ns.loop=true;
-    const nf=ac.createBiquadFilter();nf.type='lowpass';nf.frequency.value=2800;
-    const nsg=ac.createGain();nsg.gain.value=0.1;
+    const nf=ac.createBiquadFilter();nf.type='lowpass';nf.frequency.value=800;
+    const nsg=ac.createGain();nsg.gain.value=0.08;
     ns.connect(nf);nf.connect(nsg);nsg.connect(master);ns.start();addN(ns);
+
+  }else if(idx===2){
+    /* ── STUDY FOCUS 10Hz ALPHA ──────────────────────────────────────────────
+       Binaural: 220Hz left, 230Hz right → 10Hz alpha wave
+       Underlay: pink noise through lowpass 2000Hz at 10%
+       ──────────────────────────────────────────────────────────────────── */
+    try{
+      const oL=ac.createOscillator();const pL=ac.createStereoPanner();const gL=ac.createGain();
+      oL.type='sine';oL.frequency.value=220;pL.pan.value=-1;gL.gain.value=0.25;
+      oL.connect(gL);gL.connect(pL);pL.connect(master);oL.start();addN(oL);
+      const oR=ac.createOscillator();const pR=ac.createStereoPanner();const gR=ac.createGain();
+      oR.type='sine';oR.frequency.value=230;pR.pan.value=1;gR.gain.value=0.25;
+      oR.connect(gR);gR.connect(pR);pR.connect(master);oR.start();addN(oR);
+    }catch(e){
+      const oF=ac.createOscillator();const gF=ac.createGain();
+      oF.type='sine';oF.frequency.value=225;gF.gain.value=0.20;
+      oF.connect(gF);gF.connect(master);oF.start();addN(oF);
+    }
+    // Pink noise underlay at 10%, lowpass 2000Hz
+    const ns=ac.createBufferSource();ns.buffer=makeNoiseBuffer(ac,'pink');ns.loop=true;
+    const nf=ac.createBiquadFilter();nf.type='lowpass';nf.frequency.value=2000;
+    const nsg=ac.createGain();nsg.gain.value=0.10;
+    ns.connect(nf);nf.connect(nsg);nsg.connect(master);ns.start();addN(ns);
+
+  }else if(idx===3){
+    /* ── SINGING BOWL ────────────────────────────────────────────────────────
+       Inharmonic bowl spectrum: fundamental F + 2.1× + 3.3× + 4.7× partials
+       Long attack (3s) + long decay (8s), loop with staggered overlap
+       Random ±2 cents pitch drift per partial for organic shimmer
+       ──────────────────────────────────────────────────────────────────── */
+    const bowlFund=220; // fundamental Hz
+    const ratios=[1,2.1,3.3,4.7];
+    const vols=[0.28,0.14,0.08,0.04];
+    // Convert cents offset to frequency multiplier
+    function centsToMult(c){return Math.pow(2,c/1200);}
+
+    function spawnBowl(){
+      if(relaxAudio.playing!==3)return;
+      const t=ac.currentTime;
+      ratios.forEach((r,ri)=>{
+        try{
+          const drift=(Math.random()*4-2); // ±2 cents
+          const freq=bowlFund*r*centsToMult(drift);
+          const o=ac.createOscillator();const g=ac.createGain();
+          o.type='sine';o.frequency.value=freq;
+          // Attack 3s, sustain briefly, decay 8s
+          g.gain.setValueAtTime(0.0001,t);
+          g.gain.linearRampToValueAtTime(vols[ri],t+3.0);
+          g.gain.setValueAtTime(vols[ri],t+3.5);
+          g.gain.exponentialRampToValueAtTime(0.0001,t+11.5);
+          o.onended=()=>{try{o.disconnect();g.disconnect();}catch(e){}};
+          o.connect(g);g.connect(master);o.start(t);o.stop(t+12);
+        }catch(e){}
+      });
+      // Next bowl spawns 9s after this one starts (overlapping decay)
+      addT(setTimeout(spawnBowl,9000));
+    }
+    spawnBowl();
+
+  }else if(idx===4){
+    /* ── SOFT PIANO DRONE ────────────────────────────────────────────────────
+       C major chord: C4(261Hz), E4(329Hz), G4(392Hz) — sine/triangle blend
+       2s slow attack. Chorus: ±3 cent detuned copies at 40% volume each.
+       ──────────────────────────────────────────────────────────────────── */
+    const notes=[261.63,329.63,392.00];
+    const noteVols=[0.20,0.16,0.14];
+    function centsToMult(c){return Math.pow(2,c/1200);}
+
+    notes.forEach((freq,ni)=>{
+      const vol=noteVols[ni];
+      // Primary sine + triangle blend
+      [[0,'sine',1.0],[+3,'triangle',0.40],[-3,'triangle',0.40]].forEach(([cents,wtype,relVol])=>{
+        try{
+          const o=ac.createOscillator();const g=ac.createGain();
+          o.type=wtype;o.frequency.value=freq*centsToMult(cents);
+          // Slow 2s fade in
+          g.gain.setValueAtTime(0.0001,ac.currentTime);
+          g.gain.linearRampToValueAtTime(vol*relVol,ac.currentTime+2.0);
+          o.connect(g);g.connect(master);o.start();addN(o);
+        }catch(e){}
+      });
+    });
+
   }else if(idx===5){
-    // 432Hz Healing: primary tone + harmonic + sub + shimmer + soft pink noise, all under a breathing master LFO
-    // 1. Primary 432Hz sine, gain 0.15, with slow vibrato (LFO 0.3Hz, depth ±2Hz)
+    /* ── OM CHANT TONE ───────────────────────────────────────────────────────
+       136.1Hz fundamental + 2nd harmonic (272.2Hz, 50%) + 3rd (408.3Hz, 25%)
+       Formant sweep: lowpass cutoff oscillating 400-900Hz at 0.1Hz LFO
+       ──────────────────────────────────────────────────────────────────── */
+    // Merge all partials through a shared formant filter
+    const formant=ac.createBiquadFilter();
+    formant.type='lowpass';formant.frequency.value=650;formant.Q.value=1.8;
+    formant.connect(master);
+
+    // 136.1Hz fundamental (loudest)
     const o1=ac.createOscillator();const g1=ac.createGain();
-    o1.type='sine';o1.frequency.value=432;g1.gain.value=0.15;
-    o1.connect(g1);g1.connect(master);o1.start();addN(o1);
-    const vib=ac.createOscillator();const vibG=ac.createGain();
-    vib.type='sine';vib.frequency.value=0.3;vibG.gain.value=2;
-    vib.connect(vibG);vibG.connect(o1.frequency);vib.start();addN(vib);addN(vibG);
-    // 2. Harmonic layer 864Hz, gain 0.06
+    o1.type='sine';o1.frequency.value=136.1;g1.gain.value=0.28;
+    o1.connect(g1);g1.connect(formant);o1.start();addN(o1);
+    // 272.2Hz — 2nd harmonic at 50% of fundamental volume
     const o2=ac.createOscillator();const g2=ac.createGain();
-    o2.type='sine';o2.frequency.value=864;g2.gain.value=0.06;
-    o2.connect(g2);g2.connect(master);o2.start();addN(o2);
-    // 3. Sub harmonic 216Hz, gain 0.08
+    o2.type='sine';o2.frequency.value=272.2;g2.gain.value=0.14;
+    o2.connect(g2);g2.connect(formant);o2.start();addN(o2);
+    // 408.3Hz — 3rd harmonic at 25%
     const o3=ac.createOscillator();const g3=ac.createGain();
-    o3.type='sine';o3.frequency.value=216;g3.gain.value=0.08;
-    o3.connect(g3);g3.connect(master);o3.start();addN(o3);
-    // 4. Gentle shimmer 648Hz (3/2 harmonic), gain 0.04, own slow LFO 0.2Hz
-    const o4=ac.createOscillator();const g4=ac.createGain();
-    o4.type='sine';o4.frequency.value=648;g4.gain.value=0.04;
-    o4.connect(g4);g4.connect(master);o4.start();addN(o4);
-    const shim=ac.createOscillator();const shimG=ac.createGain();
-    shim.type='sine';shim.frequency.value=0.2;shimG.gain.value=0.025;
-    shim.connect(shimG);shimG.connect(g4.gain);shim.start();addN(shim);addN(shimG);
-    // 5. Soft pink noise underlayer, gain 0.03, lowpass 300Hz
-    const ns=ac.createBufferSource();ns.buffer=makeNoiseBuffer(ac,'pink');ns.loop=true;
-    const nf=ac.createBiquadFilter();nf.type='lowpass';nf.frequency.value=300;
-    const nsg=ac.createGain();nsg.gain.value=0.03;
-    ns.connect(nf);nf.connect(nsg);nsg.connect(master);ns.start();addN(ns);
-    // 6. Master breathing LFO: 0.04Hz, oscillates master gain between 0.7 and 1.0
-    const breath=ac.createOscillator();const breathG=ac.createGain();
-    breath.type='sine';breath.frequency.value=0.04;breathG.gain.value=0.15;
-    breath.connect(breathG);breathG.connect(master.gain);breath.start();addN(breath);addN(breathG);
+    o3.type='sine';o3.frequency.value=408.3;g3.gain.value=0.07;
+    o3.connect(g3);g3.connect(formant);o3.start();addN(o3);
+
+    // Formant sweep LFO: 0.1Hz, sweeps cutoff ±250Hz around 650Hz (range 400-900Hz)
+    const fLfo=ac.createOscillator();const fLfoG=ac.createGain();
+    fLfo.type='sine';fLfo.frequency.value=0.1;fLfoG.gain.value=250;
+    fLfo.connect(fLfoG);fLfoG.connect(formant.frequency);fLfo.start();addN(fLfo);
   }
 }
 function renderRelax(){
@@ -3098,7 +3088,7 @@ function renderRelax(){
     const btn=$(`<button class="sound-btn ${relaxAudio.playing===i?'active':''}">
       <div class="se">${s.emoji}</div>
       <div class="sn">${s.name}</div>
-      <div style="font-size:10px;color:var(--text2);">${s.desc}</div>
+      <div class="sd">${s.desc}</div>
     </button>`);
     btn.onclick=()=>{
       resumeCtx();
