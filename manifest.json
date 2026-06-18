@@ -3,11 +3,14 @@
   "short_name": "NeuroZen",
   "description": "Train your brain with 10 science-inspired games. Build focus, memory, logic & speed.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#F0F4FF",
+  "background_color": "#7C3AED",
   "theme_color": "#7C3AED",
   "categories": ["education", "games"],
+  "lang": "en",
+  "dir": "ltr",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -32,6 +35,15 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "NeuroZen Home Screen"
     }
   ]
 }
