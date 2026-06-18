@@ -1044,7 +1044,7 @@ function playMemory(body,setScore,end,wrap,startClock){
         <div class="mm-phase-label" id="mmPhase">${phaseLabel} (${n} cell${n>1?'s':''})</div>
         <div class="mm-flash-bar"><div class="mm-flash-fill" id="mmFlashFill" style="width:100%;transition:width ${flashMs}ms linear;"></div></div>
         <div class="mm-gridwrap">
-          <div class="mm-grid" id="mmGrid" style="grid-template-columns:repeat(${gsize},${cellPx}px);gap:4px;"></div>
+          <div class="mm-grid" id="mmGrid" style="display:grid;grid-template-columns:repeat(${gsize},${cellPx}px);gap:4px;"></div>
         </div>
         ${isColor?`<div class="mm-color-guide" id="mmColorGuide"></div>`:''}
       `);

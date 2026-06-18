@@ -440,7 +440,7 @@ body.dark .sch-zen .sc-cell{background:linear-gradient(135deg,#2A2150,#1E2A45);}
 .mm-roundrow strong{color:var(--primary);font-size:16px;}
 .mm-info{text-align:center;font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px;min-height:20px;}
 .mm-gridwrap{display:flex;justify-content:center;}
-.mm-grid{gap:6px !important;}
+.mm-grid{display:grid !important;gap:6px !important;}
 .mm-cell{background:var(--card);border-radius:10px;box-shadow:var(--shadow);transition:transform .15s,background .2s,box-shadow .2s;cursor:pointer;}
 .mm-cell:active{transform:scale(.94);}
 .mm-cell.mm-flash{background:linear-gradient(135deg,#7C3AED,#4F8EF7);transform:scale(1.06);box-shadow:0 0 20px rgba(124,58,237,.6);}
