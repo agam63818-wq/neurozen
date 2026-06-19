@@ -1,21 +1,22 @@
-const CACHE_NAME = 'neurozen-v1';
+const CACHE_NAME = 'neurozen-v2';
 const CORE_ASSETS = [
   '/',
   '/index.html',
   '/css/style.css',
   '/js/app.js',
   '/js/shared.js',
-  '/js/games/schulte.js',
-  '/js/games/memory.js',
-  '/js/games/pattern.js',
-  '/js/games/wordflash.js',
-  '/js/games/wordchain.js',
-  '/js/games/math.js',
-  '/js/games/stroopx.js',
-  '/js/games/iqtest.js',
-  '/js/games/reactionlab.js',
-  '/js/games/spatialspin.js',
-  '/manifest.json'
+  '/js/schulte.js',
+  '/js/memory.js',
+  '/js/pattern.js',
+  '/js/wordflash.js',
+  '/js/wordchain.js',
+  '/js/math.js',
+  '/js/stroopx.js',
+  '/js/reactionlab.js',
+  '/js/spatialspin.js',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png'
 ];
 
 self.addEventListener('install', e => {
