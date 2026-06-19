@@ -4,6 +4,17 @@ const CORE_ASSETS = [
   '/index.html',
   '/css/style.css',
   '/js/app.js',
+  '/js/shared.js',
+  '/js/games/schulte.js',
+  '/js/games/memory.js',
+  '/js/games/pattern.js',
+  '/js/games/wordflash.js',
+  '/js/games/wordchain.js',
+  '/js/games/math.js',
+  '/js/games/stroopx.js',
+  '/js/games/iqtest.js',
+  '/js/games/reactionlab.js',
+  '/js/games/spatialspin.js',
   '/manifest.json'
 ];
 

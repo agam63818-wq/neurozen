@@ -650,3 +650,43 @@ body.dark .mm-zen .mm-cell{background:linear-gradient(135deg,#2A2150,#1E2A45);}
 .wc-hearts{display:flex;gap:6px;align-items:center;}
 .wc-heart{font-size:20px;transition:filter .3s,transform .3s;}
 .wc-heart.lost{filter:grayscale(1);opacity:.5;}
+/* ===================== COLOR STROOP XTREME v2 ===================== */
+.sx-start{animation:fadeUp .3s ease;padding:4px 0;}
+.sx-hero{text-align:center;background:var(--card);border-radius:24px;padding:28px 20px 22px;box-shadow:var(--shadow);margin-bottom:16px;}
+.sx-best-chip{display:inline-block;margin-top:4px;padding:6px 16px;border-radius:50px;background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(79,142,247,.15));color:var(--primary);font-size:12px;font-weight:700;border:1px solid rgba(124,58,237,.2);}
+.sx-modes{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.sx-mode{background:var(--card);border-radius:16px;padding:14px 12px;text-align:left;box-shadow:var(--shadow);border:2px solid transparent;transition:border-color .15s,transform .15s;min-height:80px;cursor:pointer;font-family:inherit;color:var(--text);}
+.sx-mode:active{transform:scale(.97);}
+.sx-mode.sel{border-color:var(--primary);box-shadow:0 0 20px rgba(124,58,237,.25);}
+.sx-mode .sm-top{font-size:14px;font-weight:800;}
+.sx-mode .sm-sub{font-size:11px;color:var(--text2);margin-top:4px;line-height:1.3;}
+.sx-host{animation:fadeUp .3s ease;}
+.sx-variant-badge{display:inline-block;padding:5px 14px;border-radius:50px;font-size:11px;font-weight:800;color:#fff;margin-bottom:10px;letter-spacing:.04em;}
+.sx-question{text-align:center;font-size:13px;color:var(--text2);font-weight:600;margin-bottom:12px;min-height:20px;}
+.sx-stimulus{display:flex;align-items:center;justify-content:center;min-height:80px;margin:10px 0 14px;position:relative;}
+.sx-word{font-size:52px;font-weight:900;letter-spacing:.03em;user-select:none;}
+.sx-shape{font-size:72px;line-height:1.1;user-select:none;}
+.sx-number{font-size:56px;font-weight:900;letter-spacing:.06em;user-select:none;font-family:'Courier New',monospace;}
+.sx-arrow{font-size:72px;font-weight:900;user-select:none;transition:transform .2s;}
+.sx-pos-word{position:absolute;font-size:18px;font-weight:700;padding:8px 18px;border-radius:12px;background:var(--card);box-shadow:var(--shadow);border:2px solid var(--border);}
+.sx-pos-word.sx-top{top:8px;}
+.sx-pos-word.sx-bottom{bottom:8px;}
+.sx-opts{display:grid;gap:8px;max-width:300px;margin:0 auto;}
+.sx-opts.sx-opts-2{grid-template-columns:1fr 1fr;}
+.sx-opts.sx-opts-3{grid-template-columns:1fr 1fr 1fr;}
+.sx-opts.sx-opts-4{grid-template-columns:1fr 1fr;}
+.sx-opt{padding:14px 8px;border-radius:14px;background:var(--card);box-shadow:var(--shadow);font-weight:700;font-size:14px;border:2px solid var(--border);transition:all .12s;cursor:pointer;text-align:center;font-family:inherit;color:var(--text);min-height:48px;display:flex;align-items:center;justify-content:center;gap:4px;}
+.sx-opt:active{transform:scale(.95);}
+.sx-opt.sx-correct{border-color:#22C55E;background:rgba(52,211,153,.18);color:#059669;animation:ssBounce .4s ease;}
+.sx-opt.sx-wrong{border-color:#EF4444;background:rgba(248,113,113,.18);color:#DC2626;animation:shake .35s ease;}
+.sx-opt:disabled{opacity:.6;pointer-events:none;}
+.sx-dual{display:flex;gap:16px;justify-content:center;align-items:center;flex-wrap:wrap;}
+.sx-dual-word{font-size:40px;font-weight:900;padding:12px 20px;border-radius:16px;min-width:100px;text-align:center;box-shadow:var(--shadow-lg);}
+.sx-dual-vs{font-size:24px;font-weight:900;color:var(--text2);}
+.sx-special-badge{display:inline-block;padding:6px 16px;border-radius:50px;font-weight:800;font-size:13px;letter-spacing:.06em;margin-bottom:10px;animation:schFindPulse 1s ease-in-out infinite;}
+.sx-info{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text2);font-weight:600;margin:8px 4px;}
+.sx-round-tag{background:var(--card);padding:4px 12px;border-radius:50px;box-shadow:var(--shadow);font-size:11px;font-weight:700;}
+.sx-last-hint{text-align:center;font-size:13px;color:var(--mint);font-weight:700;margin-top:6px;padding:6px;animation:fadeUp .2s;}
+.sx-pts-popup{position:fixed;top:42%;left:50%;transform:translate(-50%,-50%);font-size:32px;font-weight:900;pointer-events:none;z-index:160;animation:ptsFloat .9s ease forwards;}
+@keyframes sxGlowPulse{0%,100%{filter:drop-shadow(0 0 18px currentColor)}50%{filter:drop-shadow(0 0 40px currentColor)}}
+.sx-glow{animation:sxGlowPulse 1.2s ease-in-out infinite;}

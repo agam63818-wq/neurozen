@@ -24,10 +24,35 @@
 <div id="achToast" class="ach-unlock-toast"></div>
 <div id="comboBadge" class="combo-badge"></div>
 <script src="js/app.js"></script>
+<script src="js/shared.js"></script>
+<script src="js/games/schulte.js"></script>
+<script src="js/games/memory.js"></script>
+<script src="js/games/pattern.js"></script>
+<script src="js/games/wordflash.js"></script>
+<script src="js/games/wordchain.js"></script>
+<script src="js/games/math.js"></script>
+<script src="js/games/stroopx.js"></script>
+<script src="js/games/iqtest.js"></script>
+<script src="js/games/reactionlab.js"></script>
+<script src="js/games/spatialspin.js"></script>
 <script>
   if('serviceWorker' in navigator){
     window.addEventListener('load',()=>{
-      navigator.serviceWorker.register('/sw.js').catch(()=>{});
+      navigator.serviceWorker.register('/sw.js').then(reg=>{
+        reg.onupdatefound=()=>{
+          const installingWorker=reg.installing;
+          if(installingWorker){
+            installingWorker.onstatechange=()=>{
+              if(installingWorker.state==='installed'&&navigator.serviceWorker.controller){
+                const el=document.getElementById('toast');
+                if(el){el.textContent='🔄 NeuroZen updated! Reload for latest version.';el.classList.add('show');setTimeout(()=>el.classList.remove('show'),4000);}
+              }
+            };
+          }
+        };
+      }).catch(err=>{
+        console.warn('⚠️ Service worker registration failed:',err.message);
+      });
     });
   }
 </script>
