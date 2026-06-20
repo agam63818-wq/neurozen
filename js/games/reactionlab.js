@@ -90,6 +90,18 @@ function playReactionLab(body,setScore,end,wrap,startClock){
     const info=stage.querySelector('#rlInfo');
     const times=[];
     let round=0,score=0,lives=zen?Infinity:3,fastest=null,delayT=null,holdT=null,busy=false,active=true;
+    let _delayDeadline=0,_delayCb=null,_holdDeadline=0,_holdCb=null;
+    const _rlVH=()=>{
+      if(document.hidden){
+        if(delayT){const r=Math.max(1,_delayDeadline-Date.now());clearTimeout(delayT);delayT=null;_delayDeadline=Date.now()+r;}
+        if(holdT){const r=Math.max(1,_holdDeadline-Date.now());clearTimeout(holdT);holdT=null;_holdDeadline=Date.now()+r;}
+      }else{
+        if(_delayDeadline>Date.now()&&_delayCb&&!delayT){delayT=_st(_delayCb,_delayDeadline-Date.now());}
+        if(_holdDeadline>Date.now()&&_holdCb&&!holdT){holdT=_st(_holdCb,_holdDeadline-Date.now());}
+      }
+    };
+    document.addEventListener('visibilitychange',_rlVH);
+    wrap.addEventListener('remove_game',()=>{document.removeEventListener('visibilitychange',_rlVH);active=false;clearTimeout(delayT);clearTimeout(holdT);busy=true;});
 
     function heartsHtml(){
       if(zen)return `<span class="qm-zen-tag">🧘 Zen — no lives</span>`;
@@ -125,7 +137,7 @@ function playReactionLab(body,setScore,end,wrap,startClock){
 
     function advance(t,msg,color,pts,dead){
       if(!active)return;
-      clearTimeout(holdT);clearTimeout(delayT);busy=true;
+      clearTimeout(holdT);clearTimeout(delayT);busy=true;_delayDeadline=0;_holdDeadline=0;
       if(t>0&&t<RL_DISAPPEAR){times.push(t);if(fastest===null||t<fastest)fastest=t;}
       if(pts>0){score+=pts;setScore(score);}
       showFb(msg,color);
@@ -142,7 +154,7 @@ function playReactionLab(body,setScore,end,wrap,startClock){
       info.textContent=`Round ${rn+1} · ${type==='single'?'Tap the circle!':type==='gonogo'?'🔴 tap · 🔵 don\'t tap':type==='target'?'Tap the LARGER circle':'Tap the ODD-colored circle'}`;
       arena.innerHTML='<div class="rl-ready">+ + +</div>';
       const delay=rn<10?(800+Math.random()*1700):(500+Math.random()*1000);
-      delayT=_st(()=>{
+      _delayCb=()=>{
         if(!active||round!==rn)return;
         arena.innerHTML='';
         const aw=arena.clientWidth||300,ah=arena.clientHeight||220;
@@ -170,7 +182,7 @@ function playReactionLab(body,setScore,end,wrap,startClock){
         if(type==='single'){
           const col=['#7C3AED','#4F8EF7','#34D399','#F472B6','#F97316'][Math.floor(Math.random()*5)];
           circle(54,col,()=>{onCorrectTap();});
-          holdT=_st(onMiss,RL_DISAPPEAR);
+          const _hc=onMiss;holdT=_st(_hc,RL_DISAPPEAR);_holdCb=_hc;_holdDeadline=Date.now()+RL_DISAPPEAR;
         } else if(type==='gonogo'){
           const isGo=Math.random()<0.6;
           const col=isGo?'#EF4444':'#3B82F6';
@@ -178,8 +190,8 @@ function playReactionLab(body,setScore,end,wrap,startClock){
             if(isGo){onCorrectTap();}
             else{onWrongTap('❌ Tapped blue!');}
           });
-          if(isGo)holdT=_st(onMiss,RL_DISAPPEAR);
-          else holdT=_st(()=>{lockAll();advance(0,'👍 +3 · Correctly ignored','#22C55E',3,false);},RL_DISAPPEAR);
+          if(isGo){const _hc=onMiss;holdT=_st(_hc,RL_DISAPPEAR);_holdCb=_hc;_holdDeadline=Date.now()+RL_DISAPPEAR;}
+          else{const _hc=()=>{lockAll();advance(0,'👍 +3 · Correctly ignored','#22C55E',3,false);};holdT=_st(_hc,RL_DISAPPEAR);_holdCb=_hc;_holdDeadline=Date.now()+RL_DISAPPEAR;}
         } else if(type==='target'){
           let big=46+Math.floor(Math.random()*22);
           let small=big-(18+Math.floor(Math.random()*12));
@@ -188,7 +200,7 @@ function playReactionLab(body,setScore,end,wrap,startClock){
             const col=['#7C3AED','#4F8EF7'][i];
             circle(c.size,col,()=>{c.correct?onCorrectTap():onWrongTap('❌ Smaller circle!');});
           });
-          holdT=_st(onMiss,RL_DISAPPEAR);
+          const _hc=onMiss;holdT=_st(_hc,RL_DISAPPEAR);_holdCb=_hc;_holdDeadline=Date.now()+RL_DISAPPEAR;
         } else {
           const base=['#7C3AED','#4F8EF7','#34D399','#F97316'][Math.floor(Math.random()*4)];
           let odd=base;while(odd===base)odd=['#7C3AED','#4F8EF7','#34D399','#F97316','#F472B6'][Math.floor(Math.random()*5)];
@@ -198,11 +210,15 @@ function playReactionLab(body,setScore,end,wrap,startClock){
             circle(48,col,()=>{i===oddIdx?onCorrectTap():onWrongTap('❌ Wrong color!');});
           }
           holdT=_st(onMiss,RL_DISAPPEAR);
+          _holdCb=onMiss;_holdDeadline=Date.now()+RL_DISAPPEAR;
         }
-      },delay);
+      };
+      _delayDeadline=Date.now()+delay;
+      delayT=_st(_delayCb,delay);
     }
 
     function gameOver(){
+      document.removeEventListener('visibilitychange',_rlVH);
       active=false;clearTimeout(delayT);clearTimeout(holdT);
       const valid=times.filter(t=>t>0&&t<RL_DISAPPEAR);
       const avg=valid.length?Math.round(valid.reduce((a,b)=>a+b,0)/valid.length):0;
@@ -254,7 +270,6 @@ function playReactionLab(body,setScore,end,wrap,startClock){
       });
     }
 
-    wrap.addEventListener('remove_game',()=>{active=false;clearTimeout(delayT);clearTimeout(holdT);busy=true;});
     doRound();
   }
 }

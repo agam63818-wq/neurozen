@@ -23,7 +23,7 @@ const IQ_POOL=[
   {q:'🧠 Aaj Monday hai. 100 din baad kaunsa day hoga?',opts:['Tuesday','Wednesday','Thursday','Friday'],ans:1,cat:'logic',diff:'medium',exp:'100 = 14×7 + 2; Mon+2 = Wednesday'},
   {q:'🧠 Ek ghadi din mein 4 min fast ho jaati hai. Agar 6:00 AM pe sahi thi, to kaun se real time pe 6:08 AM dikhayegi?',opts:['6:05 AM','6:06 AM','6:07 AM','6:08 AM'],ans:1,cat:'logic',diff:'hard',exp:'4min/1440min×real mins; real time=6:06 AM approx'},
   {q:'🧠 5 logon ki row mein Ram 2nd aur right se 4th hai. Row mein kitne log hain?',opts:['5','6','7','8'],ans:0,cat:'logic',diff:'medium',exp:'Left se 2nd + Right se 4th - 1 = 2+4-1 = 5'},
-  {q:'🧠 Agar "PENCIL" ko GDQFLP likhte hain, to "PAPER" ka code?',opts:['SDQHU','SDSHQ','SDSHV','SDQHV'],ans:0,cat:'logic',diff:'hard',exp:'+3 each letter: P+3=S, A+3=D, P+3=S, E+3=H, R+3=U = SDSHU'},
+  {q:'🧠 Agar "CAT" ko FDW likhte hain (har letter +3 shift), to "DOG" ka code?',opts:['GRJ','FRJ','GSJ','HRJ'],ans:0,cat:'logic',diff:'hard',exp:'+3 Caesar shift: D+3=G, O+3=R, G+3=J → GRJ'},
   {q:'🧠 Ek shop mein 40% discount hai. Original price ₹1500. Discounted price?',opts:['₹850','₹900','₹950','₹1050'],ans:1,cat:'logic',diff:'medium',exp:'1500×0.40=600; 1500-600=₹900'},
   {q:'🧠 Ek number ko 5 se multiply karo, phir 8 ghataao, to 42. Number?',opts:['8','9','10','11'],ans:2,cat:'logic',diff:'easy',exp:'5n-8=42 → 5n=50 → n=10'},
   {q:'🧠 24 June ka age se 7 days pehle wala day?',opts:['16 June','17 June','18 June','19 June'],ans:1,cat:'logic',diff:'easy',exp:'24-7=17 June'},

@@ -83,6 +83,10 @@ function playStroopX(body,setScore,end,wrap,startClock){
     body.innerHTML='';
     host=$(`<div class="sx-host"></div>`);
     body.appendChild(host);
+    let _sxHideTs=0,_sxOff=0;
+    const _sxVH=()=>{if(document.hidden)_sxHideTs=Date.now();else if(_sxHideTs){_sxOff+=Date.now()-_sxHideTs;_sxHideTs=0;}};
+    document.addEventListener('visibilitychange',_sxVH);
+    wrap.addEventListener('remove_game',()=>{document.removeEventListener('visibilitychange',_sxVH);});
     nextRound();
   }
 
@@ -296,9 +300,9 @@ function playStroopX(body,setScore,end,wrap,startClock){
       </div>
     `;
     if(timerMs>0){
-      let elapsed=0;
+      const _roundStart=Date.now(),_roundOff=_sxOff;
       barT=_si(()=>{
-        elapsed+=100;
+        const elapsed=Date.now()-_roundStart-(_sxOff-_roundOff);
         const pct=Math.max(0,100-elapsed/timerMs*100);
         const bar=wrap.querySelector('#sBar');
         if(bar){bar.style.width=pct+'%';bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');}
@@ -341,6 +345,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
   }
 
   function gameOver(){
+    document.removeEventListener('visibilitychange',_sxVH);
     const newPB=score>record;
     if(newPB)setS('nz_stroop_best',score);
     setS('nz_stroop_games',(S('nz_stroop_games')||0)+1);
