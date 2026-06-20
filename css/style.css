@@ -693,3 +693,64 @@ body.dark .mm-zen .mm-cell{background:linear-gradient(135deg,#2A2150,#1E2A45);}
 .sx-pts-popup{position:fixed;top:42%;left:50%;transform:translate(-50%,-50%);font-size:32px;font-weight:900;pointer-events:none;z-index:160;animation:ptsFloat .9s ease forwards;}
 @keyframes sxGlowPulse{0%,100%{filter:drop-shadow(0 0 18px currentColor)}50%{filter:drop-shadow(0 0 40px currentColor)}}
 .sx-glow{animation:sxGlowPulse 1.2s ease-in-out infinite;}
+
+/* ===================== STROOP X v2 — redesigned ===================== */
+/* Start screen v2 */
+.sx-hero-em{font-size:56px;margin-bottom:8px;line-height:1;}
+.sx-hero-sub{font-size:12px;color:var(--text2);margin:6px 0 0;line-height:1.4;}
+.sx-sel-title{font-size:15px;font-weight:700;margin:4px 2px 12px;}
+.sx-mode-card{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow);border:2.5px solid transparent;cursor:pointer;font-family:inherit;color:var(--text);text-align:left;transition:border-color .18s,transform .15s,box-shadow .2s;min-height:72px;width:100%;}
+.sx-mode-card:active{transform:scale(.97);}
+.sx-mode-card.sel{border-color:var(--primary);box-shadow:0 0 24px rgba(124,58,237,.22),var(--shadow);}
+.sx-mode-em{font-size:28px;flex-shrink:0;width:44px;text-align:center;}
+.sx-mode-info{flex:1;min-width:0;}
+.sx-mode-name{font-size:15px;font-weight:800;}
+.sx-mode-sub{font-size:11px;color:var(--text2);margin-top:3px;line-height:1.3;}
+.sx-mode-check{font-size:16px;font-weight:800;color:var(--primary);flex-shrink:0;width:24px;text-align:center;}
+.sx-rules-card{background:var(--card);border-radius:16px;padding:14px 16px;margin:14px 0;box-shadow:var(--shadow);border:1px solid var(--border);}
+.sx-rules-title{font-size:13px;font-weight:700;margin-bottom:6px;}
+.sx-rules-text{font-size:12px;color:var(--text2);line-height:1.5;}
+.sx-start-btn{display:block;width:100%;padding:16px;background:var(--grad);color:#fff;border-radius:16px;font-weight:700;font-size:16px;border:none;font-family:inherit;cursor:pointer;box-shadow:0 8px 24px rgba(124,58,237,.35);transition:transform .15s;}
+.sx-start-btn:active{transform:scale(.97);}
+/* In-game HUD v2 */
+.sx-hud{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;}
+.sx-hud-left{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.sx-hud-right{display:flex;align-items:center;gap:10px;}
+.sx-variant-chip{display:inline-block;padding:5px 14px;border-radius:50px;font-size:11px;font-weight:800;color:#fff;letter-spacing:.04em;}
+.sx-round-num{font-size:13px;font-weight:700;color:var(--text2);background:var(--card);padding:4px 12px;border-radius:50px;box-shadow:var(--shadow);}
+.sx-combo-badge{font-size:12px;font-weight:800;color:#F59E0B;animation:schFindPulse .8s ease-in-out infinite;white-space:nowrap;}
+.sx-wave-badge{font-size:11px;font-weight:700;color:#34D399;background:rgba(52,211,153,.12);padding:3px 10px;border-radius:50px;}
+.sx-wave-progress{text-align:center;margin-bottom:8px;}
+.sx-wp-label{font-size:11px;font-weight:600;color:var(--text2);}
+.sx-score-line{text-align:center;font-size:13px;color:var(--text2);font-weight:600;margin-top:12px;padding:8px;background:var(--card);border-radius:12px;box-shadow:var(--shadow);}
+.sx-zen-badge{text-align:center;font-size:16px;font-weight:700;color:var(--primary);margin-bottom:10px;padding:10px;background:var(--card);border-radius:14px;box-shadow:var(--shadow);}
+.sx-hearts-row{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:10px;}
+.wx-heart{font-size:18px;transition:filter .3s,transform .3s;}
+.wx-heart.lost{filter:grayscale(1);opacity:.4;}
+.sx-lives-count{font-size:12px;font-weight:700;color:var(--text2);margin-left:6px;}
+/* Stimulus container v2 */
+.sx-stim{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70px;margin:8px 0 14px;position:relative;}
+.sx-deco{position:absolute;bottom:-6px;right:4px;font-size:18px;opacity:.2;pointer-events:none;}
+.sx-shape-word{text-align:center;font-size:13px;color:var(--text2);font-weight:600;margin-top:6px;}
+/* Sequence memory variant */
+.sx-seq-wrap{background:var(--card);border-radius:18px;padding:16px;margin:8px 0 14px;box-shadow:var(--shadow);text-align:center;}
+.sx-seq-label{font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px;letter-spacing:.06em;}
+.sx-seq-row{display:flex;gap:10px;justify-content:center;margin-bottom:12px;}
+.sx-seq-chip{display:inline-block;padding:8px 16px;border-radius:12px;color:#fff;font-weight:800;font-size:15px;min-width:44px;text-align:center;box-shadow:var(--shadow);}
+.sx-seq-probe{font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;justify-content:center;gap:8px;}
+/* Oddball variant */
+.sx-odd-wrap{text-align:center;margin:8px 0 14px;}
+.sx-odd-lbl{font-size:12px;color:var(--text2);font-weight:700;margin-bottom:12px;letter-spacing:.04em;}
+.sx-odd-row{display:flex;gap:14px;justify-content:center;}
+.sx-odd-btn{width:64px;height:64px;border-radius:16px;border:none;cursor:pointer;font-weight:800;font-size:22px;color:#fff;box-shadow:var(--shadow);transition:transform .12s;font-family:inherit;}
+.sx-odd-btn:active{transform:scale(.9);}
+.sx-odd-btn:disabled{opacity:.6;}
+/* Split-attention variant */
+.sx-split{display:flex;gap:12px;justify-content:center;align-items:center;margin:8px 0 14px;flex-wrap:wrap;}
+.sx-split-half{flex:1;min-width:110px;max-width:160px;background:var(--card);border-radius:18px;padding:16px 12px;text-align:center;box-shadow:var(--shadow);border:2.5px solid;}
+.sx-split-label{font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.12em;margin-bottom:8px;}
+.sx-split-word{font-size:26px;font-weight:800;padding:10px 14px;border-radius:14px;color:#fff;display:inline-block;min-width:80px;}
+.sx-split-vs{font-size:18px;font-weight:900;color:var(--text2);flex-shrink:0;}
+/* Compare previous variant */
+.sx-compare{text-align:center;margin:8px 0 14px;}
+.sx-compare-prev{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:8px;}
