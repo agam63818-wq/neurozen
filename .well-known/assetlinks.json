@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.nexgen.neurozen",
+        "sha256_cert_fingerprints": ["8C:6B:5D:DA:18:91:BC:FA:22:CE:02:DD:3C:5A:21:91:3E:34:5D:0D:0C:75:1C:37:CD:F4:E1:7F:1D:CC:A7:52"]
+      }
+    }]
