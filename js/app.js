@@ -1126,9 +1126,29 @@ function renderProfile(){
   const name=S('nz_username');
   const sett=S('nz_settings');
   const lvP=xpLevel(S('nz_xp')).cur;
+  const score=S('nz_brain_score');
+  const tier=brainLevel(score);
+  const tierEm=brainLevelEmoji(score);
+  const sk=S('nz_skill_scores');
+  const bestScores=S('nz_best_scores');
+  const ach=S('nz_achievements')||[];
+  const hist=S('nz_score_history')||[];
+  const gamesPlayed=S('nz_games_played');
   const p=$(`<div></div>`);
+  /* Build top 3 best-score games */
+  const bestRows=Object.entries(bestScores||{})
+    .map(([id,v])=>{const g=GAMES.find(x=>x.id===id);return g?{name:g.name,icon:g.icon,v:v,color:g.color}:null;})
+    .filter(Boolean)
+    .sort((a,b)=>b.v-a.v).slice(0,3);
+  /* Last 3 unlocked achievements */
+  const recentAch=ACHIEVEMENTS.filter(a=>ach.includes(a.id)).slice(-3);
+  /* 7-day mini-bars data */
+  const histMax=Math.max(1,...hist);
+  const dayLbl=['M','T','W','T','F','S','S'];
+
   p.innerHTML=`
     <div class="hdr"><div><div class="greet">Your account</div><h1>Profile</h1></div></div>
+
     <div class="prof-card">
       <div class="prof-top">
         <div class="prof-avatar">${name.charAt(0).toUpperCase()}</div>
@@ -1136,46 +1156,102 @@ function renderProfile(){
         <div class="lvl-badge">Lv ${lvP.lv}<br><span style="font-size:9px;letter-spacing:.06em;">${lvP.name.toUpperCase()}</span></div>
       </div>
       <div class="prof-stats">
-        <div class="prof-stat"><div class="v">${S('nz_brain_score')}</div><div class="l">Brain Score</div></div>
+        <div class="prof-stat"><div class="v">${score}</div><div class="l">Brain Score</div></div>
         <div class="prof-stat"><div class="v">${S('nz_streak')}</div><div class="l">Streak</div></div>
-        <div class="prof-stat"><div class="v">${S('nz_games_played')}</div><div class="l">Games</div></div>
+        <div class="prof-stat"><div class="v">${gamesPlayed}</div><div class="l">Games</div></div>
       </div>
+      <div class="pf-tier-chip">${tierEm} <span>${tier}</span></div>
     </div>
+
+    <div class="sec-title"><h2>Skills Snapshot</h2><a href="#" id="pfSeeProgress">Details ›</a></div>
+    <div class="card pf-skills">
+      ${[['memory','Memory','#7C3AED'],['focus','Focus','#4F8EF7'],['logic','Logic','#34D399'],['speed','Speed','#F97316']].map(([k,lbl,col])=>{
+        const v=Math.min(100,sk[k]||0);
+        return `<div class="pf-skill-row">
+          <div class="pf-skill-lbl">${lbl}</div>
+          <div class="pf-skill-bar"><div class="pf-skill-fill" style="width:${v}%;background:linear-gradient(90deg,${col},${col}cc);"></div></div>
+          <div class="pf-skill-val">${v}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${bestRows.length?`
+    <div class="sec-title"><h2>Top Games</h2><a href="#" id="pfSeeGames">All ›</a></div>
+    <div class="card pf-best">
+      ${bestRows.map((r,i)=>`<div class="pf-best-row">
+        <div class="pf-best-rank pf-rank-${i}">#${i+1}</div>
+        <div class="pf-best-icon" style="background:${r.color||'var(--grad)'};">${r.icon}</div>
+        <div class="pf-best-name">${r.name}</div>
+        <div class="pf-best-val">${r.v}<span>best</span></div>
+      </div>`).join('')}
+    </div>`:''}
+
+    <div class="sec-title"><h2>Last 7 Days</h2></div>
+    <div class="card pf-week">
+      <div class="pf-week-bars">
+        ${hist.map((v,i)=>{
+          const h=Math.max(4,Math.round((v/histMax)*46));
+          const isToday=i===hist.length-1;
+          return `<div class="pf-day"><div class="pf-day-bar ${isToday?'today':''}" style="height:${h}px;"></div><div class="pf-day-lbl">${dayLbl[i]||''}</div></div>`;
+        }).join('')}
+      </div>
+      <div class="pf-week-foot">${hist[hist.length-1]||0} today · ${hist.reduce((a,b)=>a+b,0)} this week</div>
+    </div>
+
+    ${recentAch.length?`
+    <div class="sec-title"><h2>Recent Achievements</h2><a href="#" id="pfSeeAch">View all ›</a></div>
+    <div class="card pf-ach">
+      ${recentAch.map(a=>`<div class="pf-ach-item"><div class="pf-ach-em">${a.emoji}</div><div class="pf-ach-name">${a.title}</div></div>`).join('')}
+      ${recentAch.length<3?Array(3-recentAch.length).fill('<div class="pf-ach-item locked"><div class="pf-ach-em">\u{1F512}</div><div class="pf-ach-name">Locked</div></div>').join(''):''}
+    </div>`:''}
+
     <div class="sec-title"><h2>Settings</h2></div>
-    <div id="settList"></div>
+    <div class="pf-settings-group"><div class="pf-group-lbl">Appearance</div><div id="settAppear"></div></div>
+    <div class="pf-settings-group"><div class="pf-group-lbl">Audio & Feedback</div><div id="settAudio"></div></div>
+    <div class="pf-settings-group"><div class="pf-group-lbl">Notifications</div><div id="settNotif"></div></div>
+    <div class="pf-settings-group"><div class="pf-group-lbl">Data & Privacy</div><div id="settData"></div></div>
+    <div class="pf-settings-group"><div class="pf-group-lbl pf-group-danger">Danger Zone</div><div id="settDanger"></div></div>
+
     <div class="sec-title"><h2>App Info</h2></div>
-    <div class="card" style="padding:16px;"><div style="font-size:13px;color:var(--text2);line-height:1.8;">
-      <strong style="color:var(--text);">NeuroZen v2.0</strong><br>
-      8 brain-training games · Scientifically inspired · Progress tracking
-    </div></div>
+    <div class="card pf-app-info">
+      <div class="pf-app-row"><span class="pf-app-k">Version</span><span class="pf-app-v">v3.0</span></div>
+      <div class="pf-app-row"><span class="pf-app-k">Games</span><span class="pf-app-v">10 brain-training</span></div>
+      <div class="pf-app-row"><span class="pf-app-k">Storage</span><span class="pf-app-v">Local-only</span></div>
+      <div class="pf-app-row"><span class="pf-app-k">Account</span><span class="pf-app-v">Not required</span></div>
+    </div>
   `;
-  const settList=p.querySelector('#settList');
-  function mkSetting(ico,title,sub,right,onClick){
-    const el=$(`<div class="setting"><div class="sic">${ico}</div><div style="flex:1;"><div class="sttl">${title}</div>${sub?`<div class="ssub">${sub}</div>`:''}</div><div class="sright">${right}</div></div>`);
-    el.onclick=onClick;settList.appendChild(el);return el;
-  }
-  function mkToggle(key,ico,title,sub){
-    const tgl=$(`<div class="tgl ${sett[key]?'on':''}" id="tgl_${key}"></div>`);
+
+  /* settings helpers (same behaviour as before, just routed into groups) */
+  function attachToggle(host,key,ico,title,sub){
+    const tgl=$(`<div class="tgl ${sett[key]?'on':''}"></div>`);
     const el=$(`<div class="setting"><div class="sic">${ico}</div><div style="flex:1;"><div class="sttl">${title}</div>${sub?`<div class="ssub">${sub}</div>`:''}</div></div>`);
-    el.appendChild(tgl);settList.appendChild(el);
-    el.onclick=()=>{
-      const s=S('nz_settings');s[key]=!s[key];setS('nz_settings',s);
-      tgl.classList.toggle('on',!!s[key]);
-      toast(s[key]?`${title} enabled`:`${title} disabled`);
-    };
+    el.appendChild(tgl);host.appendChild(el);
+    el.onclick=()=>{const s=S('nz_settings');s[key]=!s[key];setS('nz_settings',s);tgl.classList.toggle('on',!!s[key]);toast(s[key]?`${title} enabled`:`${title} disabled`);};
   }
-  const dmEl=$(`<div class="setting"><div class="sic">🌙</div><div style="flex:1;"><div class="sttl">Dark Mode</div></div><div class="tgl ${S('nz_dark_mode')?'on':''}" id="dmTgl"></div></div>`);
-  dmEl.onclick=()=>{const v=!S('nz_dark_mode');setS('nz_dark_mode',v);applyDark();dmEl.querySelector('#dmTgl').classList.toggle('on',v);};
-  settList.appendChild(dmEl);
-  mkToggle('reminders','⏰','Daily Reminders','Practice at your peak time');
-  mkToggle('sfx','🔊','Sound Effects','In-game audio feedback');
-  mkSetting('🔔','Notifications','App alerts','›',()=>{
-    const s=S('nz_settings');s.notifications=!s.notifications;setS('nz_settings',s);
-    toast(s.notifications?'🔔 Notifications enabled':'🔕 Notifications disabled');
-  });
-  mkSetting('🔒','Privacy','Your data','›',()=>showModal('privacy'));
-  mkSetting('❓','Help & Support','FAQ','›',()=>showModal('help'));
-  mkSetting('🚪','Log Out','Reset all progress','',()=>showModal('logout')).classList.add('danger');
+  function attachAction(host,ico,title,sub,right,onClick,danger){
+    const el=$(`<div class="setting${danger?' danger':''}"><div class="sic">${ico}</div><div style="flex:1;"><div class="sttl">${title}</div>${sub?`<div class="ssub">${sub}</div>`:''}</div><div class="sright">${right}</div></div>`);
+    el.onclick=onClick;host.appendChild(el);
+  }
+  /* Appearance */
+  const appearHost=p.querySelector('#settAppear');
+  const dmEl=$(`<div class="setting"><div class="sic">\u{1F319}</div><div style="flex:1;"><div class="sttl">Dark Mode</div><div class="ssub">${S('nz_dark_mode')?'On':'Off'} \u00b7 follows system at first launch</div></div><div class="tgl ${S('nz_dark_mode')?'on':''}" id="dmTgl"></div></div>`);
+  dmEl.onclick=()=>{const v=!S('nz_dark_mode');setS('nz_dark_mode',v);applyDark();dmEl.querySelector('#dmTgl').classList.toggle('on',v);dmEl.querySelector('.ssub').textContent=(v?'On':'Off')+' \u00b7 follows system at first launch';};
+  appearHost.appendChild(dmEl);
+  /* Audio */
+  attachToggle(p.querySelector('#settAudio'),'sfx','\u{1F50A}','Sound Effects','In-game audio feedback');
+  /* Notifications */
+  attachToggle(p.querySelector('#settNotif'),'reminders','\u23F0','Daily Reminders','Practice at your peak time');
+  attachAction(p.querySelector('#settNotif'),'\u{1F514}','Notifications','App alerts','\u203a',()=>{const s=S('nz_settings');s.notifications=!s.notifications;setS('nz_settings',s);toast(s.notifications?'\u{1F514} Notifications enabled':'\u{1F515} Notifications disabled');});
+  /* Data & Privacy */
+  attachAction(p.querySelector('#settData'),'\u{1F512}','Privacy','Your data, your device','\u203a',()=>showModal('privacy'));
+  attachAction(p.querySelector('#settData'),'\u2753','Help & FAQ','Common questions','\u203a',()=>showModal('help'));
+  /* Danger */
+  attachAction(p.querySelector('#settDanger'),'\u{1F6AA}','Log Out','Reset all progress','',()=>showModal('logout'),true);
+
+  /* link nav clicks */
+  const goProgress=p.querySelector('#pfSeeProgress'); if(goProgress)goProgress.onclick=(e)=>{e.preventDefault();render('progress');};
+  const goGames   =p.querySelector('#pfSeeGames');    if(goGames)   goGames.onclick   =(e)=>{e.preventDefault();render('games');};
+  const goAch     =p.querySelector('#pfSeeAch');      if(goAch)     goAch.onclick     =(e)=>{e.preventDefault();render('progress');};
   return p;
 }
 
