@@ -127,7 +127,29 @@ function toast(msg){
 }
 function todayKey(){return new Date().toISOString().slice(0,10);}
 function isPlayedToday(){return S('nz_last_played')===todayKey();}
-function brainLevel(s){if(s<=100)return'BEGINNER';if(s<=300)return'DEVELOPING';if(s<=500)return'SHARP';if(s<=750)return'EXPERT';return'MASTER';}
+/* Brain-score tier ladder, scaled for the 0–10000 brain-score range.
+   Returns a short label (max 8 chars) so the existing home-page ring chip
+   (“🧠 ${brainLevel(score)}”) keeps fitting without UI breakage. */
+function brainLevel(s){
+  if(s<=250)return'NOVICE';
+  if(s<=800)return'LEARNER';
+  if(s<=1800)return'FOCUSED';
+  if(s<=3500)return'SHARP';
+  if(s<=5500)return'EXPERT';
+  if(s<=8000)return'ELITE';
+  return'MASTER';
+}
+/* Optional companion: emoji for the tier. Not used by existing UI — safe to call
+   from new code. */
+function brainLevelEmoji(s){
+  if(s<=250)return'🌱';
+  if(s<=800)return'📚';
+  if(s<=1800)return'🎯';
+  if(s<=3500)return'⚡';
+  if(s<=5500)return'🧠';
+  if(s<=8000)return'💎';
+  return'👑';
+}
 function greet(){
   const h=new Date().getHours();
   if(h>=6&&h<12)return'Good morning 👋';

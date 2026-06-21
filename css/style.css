@@ -506,6 +506,37 @@ body.dark .mm-zen .mm-cell{background:linear-gradient(135deg,#2A2150,#1E2A45);}
 .qm-question{text-align:center;font-size:34px;font-weight:900;margin:16px 0 18px;line-height:1.1;min-height:44px;color:var(--text);}
 .math-opt.correct-ans{background:#34D399 !important;color:#fff !important;animation:mmPop .3s ease;}
 .math-opt.wrong-ans{background:#F87171 !important;color:#fff !important;animation:shake .3s ease;}
+
+/* ===================== QUICK MATH v3 ADDITIONS ===================== */
+.qm-modes-v3{grid-template-columns:1fr 1fr;}
+@media (max-width:360px){.qm-modes-v3{grid-template-columns:1fr;}}
+.qm-task-chip{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 18px;border-radius:50px;color:#fff;font-weight:900;font-size:14px;letter-spacing:.06em;margin:4px auto 8px;max-width:340px;box-shadow:0 8px 24px rgba(0,0,0,.18);text-shadow:0 1px 2px rgba(0,0,0,.25);animation:qmChipPop .3s cubic-bezier(.16,1,.3,1);}
+.qm-task-icon{font-size:20px;line-height:1;}
+.qm-task-text{font-size:13px;letter-spacing:.08em;}
+@keyframes qmChipPop{0%{opacity:0;transform:translateY(-6px) scale(.92)}60%{transform:translateY(0) scale(1.04)}100%{opacity:1;transform:none}}
+.qm-event-banner{display:block;text-align:center;padding:8px 14px;border-radius:14px;color:#fff;font-weight:800;font-size:12px;margin:0 auto 8px;max-width:340px;letter-spacing:.04em;background:linear-gradient(135deg,#7C3AED,#F97316);box-shadow:0 6px 18px rgba(0,0,0,.18);animation:qmEventSlide .35s cubic-bezier(.16,1,.3,1);}
+@keyframes qmEventSlide{0%{opacity:0;transform:translateY(-8px) scale(.95)}100%{opacity:1;transform:none}}
+.qm-acc-mini{display:inline-block;font-size:11px;font-weight:700;color:var(--text2);background:var(--card);padding:3px 10px;border-radius:50px;box-shadow:var(--shadow);margin:0 4px;}
+.qm-cmp{display:block;font-size:18px;font-weight:700;color:var(--text2);margin-top:6px;letter-spacing:.02em;}
+/* Memory hide treatment */
+.qm-question-hidden{font-size:18px!important;font-weight:700!important;color:var(--primary)!important;background:repeating-linear-gradient(45deg,rgba(124,58,237,.10),rgba(124,58,237,.10) 6px,rgba(79,142,247,.10) 6px,rgba(79,142,247,.10) 12px);border-radius:14px;padding:12px;letter-spacing:.04em;}
+/* Combo banner */
+.qm-combo-banner{position:fixed;top:30%;left:50%;transform:translate(-50%,-50%) scale(.6);background:linear-gradient(135deg,#F97316,#EF4444,#A855F7);color:#fff;font-weight:900;font-size:22px;letter-spacing:.06em;padding:14px 28px;border-radius:50px;box-shadow:0 16px 48px rgba(239,68,68,.45);z-index:200;pointer-events:none;animation:qmComboIn .35s cubic-bezier(.16,1,.3,1) forwards;text-shadow:0 2px 8px rgba(0,0,0,.3);}
+@keyframes qmComboIn{0%{opacity:0;transform:translate(-50%,-50%) scale(.6) rotate(-4deg)}60%{transform:translate(-50%,-50%) scale(1.12) rotate(2deg)}100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(0)}}
+.qm-combo-banner.qm-combo-out{animation:qmComboOut .55s ease forwards;}
+@keyframes qmComboOut{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-90%) scale(.85)}}
+/* Points popup */
+.qm-pts-popup{position:fixed;top:42%;left:50%;transform:translate(-50%,-50%);font-size:30px;font-weight:900;pointer-events:none;z-index:160;animation:ptsFloat .9s ease forwards;text-shadow:0 2px 10px rgba(52,211,153,.5);}
+/* Zen explanation */
+.qm-explain{margin-top:12px;padding:11px 14px;border-radius:14px;font-size:13px;font-weight:700;line-height:1.4;background:rgba(124,58,237,.08);border:1.5px solid rgba(124,58,237,.25);color:var(--text);animation:fadeUp .25s ease;}
+/* End-of-game insight */
+.qm-insight{margin-top:14px;padding:12px 14px;border-radius:14px;font-size:13px;font-weight:700;line-height:1.45;background:linear-gradient(135deg,rgba(124,58,237,.10),rgba(79,142,247,.10));border:1px solid var(--border);color:var(--text);}
+@media (max-width:360px){
+  .qm-task-chip{padding:9px 14px;font-size:12px;}
+  .qm-task-text{font-size:11px;}
+  .qm-question{font-size:28px;}
+}
+
 /* ===================== REACTION LAB (endless survival) ===================== */
 .rl-start{animation:fadeUp .3s ease;}
 .rl-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
@@ -590,6 +621,44 @@ body.dark .mm-zen .mm-cell{background:linear-gradient(135deg,#2A2150,#1E2A45);}
 @keyframes ptsFloat{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-50px) scale(1.4)}}
 .pat-pts-popup{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);font-size:28px;font-weight:900;color:#34D399;pointer-events:none;z-index:160;animation:ptsFloat .9s ease forwards;text-shadow:0 2px 10px rgba(52,211,153,.5);}
 .pat-instruction{text-align:center;font-size:13px;color:var(--text2);font-weight:600;margin-bottom:14px;min-height:18px;}
+
+/* ===================== PATTERN IQ v4 ADDITIONS ===================== */
+/* Bold task chip */
+.pat-task-chip{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 18px;border-radius:50px;color:#fff;font-weight:900;font-size:14px;letter-spacing:.06em;margin:4px auto 6px;max-width:340px;box-shadow:0 8px 24px rgba(0,0,0,.18);text-shadow:0 1px 2px rgba(0,0,0,.25);animation:patChipPop .3s cubic-bezier(.16,1,.3,1);}
+.pat-task-icon{font-size:20px;line-height:1;}
+.pat-task-text{font-size:13px;letter-spacing:.08em;}
+@keyframes patChipPop{0%{opacity:0;transform:translateY(-6px) scale(.92)}60%{transform:translateY(0) scale(1.04)}100%{opacity:1;transform:none}}
+/* Phase + accuracy chips in HUD row */
+.pat-phase-chip{font-size:13px;font-weight:800;padding:5px 12px;border-radius:50px;background:var(--card);box-shadow:var(--shadow);border:1px solid var(--border);letter-spacing:.02em;}
+.pat-acc-chip{display:inline-block;font-size:11px;font-weight:700;color:var(--text2);background:var(--card);padding:3px 10px;border-radius:50px;box-shadow:var(--shadow);margin-right:6px;}
+.pat-q-meta{display:flex;align-items:center;gap:6px;}
+/* Special-event banner */
+.pat-event-banner{display:block;text-align:center;padding:8px 14px;border-radius:14px;color:#fff;font-weight:800;font-size:12px;margin:0 auto 8px;max-width:340px;letter-spacing:.04em;background:linear-gradient(135deg,#7C3AED,#F97316);box-shadow:0 6px 18px rgba(0,0,0,.18);animation:patEventSlide .35s cubic-bezier(.16,1,.3,1);}
+@keyframes patEventSlide{0%{opacity:0;transform:translateY(-8px) scale(.95)}100%{opacity:1;transform:none}}
+/* Combo banner */
+.pat-combo-banner{position:fixed;top:30%;left:50%;transform:translate(-50%,-50%) scale(.6);background:linear-gradient(135deg,#F97316,#EF4444,#A855F7);color:#fff;font-weight:900;font-size:22px;letter-spacing:.06em;padding:14px 28px;border-radius:50px;box-shadow:0 16px 48px rgba(239,68,68,.45);z-index:200;pointer-events:none;animation:patComboIn .35s cubic-bezier(.16,1,.3,1) forwards;text-shadow:0 2px 8px rgba(0,0,0,.3);}
+@keyframes patComboIn{0%{opacity:0;transform:translate(-50%,-50%) scale(.6) rotate(-4deg)}60%{transform:translate(-50%,-50%) scale(1.12) rotate(2deg)}100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(0)}}
+.pat-combo-banner.pat-combo-out{animation:patComboOut .55s ease forwards;}
+@keyframes patComboOut{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-90%) scale(.85)}}
+/* New item types */
+.pat-item-arrow{font-size:30px;font-weight:900;background:var(--card);box-shadow:var(--shadow);border-radius:14px;width:54px;height:54px;display:flex;align-items:center;justify-content:center;}
+.pat-opt-arrow{font-size:30px;font-weight:900;background:var(--card)!important;box-shadow:var(--shadow);}
+.pat-item-size{position:relative;background:var(--card);box-shadow:var(--shadow);border-radius:14px;width:60px;height:60px;display:flex;align-items:center;justify-content:center;}
+.pat-opt-size{position:relative;background:var(--card)!important;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--text);font-weight:800;}
+.pat-size-tag{position:absolute;top:4px;left:6px;font-size:9px;font-weight:900;color:var(--text2);letter-spacing:.06em;}
+.pat-mix-cell{font-size:18px;font-weight:800;background:var(--card);box-shadow:var(--shadow);border-radius:14px;padding:10px 12px;color:var(--text);min-width:54px;text-align:center;}
+.pat-opt-mix{font-size:16px;font-weight:800;background:var(--card)!important;color:var(--text);}
+/* Memory event hidden cells */
+.pat-mem-hidden{background:repeating-linear-gradient(45deg,rgba(124,58,237,.18),rgba(124,58,237,.18) 6px,rgba(79,142,247,.18) 6px,rgba(79,142,247,.18) 12px)!important;color:transparent!important;text-shadow:none!important;border:1px dashed var(--primary)!important;}
+.pat-mem-hidden *{visibility:hidden;}
+/* End-of-game insight */
+.pat-insight{margin-top:14px;padding:12px 14px;border-radius:14px;font-size:13px;font-weight:700;line-height:1.45;background:linear-gradient(135deg,rgba(124,58,237,.10),rgba(79,142,247,.10));border:1px solid var(--border);color:var(--text);}
+/* Tighter HUD on small screens */
+@media (max-width:360px){
+  .pat-task-chip{padding:9px 14px;font-size:12px;}
+  .pat-task-text{font-size:11px;}
+  .pat-phase-chip{font-size:11px;padding:4px 10px;}
+}
 
 /* ===================== MEMORY MATRIX v3 — new UI classes ===================== */
 .mm-hero{text-align:center;background:var(--card);border-radius:24px;padding:24px 20px 20px;box-shadow:var(--shadow);margin-bottom:16px;}
@@ -754,3 +823,62 @@ body.dark .mm-zen .mm-cell{background:linear-gradient(135deg,#2A2150,#1E2A45);}
 /* Compare previous variant */
 .sx-compare{text-align:center;margin:8px 0 14px;}
 .sx-compare-prev{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:8px;}
+
+/* ===================== SPATIAL SPIN v3 ADDITIONS ===================== */
+.ss-modes-v3{grid-template-columns:1fr 1fr;}
+.ss-task-chip{display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 18px;border-radius:50px;color:#fff;font-weight:900;font-size:15px;letter-spacing:.04em;margin:6px auto 6px;max-width:340px;box-shadow:0 8px 24px rgba(0,0,0,.18);text-shadow:0 1px 2px rgba(0,0,0,.25);animation:ssChipPop .3s cubic-bezier(.16,1,.3,1);}
+.ss-task-icon{font-size:20px;line-height:1;}
+.ss-task-text{font-size:14px;letter-spacing:.06em;}
+@keyframes ssChipPop{0%{opacity:0;transform:translateY(-6px) scale(.92)}60%{transform:translateY(0) scale(1.04)}100%{opacity:1;transform:none}}
+.ss-helper{text-align:center;font-size:12px;color:var(--text2);font-weight:600;margin:0 auto 12px;max-width:320px;line-height:1.35;display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;}
+.ss-mini-tag{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:50px;background:rgba(124,58,237,.12);color:var(--primary);letter-spacing:.06em;}
+.ss-chain-pair{display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;}
+.ss-chain-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 12px;background:var(--card);border-radius:14px;box-shadow:var(--shadow);min-width:70px;}
+.ss-chain-lbl{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--text2);}
+.ss-chain-arrow{font-size:24px;font-weight:900;color:var(--primary);}
+.ss-opt-text{font-size:18px;font-weight:900;letter-spacing:.04em;color:var(--text);min-height:64px;}
+.ss-angle{font-size:20px;font-weight:900;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.ss-explain{margin-top:12px;padding:11px 14px;border-radius:14px;font-size:13px;font-weight:600;line-height:1.4;background:rgba(124,58,237,.08);border:1.5px solid rgba(124,58,237,.25);color:var(--text);animation:fadeUp .25s ease;}
+.ss-insight{margin-top:14px;padding:12px 14px;border-radius:14px;font-size:13px;font-weight:700;line-height:1.45;background:linear-gradient(135deg,rgba(124,58,237,.10),rgba(79,142,247,.10));border:1px solid var(--border);color:var(--text);}
+@media (max-width:360px){
+  .ss-task-chip{padding:9px 14px;font-size:13px;}
+  .ss-task-text{font-size:12px;}
+  .ss-helper{font-size:11px;}
+  .ss-modes-v3{grid-template-columns:1fr;}
+}
+
+/* ===================== STROOP X v3 ADDITIONS ===================== */
+/* Task chip — primary read, large + bold */
+.sx-task-chip{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 18px;border-radius:50px;color:#fff;font-weight:900;font-size:16px;letter-spacing:.04em;margin:6px auto 8px;max-width:340px;box-shadow:0 8px 24px rgba(0,0,0,.18);text-shadow:0 1px 2px rgba(0,0,0,.25);animation:sxChipPop .35s cubic-bezier(.16,1,.3,1);}
+.sx-task-icon{font-size:22px;line-height:1;}
+.sx-task-text{font-size:15px;letter-spacing:.06em;}
+@keyframes sxChipPop{0%{opacity:0;transform:translateY(-6px) scale(.92)}60%{transform:translateY(0) scale(1.04)}100%{opacity:1;transform:none}}
+/* Helper line — secondary read */
+.sx-helper{text-align:center;font-size:12px;color:var(--text2);font-weight:600;margin:0 auto 12px;max-width:320px;line-height:1.35;}
+.sx-helper-dim{opacity:.25;transition:opacity .3s;}
+/* Event banner */
+.sx-event-banner{display:block;text-align:center;padding:8px 14px;border-radius:14px;color:#fff;font-weight:800;font-size:13px;margin:0 auto 8px;max-width:340px;letter-spacing:.04em;box-shadow:0 6px 18px rgba(0,0,0,.18);animation:sxEventSlide .4s cubic-bezier(.16,1,.3,1);}
+.sx-event-sub{font-weight:600;opacity:.9;font-size:11px;}
+@keyframes sxEventSlide{0%{opacity:0;transform:translateY(-10px) scale(.95)}100%{opacity:1;transform:none}}
+/* Stim wrapper — supports ghost fade */
+.sx-stim-wrap{transition:opacity .8s ease,filter .8s ease;}
+.sx-ghost-fade{opacity:.08;filter:blur(2px);}
+/* Accuracy mini-badge */
+.sx-acc-mini{font-size:11px;font-weight:700;color:var(--text2);background:var(--card);padding:3px 10px;border-radius:50px;box-shadow:var(--shadow);}
+/* Combo banner — mid-screen flash */
+.sx-combo-banner{position:fixed;top:30%;left:50%;transform:translate(-50%,-50%) scale(.6);background:linear-gradient(135deg,#F97316,#EF4444,#A855F7);color:#fff;font-weight:900;font-size:22px;letter-spacing:.06em;padding:14px 28px;border-radius:50px;box-shadow:0 16px 48px rgba(239,68,68,.45);z-index:200;pointer-events:none;animation:sxComboIn .35s cubic-bezier(.16,1,.3,1) forwards;text-shadow:0 2px 8px rgba(0,0,0,.3);}
+@keyframes sxComboIn{0%{opacity:0;transform:translate(-50%,-50%) scale(.6) rotate(-4deg)}60%{transform:translate(-50%,-50%) scale(1.12) rotate(2deg)}100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(0)}}
+.sx-combo-banner.sx-combo-out{animation:sxComboOut .55s ease forwards;}
+@keyframes sxComboOut{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-90%) scale(.85)}}
+/* Color option — color-blind letter prefix */
+.sx-opt-letter-cb{display:inline-block;width:20px;height:20px;line-height:20px;border-radius:6px;background:rgba(0,0,0,.28);font-size:11px;font-weight:900;text-align:center;margin-right:6px;letter-spacing:0;}
+/* Zen explanation */
+.sx-explain{margin-top:12px;padding:12px 14px;border-radius:14px;font-size:13px;font-weight:600;line-height:1.4;animation:fadeUp .25s ease;border:1.5px solid;}
+.sx-explain-wrong{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);color:#DC2626;}
+.sx-explain-ok{background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.4);color:#059669;}
+/* Tighter HUD on small screens */
+@media (max-width:360px){
+  .sx-task-text{font-size:13px;}
+  .sx-task-chip{padding:10px 14px;font-size:14px;}
+  .sx-helper{font-size:11px;}
+}
