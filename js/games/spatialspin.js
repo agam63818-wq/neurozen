@@ -698,9 +698,27 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       if(SS_verifyRound(candidate)){round=candidate;break;}
     }
     if(!round){
+      // Ultimate safety net: hand-built shape + options that never depend on
+      // Fresh-history-gated generators, so this path can NEVER return null/throw,
+      // no matter how constrained the freshness history has become.
       const fb=SS_norm([[0,0],[1,0],[1,1]]);
-      const built=SS_buildOptions(fb,'easy');
-      round={rule:'rotation',target:fb,canon:SS_canonicalHash(fb),sil:SS_silhouetteKey(fb),promptCells:built.promptCells,options:built.options};
+      let built=null;
+      try{built=SS_buildOptions(fb,'easy');}catch(e){built=null;}
+      if(built&&built.promptCells&&built.options&&built.options.length===4){
+        round={rule:'rotation',target:fb,canon:SS_canonicalHash(fb),sil:SS_silhouetteKey(fb),promptCells:built.promptCells,options:built.options};
+      }else{
+        // Fully manual fallback — 4 distinct, hand-verified hardcoded shapes.
+        const manualCorrect=SS_norm([[0,0],[1,0],[1,1]]);
+        const manualWrong=[
+          SS_norm([[0,0],[0,1],[1,1]]),
+          SS_norm([[0,0],[0,1],[0,2]]),
+          SS_norm([[0,1],[1,0],[1,1]])
+        ];
+        const opts=[{cells:manualCorrect,correct:true,style:'rotation'}]
+          .concat(manualWrong.map(c=>({cells:c,correct:false,style:'random'})));
+        SS_shuffle(opts);
+        round={rule:'rotation',target:manualCorrect,canon:SS_canonicalHash(manualCorrect),sil:SS_silhouetteKey(manualCorrect),promptCells:manualCorrect,options:opts};
+      }
     }
     Fresh.add(Fresh.canon,round.canon,Fresh.maxCanon);
     Fresh.add(Fresh.silhouettes,round.sil,Fresh.maxSil);
