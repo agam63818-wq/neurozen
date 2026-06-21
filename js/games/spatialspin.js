@@ -17,11 +17,11 @@
 
 /* ---------- MODE DEFS ---------- */
 const SS_MODES={
-  easy   :{label:'Easy',         emoji:'\uD83D\uDFE2',sub:'3-4 blocks \u00B7 clean distractors',time:10000,minTime:6000,decay:300,rule:'rotation',nMin:3,nMax:4,recipe:'easy',  zen:false},
+  easy   :{label:'Easy',         emoji:'\uD83D\uDFE2',sub:'4 blocks \u00B7 clean distractors',time:10000,minTime:6000,decay:300,rule:'rotation',nMin:4,nMax:4,recipe:'easy',  zen:false},
   medium :{label:'Medium',       emoji:'\uD83D\uDFE1',sub:'4-5 blocks \u00B7 near-match traps', time:8000, minTime:4500,decay:250,rule:'rotation',nMin:4,nMax:5,recipe:'medium',zen:false},
   hard   :{label:'Hard',         emoji:'\uD83D\uDD34',sub:'5-7 blocks \u00B7 mirror traps',     time:6000, minTime:3500,decay:200,rule:'rotation',nMin:5,nMax:7,recipe:'hard',  zen:false},
-  speed  :{label:'Speed',        emoji:'\u26A1',         sub:'3.5s flat \u00B7 chain reflexes',    time:3500, minTime:2500,decay:0,  rule:'rotation',nMin:3,nMax:5,recipe:'easy',  zen:false},
-  zen    :{label:'Zen',          emoji:'\uD83E\uDDD8',sub:'No timer \u00B7 explanations',        time:0,    minTime:0,   decay:0,  rule:'rotation',nMin:3,nMax:6,recipe:'medium',zen:true},
+  speed  :{label:'Speed',        emoji:'\u26A1',         sub:'3.5s flat \u00B7 chain reflexes',    time:3500, minTime:2500,decay:0,  rule:'rotation',nMin:4,nMax:5,recipe:'easy',  zen:false},
+  zen    :{label:'Zen',          emoji:'\uD83E\uDDD8',sub:'No timer \u00B7 explanations',        time:0,    minTime:0,   decay:0,  rule:'rotation',nMin:4,nMax:6,recipe:'medium',zen:true},
   mirror :{label:'Mirror Hunter',emoji:'\uD83E\uDE9E',sub:'Pick the MIRROR, not the rotation',  time:7000, minTime:4500,decay:200,rule:'mirror',  nMin:4,nMax:6,recipe:'mirror',zen:false},
   missing:{label:'Missing Block',emoji:'\uD83E\uDDE9',sub:'Where does the missing block go?',   time:8000, minTime:5000,decay:200,rule:'missing', nMin:4,nMax:6,recipe:'missing',zen:false},
   chain  :{label:'Rotation Chain',emoji:'\uD83D\uDD17',sub:'By what angle was it rotated?',      time:7000, minTime:4500,decay:200,rule:'chain',   nMin:4,nMax:6,recipe:'chain', zen:false}
@@ -148,9 +148,23 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     silhouettes:[],maxSil:12,
     distrStyles:[],maxStyle:6,
     correctPos:[],maxPos:8,
+    perNCount:{},perNMax:{3:1,4:2,5:5,6:12,7:25,8:40},
+    addCanon(h,n){
+      this.perNCount[n]=(this.perNCount[n]||0)+1;
+      this.canon.push({h:h,n:n});
+      const limit=this.perNMax[n]||50;
+      if(this.perNCount[n]>limit){
+        const idx=this.canon.findIndex(e=>e.n===n);
+        if(idx>=0){this.canon.splice(idx,1);this.perNCount[n]--;}
+      }
+      while(this.canon.length>this.maxCanon){
+        const e=this.canon.shift();this.perNCount[e.n]--;
+      }
+    },
+    hasCanon(h){return this.canon.some(e=>e.h===h);},
     add(buf,k,cap){buf.push(k);if(buf.length>cap)buf.shift();},
     countIn(buf,k,n){let c=0;const start=Math.max(0,buf.length-n);for(let i=start;i<buf.length;i++)if(buf[i]===k)c++;return c;},
-    clear(){this.canon=[];this.silhouettes=[];this.distrStyles=[];this.correctPos=[];}
+    clear(){this.canon=[];this.silhouettes=[];this.distrStyles=[];this.correctPos=[];this.perNCount={};}
   };
 
   const Adapt={
@@ -188,7 +202,18 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   }
   wrap.addEventListener('remove_game',_cleanup);
 
-  /* ---------- shape factory with quality gate ---------- */
+  /* ---------- shape factory with quality gate + mode-aware filtering ---------- */
+  function SS_shapeOkForMode(cells){
+    const rule=SS_MODES[mode].rule;
+    if(rule==='mirror'&&SS_mirrorSet(cells).size===0)return false;
+    if(rule==='missing'){
+      const setKey=new Set(cells.map(c=>c[0]+','+c[1]));
+      const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+      for(let i=0;i<cells.length;i++){let nb=0;for(let j=0;j<4;j++){const k=(cells[i][0]+dirs[j][0])+','+(cells[i][1]+dirs[j][1]);if(setKey.has(k))nb++;}if(nb<=1)return true;}
+      return false;
+    }
+    return true;
+  }
   function SS_makeFreshShape(n,opts){
     let attempts=0;
     while(attempts<10){
@@ -198,17 +223,19 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       if(cells.length<n)continue;
       if(SS_isDegenerate(cells,{banFullSym:true}))continue;
       const canon=SS_canonicalHash(cells);
-      if(Fresh.canon.indexOf(canon)>=0)continue;
+      if(Fresh.hasCanon(canon))continue;
+      if(!SS_shapeOkForMode(cells))continue;
       const sil=SS_silhouetteKey(cells);
       if(Fresh.countIn(Fresh.silhouettes,sil,4)>=2)continue;
       return{cells:cells,canon:canon,sil:sil};
     }
-    /* relaxed pass: only correctness rules */
+    /* relaxed pass: only correctness rules + mode filter */
     while(attempts<20){
       attempts++;
       const cells=SS_genShape(n,{branching:0.5});
       if(cells.length<n)continue;
       if(SS_isDegenerate(cells,{banFullSym:true}))continue;
+      if(!SS_shapeOkForMode(cells))continue;
       return{cells:cells,canon:SS_canonicalHash(cells),sil:SS_silhouetteKey(cells)};
     }
     const fb=SS_norm([[0,0],[1,0],[1,1]]);
@@ -684,11 +711,16 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     for(let attempt=0;attempt<8;attempt++){
       const sh=SS_makeFreshShape(n,{branching:0.25+Math.random()*0.5});
       let built;
-      if(def.rule==='missing')built=SS_buildMissingOptions(sh.cells);
-      else if(def.rule==='chain')built=SS_buildChainOptions(sh.cells);
-      else if(def.rule==='mirror')built=SS_buildOptions(sh.cells,'mirror');
-      else built=SS_buildOptions(sh.cells,SS_recipeForRound());
-      if(!built)continue;
+      if(def.rule==='missing'){
+        built=SS_buildMissingOptions(sh.cells);
+      }else if(def.rule==='chain'){
+        built=SS_buildChainOptions(sh.cells);
+      }else if(def.rule==='mirror'){
+        built=SS_buildOptions(sh.cells,'mirror');
+      }else{
+        built=SS_buildOptions(sh.cells,SS_recipeForRound());
+      }
+      if(!built){Fresh.addCanon(sh.canon,n);continue;}
       const candidate={
         rule:def.rule,target:sh.cells,canon:sh.canon,sil:sh.sil,
         promptCells:built.promptCells||sh.cells,
@@ -698,6 +730,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       if(SS_verifyRound(candidate)){round=candidate;break;}
     }
     if(!round){
+      console.warn('[SpatialSpin] Emergency fallback triggered (n='+n+', mode='+mode+', round='+G.round+')');
       // Ultimate safety net: hand-built shape + options that never depend on
       // Fresh-history-gated generators, so this path can NEVER return null/throw,
       // no matter how constrained the freshness history has become.
@@ -707,12 +740,12 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       if(built&&built.promptCells&&built.options&&built.options.length===4){
         round={rule:'rotation',target:fb,canon:SS_canonicalHash(fb),sil:SS_silhouetteKey(fb),promptCells:built.promptCells,options:built.options};
       }else{
-        // Fully manual fallback — 4 distinct, hand-verified hardcoded shapes.
-        const manualCorrect=SS_norm([[0,0],[1,0],[1,1]]);
+        // Fully manual fallback — hardcoded 4-block shape, 3 genuinely different distractors.
+        const manualCorrect=SS_norm([[0,0],[1,0],[2,0],[2,1]]);
         const manualWrong=[
-          SS_norm([[0,0],[0,1],[1,1]]),
-          SS_norm([[0,0],[0,1],[0,2]]),
-          SS_norm([[0,1],[1,0],[1,1]])
+          SS_norm([[0,0],[0,1],[0,2],[0,3]]),
+          SS_norm([[0,0],[1,0],[1,1],[2,1]]),
+          SS_norm([[0,0],[0,1],[1,0],[1,1]])
         ];
         const opts=[{cells:manualCorrect,correct:true,style:'rotation'}]
           .concat(manualWrong.map(c=>({cells:c,correct:false,style:'random'})));
@@ -720,7 +753,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         round={rule:'rotation',target:manualCorrect,canon:SS_canonicalHash(manualCorrect),sil:SS_silhouetteKey(manualCorrect),promptCells:manualCorrect,options:opts};
       }
     }
-    Fresh.add(Fresh.canon,round.canon,Fresh.maxCanon);
+    Fresh.addCanon(round.canon, round.target.length);
     Fresh.add(Fresh.silhouettes,round.sil,Fresh.maxSil);
     const styleSummary=(round.options||[]).map(o=>o.style||'-').sort().join('+');
     Fresh.add(Fresh.distrStyles,styleSummary,Fresh.maxStyle);
@@ -938,27 +971,56 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     return '';
   }
 
-  /* ---------- dev verify (off in production; flip to true to run in console) ---------- */
-  if(false){
-    let pass=0,fail=0;
+  /* ---------- dev self-test (off in production; flip to true or call SS_runSimulation() from console) ---------- */
+  function SS_runSimulation(){
+    const TR=300;const r={};let ge=0;
     SS_MODE_ORDER.forEach(mk=>{
-      mode=mk;Fresh.clear();Adapt.reset();G.round=0;
-      for(let i=0;i<25;i++){
-        const def=SS_MODES[mk];
-        const n=SS_blockCountForRound(i);
-        const sh=SS_makeFreshShape(n,{branching:0.5});
-        let built;
-        if(def.rule==='missing')built=SS_buildMissingOptions(sh.cells);
-        else if(def.rule==='chain')built=SS_buildChainOptions(sh.cells);
-        else if(def.rule==='mirror')built=SS_buildOptions(sh.cells,'mirror');
-        else built=SS_buildOptions(sh.cells,SS_recipeForRound());
-        if(!built){fail++;continue;}
-        const cand={rule:def.rule,target:sh.cells,partial:built.partial,promptCells:built.promptCells,afterCells:built.afterCells,angle:built.angle,options:built.options};
-        if(SS_verifyRound(cand))pass++;else fail++;
+      mode=mk;Fresh.clear();Adapt.reset();G.round=0;G.lives=SS_MODES[mk].zen?Infinity:3;
+      G.skill={rotation:{ok:0,n:0},mirror:{ok:0,n:0},missing:{ok:0,n:0},chain:{ok:0,n:0},mirrorErrors:0,nearErrors:0};
+      let em=0;const sc={};let vf=0;
+      for(let i=0;i<TR;i++){
+        const def=SS_MODES[mk];const n=SS_blockCountForRound(G.round);
+        let rd=null;
+        for(let a=0;a<8;a++){
+          const sh=SS_makeFreshShape(n,{branching:0.25+Math.random()*0.5});
+          let bu;
+          if(def.rule==='missing'){bu=SS_buildMissingOptions(sh.cells);if(!bu)continue;}
+          else if(def.rule==='chain'){bu=SS_buildChainOptions(sh.cells);}
+          else if(def.rule==='mirror'){bu=SS_buildOptions(sh.cells,'mirror');}
+          else{bu=SS_buildOptions(sh.cells,SS_recipeForRound());}
+          if(!bu)continue;
+          const ca={rule:def.rule,target:sh.cells,canon:sh.canon,sil:sh.sil,
+            promptCells:bu.promptCells||sh.cells,partial:bu.partial,
+            afterCells:bu.afterCells,angle:bu.angle,options:bu.options};
+          if(SS_verifyRound(ca)){rd=ca;break;}
+        }
+        if(!rd){em++;const fb=SS_norm([[0,0],[1,0],[1,1]]);let bu=null;
+          try{bu=SS_buildOptions(fb,'easy');}catch(e){}
+          if(bu&&bu.promptCells&&bu.options&&bu.options.length===4)
+            rd={rule:'rotation',target:fb,canon:SS_canonicalHash(fb),sil:SS_silhouetteKey(fb),promptCells:bu.promptCells,options:bu.options};
+          else{const mc=SS_norm([[0,0],[1,0],[2,0],[2,1]]);const mw=[SS_norm([[0,0],[0,1],[0,2],[0,3]]),SS_norm([[0,0],[1,0],[1,1],[2,1]]),SS_norm([[0,0],[0,1],[1,0],[1,1]])];
+            rd={rule:'rotation',target:mc,canon:SS_canonicalHash(mc),sil:SS_silhouetteKey(mc),promptCells:mc,
+              options:[{cells:mc,correct:true,style:'rotation'}].concat(mw.map(c=>({cells:c,correct:false,style:'random'})))};
+            SS_shuffle(rd.options);}
+        }
+        Fresh.addCanon(rd.canon,rd.target.length);
+        Fresh.add(Fresh.silhouettes,rd.sil,Fresh.maxSil);
+        const ss=(rd.options||[]).map(o=>o.style||'-').sort().join('+');
+        Fresh.add(Fresh.distrStyles,ss,Fresh.maxStyle);
+        const ci=(rd.options||[]).findIndex(o=>o.correct);
+        if(ci>=0)Fresh.add(Fresh.correctPos,ci,Fresh.maxPos);
+        sc[rd.canon]=(sc[rd.canon]||0)+1;
+        if(!SS_verifyRound(rd))vf++;
+        G.round++;
       }
+      r[mk]={emergencies:em,distinctShapes:Object.keys(sc).length,verifyFails:vf};
+      ge+=em;
+      console.log('[SS_Sim] '+mk+' emerg='+em+' shapes='+Object.keys(sc).length+' vfails='+vf);
     });
-    console.log('[SpatialSpin v3] verify: pass='+pass+' fail='+fail);
+    console.log('[SS_Sim] TOTAL emergencies='+ge);
+    return r;
   }
+  if(false){console.log('[SpatialSpin] Simulation results:',SS_runSimulation());}
 
   renderStart();
 }
