@@ -873,27 +873,69 @@ body.dark .mm-zen .mm-cell{background:linear-gradient(135deg,#2A2150,#1E2A45);}
 .sx-compare{text-align:center;margin:8px 0 14px;}
 .sx-compare-prev{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:8px;}
 
-/* ===================== SPATIAL SPIN v3 ADDITIONS ===================== */
-.ss-modes-v3{grid-template-columns:1fr 1fr;}
-.ss-task-chip{display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 18px;border-radius:50px;color:#fff;font-weight:900;font-size:15px;letter-spacing:.04em;margin:6px auto 6px;max-width:340px;box-shadow:0 8px 24px rgba(0,0,0,.18);text-shadow:0 1px 2px rgba(0,0,0,.25);animation:ssChipPop .3s cubic-bezier(.16,1,.3,1);}
+/* ===================== SPATIAL SPIN v4 — 4 modes × 8 challenge types ===================== */
+/* Mode grid (2×2 for 4 modes) */
+.ss-modes-v3,.ss-modes-v4{grid-template-columns:1fr 1fr;}
+/* Recommended badge inside mode card */
+.ss-rec-badge{display:inline-block;font-size:8px;font-weight:800;padding:2px 6px;border-radius:50px;background:var(--grad);color:#fff;margin-left:6px;letter-spacing:.06em;vertical-align:middle;}
+/* ---------- CHALLENGE BADGE (large, unmissable) ---------- */
+.ss-badge{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 18px;border-radius:16px;color:#fff;margin:6px auto 10px;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,.22);animation:ssBadgePop .35s cubic-bezier(.16,1,.3,1);}
+.ss-badge-top{display:flex;align-items:center;gap:10px;}
+.ss-badge-emoji{font-size:22px;line-height:1;}
+.ss-badge-name{font-size:16px;font-weight:900;letter-spacing:.08em;text-shadow:0 1px 2px rgba(0,0,0,.25);}
+.ss-badge-inst{font-size:12px;font-weight:600;opacity:.9;letter-spacing:.02em;}
+@keyframes ssBadgePop{0%{opacity:0;transform:translateY(-8px) scale(.92)}60%{transform:translateY(0) scale(1.04)}100%{opacity:1;transform:none}}
+/* legacy task chip mapping */
+.ss-task-chip{display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 18px;border-radius:50px;color:#fff;font-weight:900;font-size:15px;letter-spacing:.04em;margin:6px auto 6px;max-width:340px;box-shadow:0 8px 24px rgba(0,0,0,.18);text-shadow:0 1px 2px rgba(0,0,0,.25);animation:ssBadgePop .3s cubic-bezier(.16,1,.3,1);}
 .ss-task-icon{font-size:20px;line-height:1;}
 .ss-task-text{font-size:14px;letter-spacing:.06em;}
-@keyframes ssChipPop{0%{opacity:0;transform:translateY(-6px) scale(.92)}60%{transform:translateY(0) scale(1.04)}100%{opacity:1;transform:none}}
+/* ---------- helper text ---------- */
 .ss-helper{text-align:center;font-size:12px;color:var(--text2);font-weight:600;margin:0 auto 12px;max-width:320px;line-height:1.35;display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;}
 .ss-mini-tag{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:50px;background:rgba(124,58,237,.12);color:var(--primary);letter-spacing:.06em;}
-.ss-chain-pair{display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap;}
-.ss-chain-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 12px;background:var(--card);border-radius:14px;box-shadow:var(--shadow);min-width:70px;}
+/* ---------- chain / angle pair view ---------- */
+.ss-chain-pair{display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;}
+.ss-chain-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 12px;background:var(--card);border-radius:14px;box-shadow:var(--shadow);min-width:60px;}
+.ss-chain-card.ss-chain-q{min-width:56px;min-height:56px;border:2px dashed var(--primary);justify-content:center;}
+.ss-chain-card.ss-chain-q .ss-chain-lbl{font-size:22px;color:var(--primary);font-weight:900;}
 .ss-chain-lbl{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--text2);}
-.ss-chain-arrow{font-size:24px;font-weight:900;color:var(--primary);}
+.ss-chain-arrow{font-size:16px;font-weight:900;color:var(--primary);white-space:nowrap;}
+/* ---------- option text variants ---------- */
 .ss-opt-text{font-size:18px;font-weight:900;letter-spacing:.04em;color:var(--text);min-height:64px;}
 .ss-angle{font-size:20px;font-weight:900;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+/* ---------- odd-one-out grid ---------- */
+.ss-opts-odd{grid-template-columns:1fr 1fr;gap:10px;max-width:300px;margin:0 auto;}
+.ss-opt-odd{min-height:88px;}
+/* ---------- mirror line ---------- */
+.ss-mirror-line{width:2px;height:80%;min-height:40px;background:repeating-linear-gradient(180deg,var(--primary) 0,var(--primary) 6px,transparent 6px,transparent 12px);margin:0 auto;border-radius:2px;opacity:.5;position:absolute;left:50%;top:10%;transform:translateX(-50%);pointer-events:none;}
+.ss-disp-wrap{position:relative;}
+/* ---------- memory overlay ---------- */
+.ss-memory-hidden{display:flex;align-items:center;justify-content:center;min-height:80px;font-size:15px;font-weight:700;color:var(--primary);animation:fadeUp .3s ease;padding:16px;background:repeating-linear-gradient(45deg,rgba(124,58,237,.08),rgba(124,58,237,.08) 8px,rgba(79,142,247,.08) 8px,rgba(79,142,247,.08) 16px);border-radius:14px;}
+/* ---------- combo badge ---------- */
+.ss-combo{font-size:13px;font-weight:800;color:#F97316;animation:schFindPulse .8s ease-in-out infinite;white-space:nowrap;}
+.ss-combo-banner{position:fixed;top:30%;left:50%;transform:translate(-50%,-50%) scale(.6);background:linear-gradient(135deg,#F97316,#EF4444,#A855F7);color:#fff;font-weight:900;font-size:22px;letter-spacing:.06em;padding:14px 28px;border-radius:50px;box-shadow:0 16px 48px rgba(239,68,68,.45);z-index:200;pointer-events:none;animation:ssComboIn .35s cubic-bezier(.16,1,.3,1) forwards;text-shadow:0 2px 8px rgba(0,0,0,.3);}
+@keyframes ssComboIn{0%{opacity:0;transform:translate(-50%,-50%) scale(.6) rotate(-4deg)}60%{transform:translate(-50%,-50%) scale(1.12) rotate(2deg)}100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(0)}}
+.ss-combo-banner.ss-combo-out{animation:ssComboOut .55s ease forwards;}
+@keyframes ssComboOut{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-90%) scale(.85)}}
+/* ---------- explain / insight ---------- */
 .ss-explain{margin-top:12px;padding:11px 14px;border-radius:14px;font-size:13px;font-weight:600;line-height:1.4;background:rgba(124,58,237,.08);border:1.5px solid rgba(124,58,237,.25);color:var(--text);animation:fadeUp .25s ease;}
 .ss-insight{margin-top:14px;padding:12px 14px;border-radius:14px;font-size:13px;font-weight:700;line-height:1.45;background:linear-gradient(135deg,rgba(124,58,237,.10),rgba(79,142,247,.10));border:1px solid var(--border);color:var(--text);}
+/* ---------- game-over breakdown ---------- */
+.ss-breakdown{margin-top:14px;padding:12px 14px;border-radius:14px;background:var(--card);box-shadow:var(--shadow);border:1px solid var(--border);}
+.ss-bd-title{font-size:13px;font-weight:800;color:var(--primary);margin-bottom:8px;letter-spacing:.04em;}
+.ss-bd-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;padding:4px 0;border-bottom:1px dashed var(--border);}
+.ss-bd-row:last-child{border-bottom:none;}
+.ss-bd-row span:last-child{color:var(--primary);font-weight:700;}
+/* ---------- responsive ---------- */
 @media (max-width:360px){
+  .ss-badge{padding:10px 14px;font-size:13px;}
+  .ss-badge-name{font-size:14px;}
+  .ss-badge-inst{font-size:11px;}
   .ss-task-chip{padding:9px 14px;font-size:13px;}
   .ss-task-text{font-size:12px;}
   .ss-helper{font-size:11px;}
-  .ss-modes-v3{grid-template-columns:1fr;}
+  .ss-modes-v3,.ss-modes-v4{grid-template-columns:1fr;}
+  .ss-chain-arrow{font-size:13px;}
+  .ss-chain-pair{gap:4px;}
 }
 
 /* ===================== STROOP X v3 ADDITIONS ===================== */
