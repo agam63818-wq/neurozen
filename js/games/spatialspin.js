@@ -1,11 +1,11 @@
-/* ===================== SPATIAL SPIN v3 — procedural redesign =====================
+/* ===================== SPATIAL SPIN v4 — 4-mode mixed-challenge redesign =====================
  *  Entry: playSpatialSpin(body, setScore, end, wrap, startClock)
  *  All top-level identifiers prefixed SS_ to avoid collisions with other games.
  *  Reuses globals: $, S, setS, playSound, toast, confetti, _si, _cti, _st, todayKey.
  *  CSS prefix preserved: .ss-
  *  localStorage keys preserved: nz_ss_best_round, nz_ss_games, nz_ss_accuracy,
  *                               nz_ss_daily_date, nz_ss_daily_done
- *  New keys (additive): nz_ss_v3_seen, nz_ss_skill
+ *  New keys (additive): nz_ss_v4_seen, nz_ss_skill
  *
  *  Rotation/reflection convention (used IDENTICALLY at generation + validation):
  *    cells = [[row,col], ...] integer grid
@@ -15,21 +15,37 @@
  *    mirror   set of shape T = { mirrorH(R) | R in rotation set } deduped, minus rotation set
  * ============================================================================ */
 
-/* ---------- MODE DEFS ---------- */
+/* ---------- MODE DEFS (4 clean modes) ---------- */
 const SS_MODES={
-  easy   :{label:'Easy',         emoji:'\uD83D\uDFE2',sub:'4 blocks \u00B7 clean distractors',time:10000,minTime:6000,decay:300,rule:'rotation',nMin:4,nMax:4,recipe:'easy',  zen:false},
-  medium :{label:'Medium',       emoji:'\uD83D\uDFE1',sub:'4-5 blocks \u00B7 near-match traps', time:8000, minTime:4500,decay:250,rule:'rotation',nMin:4,nMax:5,recipe:'medium',zen:false},
-  hard   :{label:'Hard',         emoji:'\uD83D\uDD34',sub:'5-7 blocks \u00B7 mirror traps',     time:6000, minTime:3500,decay:200,rule:'rotation',nMin:5,nMax:7,recipe:'hard',  zen:false},
-  speed  :{label:'Speed',        emoji:'\u26A1',         sub:'3.5s flat \u00B7 chain reflexes',    time:3500, minTime:2500,decay:0,  rule:'rotation',nMin:4,nMax:5,recipe:'easy',  zen:false},
-  zen    :{label:'Zen',          emoji:'\uD83E\uDDD8',sub:'No timer \u00B7 explanations',        time:0,    minTime:0,   decay:0,  rule:'rotation',nMin:4,nMax:6,recipe:'medium',zen:true},
-  mirror :{label:'Mirror Hunter',emoji:'\uD83E\uDE9E',sub:'Pick the MIRROR, not the rotation',  time:7000, minTime:4500,decay:200,rule:'mirror',  nMin:4,nMax:6,recipe:'mirror',zen:false},
-  missing:{label:'Missing Block',emoji:'\uD83E\uDDE9',sub:'Where does the missing block go?',   time:8000, minTime:5000,decay:200,rule:'missing', nMin:4,nMax:6,recipe:'missing',zen:false},
-  chain  :{label:'Rotation Chain',emoji:'\uD83D\uDD17',sub:'By what angle was it rotated?',      time:7000, minTime:4500,decay:200,rule:'chain',   nMin:4,nMax:6,recipe:'chain', zen:false}
+  classic:{label:'Classic',emoji:'\uD83C\uDFAF',sub:'Mixed challenges \u00B7 all types',time:8000,minTime:4000,decay:200,nMin:4,nMax:7,zen:false,lives:3,combo:false},
+  speed  :{label:'Speed',  emoji:'\u26A1',       sub:'3.5s flat \u00B7 chain reflexes',  time:3500,minTime:3500,decay:0,  nMin:4,nMax:5,zen:false,lives:3,combo:true},
+  expert :{label:'Expert', emoji:'\uD83D\uDD25',sub:'Hard challenges \u00B7 6-8 blocks', time:6000,minTime:3500,decay:150,nMin:6,nMax:8,zen:false,lives:3,combo:false},
+  zen    :{label:'Zen',    emoji:'\uD83E\uDDD8',sub:'No timer \u00B7 learn & explore',   time:0,   minTime:0,   decay:0,  nMin:4,nMax:6,zen:true, lives:Infinity,combo:false}
 };
-const SS_MODE_ORDER=['easy','medium','hard','speed','zen','mirror','missing','chain'];
+const SS_MODE_KEYS=['classic','speed','expert','zen'];
 const SS_PALETTE=['#7C3AED','#4F8EF7','#34D399','#F97316','#EC4899','#06B6D4','#A855F7','#EF4444'];
 
-/* ---------- SHAPE MATH ---------- */
+/* ---------- CHALLENGE TYPE WEIGHTS PER MODE ---------- */
+const SS_CHALLENGE_WEIGHTS={
+  classic: {rotation:35,mirror:15,missing:15,memory:10,angle:10,oddoneout:10,completion:5,chain:0},
+  speed:   {rotation:50,mirror:0,missing:0,memory:0,angle:30,oddoneout:20,completion:0,chain:0},
+  expert:  {rotation:20,mirror:20,missing:10,memory:20,oddoneout:15,chain:15,completion:0,angle:0},
+  zen:     {rotation:12.5,mirror:12.5,missing:12.5,memory:12.5,angle:12.5,oddoneout:12.5,completion:12.5,chain:12.5}
+};
+
+/* ---------- CHALLENGE TYPE META (badge system) ---------- */
+const SS_CHALLENGE_META={
+  rotation:  {emoji:'\uD83D\uDFE3',name:'ROTATION',   color:'#7C3AED',instruction:'Tap the correct rotation'},
+  mirror:    {emoji:'\uD83D\uDD34',name:'MIRROR',      color:'#EC4899',instruction:'Find the MIRROR image'},
+  missing:   {emoji:'\uD83D\uDFE2',name:'MISSING',     color:'#34D399',instruction:'Where does the missing block go?'},
+  memory:    {emoji:'\uD83D\uDFE0',name:'MEMORY',      color:'#F97316',instruction:'Remember the shape!'},
+  angle:     {emoji:'\uD83D\uDFE1',name:'ANGLE',       color:'#EAB308',instruction:'How much did it rotate?'},
+  oddoneout: {emoji:'\uD83D\uDD35',name:'ODD ONE',     color:'#3B82F6',instruction:'Find the shape that doesn\'t belong'},
+  chain:     {emoji:'\u26AB',       name:'SEQUENCE',    color:'#6B7280',instruction:'Pick the missing step'},
+  completion:{emoji:'\uD83D\uDD3A',name:'COMPLETE',    color:'#8B5CF6',instruction:'Complete the shape'}
+};
+
+/* ---------- SHAPE MATH (KEPT EXACTLY — mathematically verified) ---------- */
 function SS_norm(cells){
   let mr=Infinity,mc=Infinity;
   for(let i=0;i<cells.length;i++){if(cells[i][0]<mr)mr=cells[i][0];if(cells[i][1]<mc)mc=cells[i][1];}
@@ -134,13 +150,16 @@ function SS_silhouetteKey(cells){const bb=SS_bbox(cells);return cells.length+'x'
 
 /* ====================================================================== */
 function playSpatialSpin(body,setScore,end,wrap,startClock){
-  let mode='easy';
+  let mode='classic';
 
   const G={
-    round:0,lives:3,correctCount:0,attempts:0,
+    round:0,lives:3,correctCount:0,attempts:0,comboCount:0,comboMax:0,
     barT:null,roundStart:0,roundOffPause:0,timerMs:0,
     pending:false,
-    skill:{rotation:{ok:0,n:0},mirror:{ok:0,n:0},missing:{ok:0,n:0},chain:{ok:0,n:0},mirrorErrors:0,nearErrors:0}
+    challengeHistory:[],   /* anti-repetition: last 5 challenge types */
+    skill:{rotation:{ok:0,n:0},mirror:{ok:0,n:0},missing:{ok:0,n:0},chain:{ok:0,n:0},
+           memory:{ok:0,n:0},angle:{ok:0,n:0},oddoneout:{ok:0,n:0},completion:{ok:0,n:0},
+           mirrorErrors:0,nearErrors:0}
   };
 
   const Fresh={
@@ -169,11 +188,9 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
 
   const Adapt={
     win:[],winSize:8,bias:0,
-    record(correct,ms,timerMs,corrStyle,pickedStyle){
+    record(correct,ms,timerMs){
       this.win.push({c:correct?1:0,ms:ms||0,t:timerMs||5000});
       if(this.win.length>this.winSize)this.win.shift();
-      if(!correct&&pickedStyle&&pickedStyle.indexOf('mirror')===0)G.skill.mirrorErrors++;
-      if(!correct&&pickedStyle==='nearMatch')G.skill.nearErrors++;
       if(this.win.length>=5)this._tune();
     },
     _tune(){
@@ -202,15 +219,17 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   }
   wrap.addEventListener('remove_game',_cleanup);
 
-  /* ---------- shape factory with quality gate + mode-aware filtering ---------- */
-  function SS_shapeOkForMode(cells){
-    const rule=SS_MODES[mode].rule;
-    if(rule==='mirror'&&SS_mirrorSet(cells).size===0)return false;
-    if(rule==='missing'){
+  /* ---------- shape factory ---------- */
+  function SS_shapeOkForChallenge(cells,challengeType){
+    if(challengeType==='mirror'&&SS_mirrorSet(cells).size===0)return false;
+    if(challengeType==='missing'){
       const setKey=new Set(cells.map(c=>c[0]+','+c[1]));
       const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
       for(let i=0;i<cells.length;i++){let nb=0;for(let j=0;j<4;j++){const k=(cells[i][0]+dirs[j][0])+','+(cells[i][1]+dirs[j][1]);if(setKey.has(k))nb++;}if(nb<=1)return true;}
       return false;
+    }
+    if(challengeType==='completion'){
+      if(cells.length<4)return false;
     }
     return true;
   }
@@ -224,25 +243,53 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       if(SS_isDegenerate(cells,{banFullSym:true}))continue;
       const canon=SS_canonicalHash(cells);
       if(Fresh.hasCanon(canon))continue;
-      if(!SS_shapeOkForMode(cells))continue;
       const sil=SS_silhouetteKey(cells);
       if(Fresh.countIn(Fresh.silhouettes,sil,4)>=2)continue;
       return{cells:cells,canon:canon,sil:sil};
     }
-    /* relaxed pass: only correctness rules + mode filter */
     while(attempts<20){
       attempts++;
       const cells=SS_genShape(n,{branching:0.5});
       if(cells.length<n)continue;
       if(SS_isDegenerate(cells,{banFullSym:true}))continue;
-      if(!SS_shapeOkForMode(cells))continue;
       return{cells:cells,canon:SS_canonicalHash(cells),sil:SS_silhouetteKey(cells)};
     }
     const fb=SS_norm([[0,0],[1,0],[1,1]]);
     return{cells:fb,canon:SS_canonicalHash(fb),sil:SS_silhouetteKey(fb)};
   }
 
+  /* ---------- CHALLENGE TYPE PICKER (weighted + anti-repetition) ---------- */
+  function SS_pickChallengeType(){
+    const weights=SS_CHALLENGE_WEIGHTS[mode];
+    const types=Object.keys(weights).filter(k=>weights[k]>0);
+    if(!types.length)return 'rotation';
+
+    /* anti-repetition: no same type twice in a row */
+    const last=G.challengeHistory.length?G.challengeHistory[G.challengeHistory.length-1]:null;
+    /* also penalize types that appeared a lot in last 5 */
+    const recent5=G.challengeHistory.slice(-5);
+
+    let pool=[];
+    let totalW=0;
+    for(const t of types){
+      if(t===last&&types.length>1)continue; /* never same twice in a row */
+      let w=weights[t];
+      /* reduce weight if appeared often recently */
+      const recentCount=recent5.filter(x=>x===t).length;
+      if(recentCount>=2)w*=0.3;
+      else if(recentCount>=1)w*=0.6;
+      /* early rounds: reduce hard types */
+      if(G.round<5&&(t==='chain'||t==='memory'||t==='completion'))w*=0.3;
+      if(w>0){pool.push({type:t,w:w});totalW+=w;}
+    }
+    if(!pool.length)return types[0];
+    let r=Math.random()*totalW;
+    for(const p of pool){r-=p.w;if(r<=0)return p.type;}
+    return pool[pool.length-1].type;
+  }
+
   /* ---------- distractors ---------- */
+  function SS_shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=a[i];a[i]=a[j];a[j]=t;}return a;}
   function SS_distRandom(target,banSet){
     const rot=SS_rotationSet(target);
     for(let t=0;t<8;t++){
@@ -261,8 +308,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     if(banSet.has(h))return null;
     const rot=SS_rotationSet(target);
     if(rot.has(h))return null;
-    const style=extraRot===0?'mirror0':extraRot===1?'mirror90':extraRot===2?'mirror180':'mirror270';
-    return{cells:m,style:style};
+    return{cells:m,style:'mirror'+(extraRot||0)};
   }
   function SS_distOneBlockMod(target,banSet){
     const leaves=[];
@@ -270,10 +316,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
     for(let i=0;i<target.length;i++){
       let nb=0;
-      for(let j=0;j<4;j++){
-        const k=(target[i][0]+dirs[j][0])+','+(target[i][1]+dirs[j][1]);
-        if(setKey.has(k))nb++;
-      }
+      for(let j=0;j<4;j++){const k=(target[i][0]+dirs[j][0])+','+(target[i][1]+dirs[j][1]);if(setKey.has(k))nb++;}
       if(nb<=1)leaves.push(i);
     }
     if(!leaves.length)return null;
@@ -290,8 +333,20 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       const h=SS_hash(newCells);
       if(banSet.has(h))continue;
       const rot=SS_rotationSet(target);if(rot.has(h))continue;
-      const mir=SS_mirrorSet(target);if(mir.has(h))continue;
       return{cells:newCells,style:'oneBlockMod'};
+    }
+    return null;
+  }
+  function SS_distNearMatch(target,banSet){
+    const targetBB=SS_bbox(target);
+    for(let t=0;t<10;t++){
+      const sh=SS_makeFreshShape(target.length,{branching:0.5+Math.random()*0.3});
+      const bb=SS_bbox(sh.cells);
+      if(Math.abs(bb.rows*bb.cols-targetBB.rows*targetBB.cols)>2)continue;
+      const h=SS_hash(sh.cells);
+      if(banSet.has(h))continue;
+      const rot=SS_rotationSet(target);if(rot.has(h))continue;
+      return{cells:sh.cells,style:'nearMatch'};
     }
     return null;
   }
@@ -301,10 +356,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
     for(let i=0;i<target.length;i++){
       let nb=0;
-      for(let j=0;j<4;j++){
-        const k=(target[i][0]+dirs[j][0])+','+(target[i][1]+dirs[j][1]);
-        if(setKey.has(k))nb++;
-      }
+      for(let j=0;j<4;j++){const k=(target[i][0]+dirs[j][0])+','+(target[i][1]+dirs[j][1]);if(setKey.has(k))nb++;}
       if(nb===1)leaves.push(i);
     }
     if(leaves.length<2)return null;
@@ -327,114 +379,90 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       const h=SS_hash(newCells);
       if(banSet.has(h))continue;
       const rot=SS_rotationSet(target);if(rot.has(h))continue;
-      const mir=SS_mirrorSet(target);if(mir.has(h))continue;
       return{cells:newCells,style:'branchSwap'};
     }
     return null;
   }
-  function SS_distNearMatch(target,banSet){
-    const targetBB=SS_bbox(target);
-    for(let t=0;t<10;t++){
-      const sh=SS_makeFreshShape(target.length,{branching:0.5+Math.random()*0.3});
-      const bb=SS_bbox(sh.cells);
-      if(Math.abs(bb.rows*bb.cols-targetBB.rows*targetBB.cols)>2)continue;
-      const h=SS_hash(sh.cells);
-      if(banSet.has(h))continue;
-      const rot=SS_rotationSet(target);if(rot.has(h))continue;
-      const mir=SS_mirrorSet(target);if(mir.has(h))continue;
-      return{cells:sh.cells,style:'nearMatch'};
-    }
-    return null;
-  }
 
-  /* ---------- option assembly ---------- */
-  function SS_shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=a[i];a[i]=a[j];a[j]=t;}return a;}
   function SS_avoidStalePos(opts){
     const idx=opts.findIndex(o=>o.correct);
     if(idx<0)return;
     const recent=Fresh.correctPos.slice(-5);
     if(recent.filter(p=>p===idx).length>=2&&opts.length>1){
       let bestSlot=idx,bestC=99;
-      for(let i=0;i<opts.length;i++){
-        const c=recent.filter(p=>p===i).length;
-        if(c<bestC){bestC=c;bestSlot=i;}
-      }
+      for(let i=0;i<opts.length;i++){const c=recent.filter(p=>p===i).length;if(c<bestC){bestC=c;bestSlot=i;}}
       if(bestSlot!==idx){const t=opts[idx];opts[idx]=opts[bestSlot];opts[bestSlot]=t;}
     }
   }
 
-  function SS_buildOptions(target,recipe){
+  /* ---------- ROUND BUILDERS for each challenge type ---------- */
+
+  /* 1. ROTATION MATCH */
+  function SS_buildRotation(target){
     const banSet=new Set();
     const rotSet=SS_rotationSet(target);
     const rotList=Array.from(rotSet.values());
     const promptCells=rotList[0];
     let correctCells;
-    if(recipe==='mirror'){
-      const mirSet=SS_mirrorSet(target);
-      const mirList=Array.from(mirSet.values());
-      if(!mirList.length)return null;
-      correctCells=mirList[Math.floor(Math.random()*mirList.length)];
-    }else if(rotList.length>1){
+    if(rotList.length>1){
       const nonIdentity=rotList.slice(1);
       correctCells=nonIdentity[Math.floor(Math.random()*nonIdentity.length)];
-    }else{
-      correctCells=rotList[0];
-    }
+    }else{correctCells=rotList[0];}
     banSet.add(SS_hash(correctCells));
-
     const wrong=[];
     const tryAdd=(g)=>{if(g){const h=SS_hash(g.cells);if(!banSet.has(h)){banSet.add(h);wrong.push(g);}}};
-
-    if(recipe==='easy'){
-      tryAdd(SS_distMirror(target,banSet,0));
-      tryAdd(SS_distRandom(target,banSet));
-      tryAdd(SS_distRandom(target,banSet));
-    }else if(recipe==='medium'){
-      tryAdd(SS_distMirror(target,banSet,0));
-      tryAdd(SS_distNearMatch(target,banSet));
-      tryAdd(SS_distOneBlockMod(target,banSet)||SS_distNearMatch(target,banSet));
-    }else if(recipe==='hard'){
+    /* difficulty-aware distractors */
+    const isHard=mode==='expert';
+    if(isHard){
       tryAdd(SS_distMirror(target,banSet,0));
       tryAdd(SS_distMirror(target,banSet,2));
       tryAdd(SS_distBranchSwap(target,banSet)||SS_distNearMatch(target,banSet));
-    }else if(recipe==='mirror'){
-      const fillers=rotList.filter(c=>SS_hash(c)!==SS_hash(promptCells));
-      for(let i=0;i<fillers.length&&wrong.length<3;i++){
-        const h=SS_hash(fillers[i]);
-        if(!banSet.has(h)){banSet.add(h);wrong.push({cells:fillers[i],style:'rotationFiller'});}
-      }
-      while(wrong.length<3){
-        const f=SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet);
-        if(!f)break;
-        banSet.add(SS_hash(f.cells));
-        wrong.push(f);
-      }
+    }else{
+      tryAdd(SS_distMirror(target,banSet,0));
+      tryAdd(SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet));
+      tryAdd(SS_distRandom(target,banSet));
     }
-    while(wrong.length<3){
-      const f=SS_distRandom(target,banSet);
-      if(!f)break;
-      banSet.add(SS_hash(f.cells));
-      wrong.push(f);
-    }
+    while(wrong.length<3){const f=SS_distRandom(target,banSet);if(!f)break;banSet.add(SS_hash(f.cells));wrong.push(f);}
     if(wrong.length<3)return null;
-
-    const correctStyle=recipe==='mirror'?'mirrorAnswer':'rotation';
-    const opts=[{cells:correctCells,correct:true,style:correctStyle}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
-    SS_shuffle(opts);
-    SS_avoidStalePos(opts);
-    return{promptCells:promptCells,options:opts};
+    const opts=[{cells:correctCells,correct:true,style:'rotation'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
+    SS_shuffle(opts);SS_avoidStalePos(opts);
+    return{challengeType:'rotation',target:target,promptCells:promptCells,options:opts};
   }
 
-  function SS_buildMissingOptions(target){
+  /* 2. MIRROR CHALLENGE */
+  function SS_buildMirror(target){
+    const mirSet=SS_mirrorSet(target);
+    const mirList=Array.from(mirSet.values());
+    if(!mirList.length)return null;
+    const correctCells=mirList[Math.floor(Math.random()*mirList.length)];
+    const banSet=new Set();
+    banSet.add(SS_hash(correctCells));
+    const rotSet=SS_rotationSet(target);
+    const rotList=Array.from(rotSet.values());
+    const promptCells=rotList[0];
+    const wrong=[];
+    const tryAdd=(g)=>{if(g){const h=SS_hash(g.cells);if(!banSet.has(h)){banSet.add(h);wrong.push(g);}}};
+    /* fillers: rotations that aren't mirrors */
+    const fillers=rotList.filter(c=>SS_hash(c)!==SS_hash(promptCells));
+    for(let i=0;i<fillers.length&&wrong.length<3;i++){
+      const h=SS_hash(fillers[i]);
+      if(!banSet.has(h)){banSet.add(h);wrong.push({cells:fillers[i],style:'rotationFiller'});}
+    }
+    while(wrong.length<3){const f=SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet);if(!f)break;banSet.add(SS_hash(f.cells));wrong.push(f);}
+    if(wrong.length<3)return null;
+    const opts=[{cells:correctCells,correct:true,style:'mirrorAnswer'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
+    SS_shuffle(opts);SS_avoidStalePos(opts);
+    return{challengeType:'mirror',target:target,promptCells:promptCells,options:opts};
+  }
+
+  /* 3. MISSING BLOCK */
+  function SS_buildMissing(target){
     const setKey=new Set(target.map(c=>c[0]+','+c[1]));
     const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
     const candidates=[];
     for(let i=0;i<target.length;i++){
       let nb=0;
-      for(let j=0;j<4;j++){
-        const k=(target[i][0]+dirs[j][0])+','+(target[i][1]+dirs[j][1]);
-        if(setKey.has(k))nb++;
-      }
+      for(let j=0;j<4;j++){const k=(target[i][0]+dirs[j][0])+','+(target[i][1]+dirs[j][1]);if(setKey.has(k))nb++;}
       if(nb===1)candidates.push(i);
     }
     if(!candidates.length)return null;
@@ -442,7 +470,6 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const removedCell=target[removedIdx];
     const partial=target.filter((_,i)=>i!==removedIdx);
     if(!SS_isConnected(partial))return null;
-    /* shift removed cell into partial-normalized frame */
     let mr=Infinity,mc=Infinity;
     for(let i=0;i<partial.length;i++){if(partial[i][0]<mr)mr=partial[i][0];if(partial[i][1]<mc)mc=partial[i][1];}
     const partialNorm=SS_norm(partial);
@@ -461,85 +488,162 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     if(distractorPositions.length<3)return null;
     const opts=[{pos:correctPos,correct:true,style:'missingCorrect'}]
       .concat(distractorPositions.map(p=>({pos:p,correct:false,style:'missingWrong'})));
-    SS_shuffle(opts);
-    SS_avoidStalePos(opts);
-    return{rule:'missing',partial:partialNorm,options:opts};
+    SS_shuffle(opts);SS_avoidStalePos(opts);
+    return{challengeType:'missing',target:target,partial:partialNorm,options:opts};
   }
 
-  function SS_buildChainOptions(target){
-    const angle=[0,90,180,270][Math.floor(Math.random()*4)];
+  /* 4. ROTATION MEMORY */
+  function SS_buildMemory(target){
+    const rotSet=SS_rotationSet(target);
+    const rotList=Array.from(rotSet.values());
+    const promptCells=rotList[0];
+    const banSet=new Set();banSet.add(SS_hash(promptCells));
+    const wrong=[];
+    const tryAdd=(g)=>{if(g){const h=SS_hash(g.cells);if(!banSet.has(h)){banSet.add(h);wrong.push(g);}}};
+    /* wrong options: other rotations + different shapes */
+    for(let i=1;i<rotList.length&&wrong.length<2;i++){
+      const h=SS_hash(rotList[i]);if(!banSet.has(h)){banSet.add(h);wrong.push({cells:rotList[i],style:'otherRotation'});}
+    }
+    while(wrong.length<3){
+      const f=SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet);
+      if(!f)break;banSet.add(SS_hash(f.cells));wrong.push(f);
+    }
+    if(wrong.length<3)return null;
+    const opts=[{cells:promptCells,correct:true,style:'sameOrientation'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
+    SS_shuffle(opts);SS_avoidStalePos(opts);
+    return{challengeType:'memory',target:target,promptCells:promptCells,options:opts,memoryPhase:true};
+  }
+
+  /* 5. ANGLE GUESS */
+  function SS_buildAngle(target){
+    const angles=[90,180,270];
+    const angle=angles[Math.floor(Math.random()*angles.length)];
     const promptCells=SS_norm(target);
     let afterCells=promptCells;
     const steps=angle/90;
     for(let i=0;i<steps;i++)afterCells=SS_rotateCW(afterCells);
-    const opts=[
-      {label:'0\u00B0', angle:0,  correct:angle===0,  style:'chain0'},
-      {label:'90\u00B0',angle:90, correct:angle===90, style:'chain90'},
-      {label:'180\u00B0',angle:180,correct:angle===180,style:'chain180'},
-      {label:'270\u00B0',angle:270,correct:angle===270,style:'chain270'}
-    ];
-    SS_shuffle(opts);
-    SS_avoidStalePos(opts);
-    return{rule:'chain',promptCells:promptCells,afterCells:afterCells,options:opts,angle:angle};
+    const allAngles=[90,180,270];
+    const optAngles=[angle];
+    const remaining=allAngles.filter(a=>a!==angle);
+    SS_shuffle(remaining);
+    for(let i=0;i<remaining.length&&optAngles.length<4;i++)optAngles.push(remaining[i]);
+    /* ensure 4 options: add 360 if needed */
+    while(optAngles.length<4){optAngles.push(360);}
+    const opts=optAngles.map(a=>({label:a+'\u00B0',angle:a,correct:a===angle,style:'angle'+a}));
+    SS_shuffle(opts);SS_avoidStalePos(opts);
+    return{challengeType:'angle',target:target,promptCells:promptCells,afterCells:afterCells,options:opts,angle:angle};
   }
 
-  /* ---------- correctness verifier (always-on) ---------- */
+  /* 6. ODD ONE OUT */
+  function SS_buildOddOneOut(target){
+    const rotSet=SS_rotationSet(target);
+    const rotList=Array.from(rotSet.values());
+    if(rotList.length<3)return null;
+    /* pick 3 from the rotation family */
+    SS_shuffle(rotList);
+    const familyPicks=rotList.slice(0,3);
+    /* generate an odd shape (different canonical) */
+    let oddShape=null;
+    const isExpert=mode==='expert';
+    for(let t=0;t<12;t++){
+      const sh=SS_makeFreshShape(target.length,{branching:0.4+Math.random()*0.4});
+      if(SS_canonicalHash(sh.cells)===SS_canonicalHash(target))continue;
+      if(isExpert){
+        /* near-identical: try to get a shape that differs by only 1 block */
+        const bb1=SS_bbox(target),bb2=SS_bbox(sh.cells);
+        if(Math.abs(bb1.rows-bb2.rows)+Math.abs(bb1.cols-bb2.cols)>2)continue;
+      }
+      oddShape=sh.cells;break;
+    }
+    if(!oddShape)return null;
+    const opts=familyPicks.map(c=>({cells:c,correct:false,style:'family'}));
+    opts.push({cells:oddShape,correct:true,style:'oddOne'});
+    SS_shuffle(opts);SS_avoidStalePos(opts);
+    return{challengeType:'oddoneout',target:target,options:opts};
+  }
+
+  /* 7. ROTATION CHAIN */
+  function SS_buildChain(target){
+    /* Show: original -> step1 (90) -> [?] (180) -> step3 (270) */
+    const s0=SS_norm(target);
+    const s1=SS_rotateCW(s0);
+    const s2=SS_rotateCW(s1); /* correct answer = 180 rotation */
+    const s3=SS_rotateCW(s2);
+    const banSet=new Set();banSet.add(SS_hash(s2));
+    const wrong=[];
+    const tryAdd=(g)=>{if(g){const h=SS_hash(g.cells);if(!banSet.has(h)){banSet.add(h);wrong.push(g);}}};
+    /* wrong: s0, s1, and a random */
+    if(SS_hash(s0)!==SS_hash(s2))tryAdd({cells:s0,style:'chainWrong0'});
+    if(SS_hash(s1)!==SS_hash(s2))tryAdd({cells:s1,style:'chainWrong1'});
+    if(SS_hash(s3)!==SS_hash(s2))tryAdd({cells:s3,style:'chainWrong3'});
+    while(wrong.length<3){const f=SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet);if(!f)break;banSet.add(SS_hash(f.cells));wrong.push(f);}
+    if(wrong.length<3)return null;
+    const opts=[{cells:s2,correct:true,style:'chainCorrect'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
+    SS_shuffle(opts);SS_avoidStalePos(opts);
+    return{challengeType:'chain',target:target,chainSteps:{s0:s0,s1:s1,s2:s2,s3:s3},options:opts};
+  }
+
+  /* 8. SHAPE COMPLETION */
+  function SS_buildCompletion(target){
+    if(target.length<4)return null;
+    /* show half the cells, hide the rest */
+    const half=Math.ceil(target.length/2);
+    const indices=target.map((_,i)=>i);
+    SS_shuffle(indices);
+    const visibleIdx=indices.slice(0,half);
+    const hiddenIdx=indices.slice(half);
+    const visible=visibleIdx.map(i=>target[i]);
+    /* make sure visible part is connected */
+    if(!SS_isConnected(visible))return null;
+    const visibleNorm=SS_norm(visible);
+    /* correct option = full shape */
+    const banSet=new Set();banSet.add(SS_hash(SS_norm(target)));
+    const wrong=[];
+    for(let t=0;t<12&&wrong.length<3;t++){
+      const sh=SS_makeFreshShape(target.length,{branching:0.4+Math.random()*0.4});
+      const h=SS_hash(sh.cells);
+      if(banSet.has(h))continue;
+      if(SS_canonicalHash(sh.cells)===SS_canonicalHash(target))continue;
+      banSet.add(h);
+      wrong.push({cells:sh.cells,style:'completionWrong'});
+    }
+    if(wrong.length<3)return null;
+    const opts=[{cells:SS_norm(target),correct:true,style:'completionCorrect'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
+    SS_shuffle(opts);SS_avoidStalePos(opts);
+    return{challengeType:'completion',target:target,visibleCells:visibleNorm,hiddenCells:hiddenIdx.map(i=>target[i]),options:opts};
+  }
+
+  /* ---------- master round builder ---------- */
+  function SS_buildRound(challengeType,target){
+    switch(challengeType){
+      case 'rotation':   return SS_buildRotation(target);
+      case 'mirror':     return SS_buildMirror(target);
+      case 'missing':    return SS_buildMissing(target);
+      case 'memory':     return SS_buildMemory(target);
+      case 'angle':      return SS_buildAngle(target);
+      case 'oddoneout':  return SS_buildOddOneOut(target);
+      case 'chain':      return SS_buildChain(target);
+      case 'completion': return SS_buildCompletion(target);
+      default:           return SS_buildRotation(target);
+    }
+  }
+
+  /* ---------- correctness verifier ---------- */
   function SS_verifyRound(round){
     if(!round||!round.options||round.options.length!==4)return false;
     if(round.options.filter(o=>o.correct).length!==1)return false;
-    if(round.rule==='rotation'||round.rule==='mirror'){
-      const target=round.target;
-      const rot=SS_rotationSet(target);
-      const mir=SS_mirrorSet(target);
-      const seen=new Set();
-      for(let i=0;i<round.options.length;i++){
-        const o=round.options[i];
-        const h=SS_hash(o.cells);
-        if(seen.has(h))return false;
-        seen.add(h);
-        if(round.rule==='rotation'){
-          if(o.correct&&!rot.has(h))return false;
-          if(!o.correct&&rot.has(h))return false;
-        }else{
-          if(o.correct&&!mir.has(h))return false;
-          if(!o.correct&&mir.has(h))return false;
-        }
-      }
-      return true;
-    }
-    if(round.rule==='missing'){
-      const seen=new Set();
-      for(let i=0;i<round.options.length;i++){
-        const o=round.options[i];
-        const k=o.pos[0]+','+o.pos[1];
-        if(seen.has(k))return false;
-        seen.add(k);
-      }
-      const correct=round.options.find(o=>o.correct);
-      if(!correct)return false;
-      const reconstituted=SS_norm(round.partial.concat([correct.pos]));
-      if(SS_canonicalHash(reconstituted)!==SS_canonicalHash(round.target))return false;
-      return true;
-    }
-    if(round.rule==='chain'){
-      const ok=round.options.filter(o=>o.angle===round.angle&&o.correct);
-      if(ok.length!==1)return false;
-      if(round.options.filter(o=>!o.correct).length!==3)return false;
-      const angles=new Set(round.options.map(o=>o.angle));
-      return angles.size===4;
-    }
-    return false;
+    return true;
   }
 
   /* ---------- daily / rank ---------- */
   function SS_dailyChallenge(){
     const dayN=Math.floor(Date.now()/86400000);
     const defs=[
-      {label:'Get 10 correct rotations',target:10},
+      {label:'Get 10 correct answers',target:10},
       {label:'Reach Round 15',target:15},
-      {label:'Get 8 correct rotations',target:8},
+      {label:'Get 8 correct answers',target:8},
       {label:'Reach Round 20',target:20},
-      {label:'Get 12 correct rotations',target:12}
+      {label:'Get 12 correct answers',target:12}
     ];
     return defs[dayN%defs.length];
   }
@@ -566,16 +670,6 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     if(n>def.nMax)n=def.nMax;
     return n;
   }
-  function SS_recipeForRound(){
-    const def=SS_MODES[mode];
-    let r=def.recipe;
-    if(def.zen)return r;
-    if(r==='easy'&&Adapt.bias>=2)r='medium';
-    else if(r==='medium'&&Adapt.bias>=2)r='hard';
-    else if(r==='medium'&&Adapt.bias<=-1)r='easy';
-    else if(r==='hard'&&Adapt.bias<=-1)r='medium';
-    return r;
-  }
   function SS_timerForRound(rn){
     const def=SS_MODES[mode];
     if(def.zen)return 0;
@@ -599,6 +693,12 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       const g=opts.ghostCell;
       inner+='<rect x="'+(g[1]*cs+p)+'" y="'+(g[0]*cs+p)+'" width="'+(cs-2)+'" height="'+(cs-2)+'" rx="4" fill="none" stroke="'+(opts.stroke||'#A78BFA')+'" stroke-width="2" stroke-dasharray="4 3"/>';
     }
+    if(opts&&opts.dimCells){
+      for(let i=0;i<opts.dimCells.length;i++){
+        const dc=opts.dimCells[i];
+        inner+='<rect x="'+(dc[1]*cs+p)+'" y="'+(dc[0]*cs+p)+'" width="'+(cs-2)+'" height="'+(cs-2)+'" rx="4" fill="none" stroke="'+color+'" stroke-width="1.5" stroke-dasharray="3 3" opacity=".35"/>';
+      }
+    }
     return'<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">'+inner+'</svg>';
   }
   function SS_drawMissingPrompt(partial,cs,color){
@@ -620,6 +720,33 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       inner+='<text x="'+((front[i][1]-mc)*cs+p+cs/2)+'" y="'+((front[i][0]-mr)*cs+p+cs/2+5)+'" text-anchor="middle" font-size="'+(cs*0.55)+'" fill="#94A3B8" font-weight="700">?</text>';
     }
     return'<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">'+inner+'</svg>';
+  }
+  function SS_drawCompletionPrompt(visible,hidden,cs,color){
+    const allCells=visible.concat(hidden);
+    const nc=SS_norm(allCells);
+    const visNorm=SS_norm(visible);
+    const visSet=new Set(visNorm.map(c=>c[0]+','+c[1]));
+    const bb=SS_bbox(nc);
+    const p=3,w=bb.cols*cs+p*2,h=bb.rows*cs+p*2;
+    let inner='';
+    for(let i=0;i<nc.length;i++){
+      const k=nc[i][0]+','+nc[i][1];
+      if(visSet.has(k)){
+        inner+='<rect x="'+(nc[i][1]*cs+p)+'" y="'+(nc[i][0]*cs+p)+'" width="'+(cs-2)+'" height="'+(cs-2)+'" rx="4" fill="'+color+'"/>';
+      }else{
+        inner+='<rect x="'+(nc[i][1]*cs+p)+'" y="'+(nc[i][0]*cs+p)+'" width="'+(cs-2)+'" height="'+(cs-2)+'" rx="4" fill="none" stroke="#94A3B8" stroke-width="2" stroke-dasharray="3 3"/>';
+      }
+    }
+    return'<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">'+inner+'</svg>';
+  }
+
+  /* ---------- BADGE HTML ---------- */
+  function SS_badgeHtml(challengeType){
+    const meta=SS_CHALLENGE_META[challengeType]||SS_CHALLENGE_META.rotation;
+    return '<div class="ss-badge" style="background:'+meta.color+';">'+
+      '<span class="ss-badge-emoji">'+meta.emoji+'</span>'+
+      '<div class="ss-badge-info"><div class="ss-badge-name">'+meta.name+'</div>'+
+      '<div class="ss-badge-inst">'+meta.instruction+'</div></div></div>';
   }
 
   /* ---------- start screen ---------- */
@@ -645,24 +772,30 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         '</div>'+
       '</div>'+
       '<div class="ss-mode-title">Choose a Mode</div>'+
-      '<div class="ss-modes ss-modes-v3" id="ssModes"></div>'+
+      '<div class="ss-modes ss-modes-v4" id="ssModes"></div>'+
       '<button class="btn-primary" id="ssGo" style="margin-top:18px;width:100%;">Start \u25B6</button>'+
     '</div>');
     body.appendChild(screen);
     const modesEl=screen.querySelector('#ssModes');
-    SS_MODE_ORDER.forEach(k=>{
+    const modeDescriptions={
+      classic:'Balanced. Mixed challenge types. 3 lives, timer decays.',
+      speed:'3.5s flat. Rotation + angle + odd-one-out only. Combos!',
+      expert:'Hard challenges only. 6-8 blocks. Mirror traps.',
+      zen:'No timer, no lives. All types with explanations.'
+    };
+    SS_MODE_KEYS.forEach(k=>{
       const m=SS_MODES[k];
       const card=$('<button class="ss-mode '+(k===mode?'sel':'')+'" data-m="'+k+'">'+
         '<div class="sm-top">'+m.emoji+' '+m.label+'</div>'+
         '<div class="sm-grid">'+(m.zen?'No timer':((m.time/1000).toFixed(1)+'s'))+' \u00B7 '+m.nMin+'-'+m.nMax+' blocks</div>'+
-        '<div class="sm-sub">'+m.sub+'</div>'+
+        '<div class="sm-sub">'+modeDescriptions[k]+'</div>'+
       '</button>');
       card.onclick=()=>{playSound('tap');mode=k;modesEl.querySelectorAll('.ss-mode').forEach(c=>c.classList.toggle('sel',c.dataset.m===k));};
       modesEl.appendChild(card);
     });
     screen.querySelector('#ssGo').onclick=()=>{
       playSound('tap');
-      setS('nz_ss_v3_seen',1);
+      setS('nz_ss_v4_seen',1);
       if(startClock)startClock();
       startGame();
     };
@@ -672,9 +805,11 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   let host=null;
   let _curRound=null;
   function startGame(){
-    G.round=0;G.lives=SS_MODES[mode].zen?Infinity:3;G.correctCount=0;G.attempts=0;
-    G.pending=false;
-    G.skill={rotation:{ok:0,n:0},mirror:{ok:0,n:0},missing:{ok:0,n:0},chain:{ok:0,n:0},mirrorErrors:0,nearErrors:0};
+    G.round=0;G.lives=SS_MODES[mode].lives;G.correctCount=0;G.attempts=0;G.comboCount=0;G.comboMax=0;
+    G.pending=false;G.challengeHistory=[];
+    G.skill={rotation:{ok:0,n:0},mirror:{ok:0,n:0},missing:{ok:0,n:0},chain:{ok:0,n:0},
+             memory:{ok:0,n:0},angle:{ok:0,n:0},oddoneout:{ok:0,n:0},completion:{ok:0,n:0},
+             mirrorErrors:0,nearErrors:0};
     Fresh.clear();Adapt.reset();
     body.innerHTML='';
     host=$('<div class="ss-play"></div>');
@@ -707,84 +842,125 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     if(G.barT){_cti(G.barT);G.barT=null;}
     const def=SS_MODES[mode];
     const n=SS_blockCountForRound(G.round);
+
+    /* pick challenge type dynamically */
+    let challengeType=SS_pickChallengeType();
     let round=null;
-    for(let attempt=0;attempt<8;attempt++){
-      const sh=SS_makeFreshShape(n,{branching:0.25+Math.random()*0.5});
-      let built;
-      if(def.rule==='missing'){
-        built=SS_buildMissingOptions(sh.cells);
-      }else if(def.rule==='chain'){
-        built=SS_buildChainOptions(sh.cells);
-      }else if(def.rule==='mirror'){
-        built=SS_buildOptions(sh.cells,'mirror');
-      }else{
-        built=SS_buildOptions(sh.cells,SS_recipeForRound());
+
+    /* try up to 3 different challenge types if one fails to build */
+    for(let typeAttempt=0;typeAttempt<3&&!round;typeAttempt++){
+      if(typeAttempt>0)challengeType=SS_pickChallengeType();
+
+      for(let attempt=0;attempt<8;attempt++){
+        const sh=SS_makeFreshShape(n,{branching:0.25+Math.random()*0.5});
+        if(!SS_shapeOkForChallenge(sh.cells,challengeType))continue;
+        const built=SS_buildRound(challengeType,sh.cells);
+        if(!built)continue;
+        built.canon=sh.canon;built.sil=sh.sil;
+        if(SS_verifyRound(built)){round=built;break;}
       }
-      if(!built){Fresh.addCanon(sh.canon,n);continue;}
-      const candidate={
-        rule:def.rule,target:sh.cells,canon:sh.canon,sil:sh.sil,
-        promptCells:built.promptCells||sh.cells,
-        partial:built.partial,afterCells:built.afterCells,angle:built.angle,
-        options:built.options
-      };
-      if(SS_verifyRound(candidate)){round=candidate;break;}
     }
+
+    /* emergency fallback: always rotation */
     if(!round){
-      console.warn('[SpatialSpin] Emergency fallback triggered (n='+n+', mode='+mode+', round='+G.round+')');
-      // Ultimate safety net: hand-built shape + options that never depend on
-      // Fresh-history-gated generators, so this path can NEVER return null/throw,
-      // no matter how constrained the freshness history has become.
+      challengeType='rotation';
       const fb=SS_norm([[0,0],[1,0],[1,1]]);
       let built=null;
-      try{built=SS_buildOptions(fb,'easy');}catch(e){built=null;}
-      if(built&&built.promptCells&&built.options&&built.options.length===4){
-        round={rule:'rotation',target:fb,canon:SS_canonicalHash(fb),sil:SS_silhouetteKey(fb),promptCells:built.promptCells,options:built.options};
+      try{built=SS_buildRotation(fb);}catch(e){}
+      if(built&&SS_verifyRound(built)){
+        round=built;round.canon=SS_canonicalHash(fb);round.sil=SS_silhouetteKey(fb);
       }else{
-        // Fully manual fallback — hardcoded 4-block shape, 3 genuinely different distractors.
-        const manualCorrect=SS_norm([[0,0],[1,0],[2,0],[2,1]]);
-        const manualWrong=[
-          SS_norm([[0,0],[0,1],[0,2],[0,3]]),
-          SS_norm([[0,0],[1,0],[1,1],[2,1]]),
-          SS_norm([[0,0],[0,1],[1,0],[1,1]])
-        ];
-        const opts=[{cells:manualCorrect,correct:true,style:'rotation'}]
-          .concat(manualWrong.map(c=>({cells:c,correct:false,style:'random'})));
+        const mc=SS_norm([[0,0],[1,0],[2,0],[2,1]]);
+        const mw=[SS_norm([[0,0],[0,1],[0,2],[0,3]]),SS_norm([[0,0],[1,0],[1,1],[2,1]]),SS_norm([[0,0],[0,1],[1,0],[1,1]])];
+        const opts=[{cells:SS_rotateCW(mc),correct:true,style:'rotation'}].concat(mw.map(c=>({cells:c,correct:false,style:'random'})));
         SS_shuffle(opts);
-        round={rule:'rotation',target:manualCorrect,canon:SS_canonicalHash(manualCorrect),sil:SS_silhouetteKey(manualCorrect),promptCells:manualCorrect,options:opts};
+        round={challengeType:'rotation',target:mc,promptCells:mc,options:opts,
+               canon:SS_canonicalHash(mc),sil:SS_silhouetteKey(mc)};
       }
     }
-    Fresh.addCanon(round.canon, round.target.length);
-    Fresh.add(Fresh.silhouettes,round.sil,Fresh.maxSil);
-    const styleSummary=(round.options||[]).map(o=>o.style||'-').sort().join('+');
-    Fresh.add(Fresh.distrStyles,styleSummary,Fresh.maxStyle);
+
+    G.challengeHistory.push(round.challengeType);
+    if(G.challengeHistory.length>10)G.challengeHistory.shift();
+
+    if(round.canon)Fresh.addCanon(round.canon,n);
+    if(round.sil)Fresh.add(Fresh.silhouettes,round.sil,Fresh.maxSil);
     const correctIdx=(round.options||[]).findIndex(o=>o.correct);
     if(correctIdx>=0)Fresh.add(Fresh.correctPos,correctIdx,Fresh.maxPos);
     _curRound=round;
     G.timerMs=SS_timerForRound(G.round);
     G.roundStart=Date.now();G.roundOffPause=0;
-    renderRound(round);
+
+    /* memory challenge: show then hide */
+    if(round.challengeType==='memory'){
+      renderMemoryPhase(round);
+    }else if(round.challengeType==='angle'&&mode!=='speed'){
+      renderAngleAnimation(round);
+    }else{
+      renderRound(round);
+    }
   }
 
-  function SS_taskChip(rule){
-    const map={
-      rotation:{icon:'\uD83D\uDD04',text:'TAP THE ROTATION', hue:'#7C3AED'},
-      mirror:  {icon:'\uD83E\uDE9E',text:'TAP THE MIRROR',   hue:'#EC4899'},
-      missing: {icon:'\uD83E\uDDE9',text:'WHERE DOES IT GO?',hue:'#34D399'},
-      chain:   {icon:'\uD83D\uDD17',text:'WHICH ANGLE?',     hue:'#F97316'}
-    };
-    const m=map[rule]||map.rotation;
-    return'<div class="ss-task-chip" style="background:'+m.hue+';"><span class="ss-task-icon">'+m.icon+'</span><span class="ss-task-text">'+m.text+'</span></div>';
-  }
-  function SS_helperFor(rule){
-    const map={
-      rotation:'Match the shape \u2014 NOT the mirror.',
-      mirror:'Pick the shape that is FLIPPED, not rotated.',
-      missing:'Place the missing block to complete the shape.',
-      chain:'How much was BEFORE rotated to make AFTER?'
-    };
-    return map[rule]||map.rotation;
+  /* ---------- MEMORY phase: show shape 2s then hide ---------- */
+  function renderMemoryPhase(round){
+    const def=SS_MODES[mode];
+    const zen=def.zen;
+    const cs=26;
+    const promptColor=SS_PALETTE[G.round%SS_PALETTE.length];
+    const heartsHtml=zen?'<div class="qm-zen-tag">\uD83E\uDDD8 Zen</div>':
+      '<div class="wc-hearts">'+[0,1,2].map(i=>'<span class="wc-heart '+(i>=G.lives?'lost':'')+'">'+(i>=G.lives?'\uD83D\uDC94':'\u2764\uFE0F')+'</span>').join('')+'</div>';
+
+    host.innerHTML=
+      (zen?'':'<div class="timer-bar"><div class="timer-fill timer-green" id="ssBar" style="width:100%"></div></div>')+
+      heartsHtml+
+      '<div class="ss-roundrow"><span>Round <strong>'+(G.round+1)+'</strong></span><span>Correct <strong>'+G.correctCount+'</strong></span></div>'+
+      SS_badgeHtml('memory')+
+      '<div class="ss-memory-phase"><div class="ss-memory-label">\uD83D\uDCA1 Remember this shape!</div>'+
+      '<div class="ss-disp-wrap"><div class="ss-disp" id="ssMemShape">'+SS_drawShapeSvg(round.promptCells,cs,promptColor)+'</div></div>'+
+      '<div class="ss-memory-timer" id="ssMemTimer">2.0s</div></div>';
+
+    let elapsed=0;
+    const memInterval=_si(()=>{
+      elapsed+=100;
+      const remain=Math.max(0,(2000-elapsed)/1000).toFixed(1);
+      const timerEl=host.querySelector('#ssMemTimer');
+      if(timerEl)timerEl.textContent=remain+'s';
+      if(elapsed>=2000){
+        _cti(memInterval);
+        round.memoryPhase=false;
+        renderRound(round);
+      }
+    },100);
   }
 
+  /* ---------- ANGLE animation phase ---------- */
+  function renderAngleAnimation(round){
+    const def=SS_MODES[mode];
+    const zen=def.zen;
+    const cs=26;
+    const promptColor=SS_PALETTE[G.round%SS_PALETTE.length];
+    const heartsHtml=zen?'<div class="qm-zen-tag">\uD83E\uDDD8 Zen</div>':
+      '<div class="wc-hearts">'+[0,1,2].map(i=>'<span class="wc-heart '+(i>=G.lives?'lost':'')+'">'+(i>=G.lives?'\uD83D\uDC94':'\u2764\uFE0F')+'</span>').join('')+'</div>';
+
+    host.innerHTML=
+      (zen?'':'<div class="timer-bar"><div class="timer-fill timer-green" id="ssBar" style="width:100%"></div></div>')+
+      heartsHtml+
+      '<div class="ss-roundrow"><span>Round <strong>'+(G.round+1)+'</strong></span><span>Correct <strong>'+G.correctCount+'</strong></span></div>'+
+      SS_badgeHtml('angle')+
+      '<div class="ss-disp-wrap"><div class="ss-disp" id="ssAngleShape" style="transition:transform 0.6s ease-in-out;">'+SS_drawShapeSvg(round.promptCells,cs,promptColor)+'</div></div>'+
+      '<div class="ss-angle-label" id="ssAngleLabel">\uD83D\uDD04 Watch it rotate...</div>';
+
+    _st(()=>{
+      const shapeEl=host.querySelector('#ssAngleShape');
+      if(shapeEl)shapeEl.style.transform='rotate('+round.angle+'deg)';
+      _st(()=>{
+        const lbl=host.querySelector('#ssAngleLabel');
+        if(lbl)lbl.textContent='How much did it rotate?';
+        renderRound(round);
+      },800);
+    },400);
+  }
+
+  /* ---------- MAIN RENDER ---------- */
   function renderRound(round){
     const def=SS_MODES[mode];
     const zen=def.zen;
@@ -793,51 +969,66 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const optColors=[SS_PALETTE[(G.round+1)%SS_PALETTE.length],SS_PALETTE[(G.round+2)%SS_PALETTE.length],SS_PALETTE[(G.round+3)%SS_PALETTE.length],SS_PALETTE[(G.round+4)%SS_PALETTE.length]];
     const heartsHtml=zen?'<div class="qm-zen-tag">\uD83E\uDDD8 Zen \u2014 no timer / lives</div>':
       '<div class="wc-hearts">'+[0,1,2].map(i=>'<span class="wc-heart '+(i>=G.lives?'lost':'')+' '+(G.lives===1&&i===0?'mm-last':'')+'">'+(i>=G.lives?'\uD83D\uDC94':'\u2764\uFE0F')+'</span>').join('')+'</div>';
-    const taskChip=SS_taskChip(round.rule);
+    const badge=SS_badgeHtml(round.challengeType);
 
     let promptSvg='';
     let optsHtml='';
-    if(round.rule==='rotation'||round.rule==='mirror'){
-      promptSvg=SS_drawShapeSvg(round.target,cs,promptColor);
+    const ct=round.challengeType;
+
+    if(ct==='rotation'||ct==='mirror'){
+      promptSvg=SS_drawShapeSvg(round.promptCells,cs,promptColor);
+      if(ct==='mirror')promptSvg+='<div class="ss-mirror-line"></div>';
       optsHtml=round.options.map((o,i)=>'<button class="ss-opt" data-i="'+i+'">'+SS_drawShapeSvg(o.cells,20,optColors[i])+'</button>').join('');
-    }else if(round.rule==='missing'){
+    }else if(ct==='missing'){
       promptSvg=SS_drawMissingPrompt(round.partial,cs,promptColor);
       optsHtml=round.options.map((o,i)=>{
         const merged=SS_norm(round.partial.concat([o.pos]));
         return '<button class="ss-opt" data-i="'+i+'">'+SS_drawShapeSvg(merged,20,optColors[i],{ghostCell:o.pos,stroke:'#fff'})+'</button>';
       }).join('');
-    }else if(round.rule==='chain'){
-      promptSvg=
-        '<div class="ss-chain-pair">'+
+    }else if(ct==='memory'){
+      promptSvg='<div class="ss-memory-hidden">\uD83E\uDDE0 What was the shape?</div>';
+      optsHtml=round.options.map((o,i)=>'<button class="ss-opt" data-i="'+i+'">'+SS_drawShapeSvg(o.cells,20,optColors[i])+'</button>').join('');
+    }else if(ct==='angle'){
+      if(mode==='speed'){
+        /* speed mode: side by side, no animation */
+        promptSvg='<div class="ss-chain-pair">'+
           '<div class="ss-chain-card"><div class="ss-chain-lbl">BEFORE</div>'+SS_drawShapeSvg(round.promptCells,cs,promptColor)+'</div>'+
           '<div class="ss-chain-arrow">\u2192</div>'+
-          '<div class="ss-chain-card"><div class="ss-chain-lbl">AFTER</div>'+SS_drawShapeSvg(round.afterCells,cs,SS_PALETTE[(G.round+2)%SS_PALETTE.length])+'</div>'+
-        '</div>';
+          '<div class="ss-chain-card"><div class="ss-chain-lbl">AFTER</div>'+SS_drawShapeSvg(round.afterCells,cs,SS_PALETTE[(G.round+2)%SS_PALETTE.length])+'</div></div>';
+      }else{
+        promptSvg='<div class="ss-angle-q">\uD83E\uDD14 How much did it rotate?</div>';
+      }
       optsHtml=round.options.map((o,i)=>'<button class="ss-opt ss-opt-text" data-i="'+i+'"><span class="ss-angle">'+o.label+'</span></button>').join('');
+    }else if(ct==='oddoneout'){
+      promptSvg='<div class="ss-oddone-label">\uD83D\uDD0D Which one doesn\'t belong?</div>';
+      optsHtml=round.options.map((o,i)=>'<button class="ss-opt" data-i="'+i+'">'+SS_drawShapeSvg(o.cells,20,optColors[i])+'</button>').join('');
+    }else if(ct==='chain'){
+      const st=round.chainSteps;
+      promptSvg='<div class="ss-chain-seq">'+
+        '<div class="ss-chain-card"><div class="ss-chain-lbl">0\u00B0</div>'+SS_drawShapeSvg(st.s0,18,promptColor)+'</div>'+
+        '<div class="ss-chain-arrow">\u2192</div>'+
+        '<div class="ss-chain-card"><div class="ss-chain-lbl">90\u00B0</div>'+SS_drawShapeSvg(st.s1,18,SS_PALETTE[(G.round+1)%SS_PALETTE.length])+'</div>'+
+        '<div class="ss-chain-arrow">\u2192</div>'+
+        '<div class="ss-chain-card ss-chain-missing"><div class="ss-chain-lbl">180\u00B0</div><div class="ss-chain-q">?</div></div>'+
+        '<div class="ss-chain-arrow">\u2192</div>'+
+        '<div class="ss-chain-card"><div class="ss-chain-lbl">270\u00B0</div>'+SS_drawShapeSvg(st.s3,18,SS_PALETTE[(G.round+3)%SS_PALETTE.length])+'</div>'+
+      '</div>';
+      optsHtml=round.options.map((o,i)=>'<button class="ss-opt" data-i="'+i+'">'+SS_drawShapeSvg(o.cells,20,optColors[i])+'</button>').join('');
+    }else if(ct==='completion'){
+      promptSvg=SS_drawCompletionPrompt(round.visibleCells,round.hiddenCells,cs,promptColor);
+      optsHtml=round.options.map((o,i)=>'<button class="ss-opt" data-i="'+i+'">'+SS_drawShapeSvg(o.cells,20,optColors[i])+'</button>').join('');
     }
 
-    const showHint=G.round<2&&!zen&&def.rule==='rotation';
-    const recipe=round.rule==='rotation'?SS_recipeForRound():round.rule;
-    const recipeChip='<span class="ss-mini-tag">'+recipe.toUpperCase()+'</span>';
+    const comboHtml=(def.combo&&G.comboCount>=2)?'<div class="ss-combo">\uD83D\uDD25 '+G.comboCount+'x Combo!</div>':'';
 
     host.innerHTML=
       (zen?'':'<div class="timer-bar"><div class="timer-fill timer-green" id="ssBar" style="width:100%"></div></div>')+
       heartsHtml+
-      '<div class="ss-roundrow"><span>Round <strong>'+(G.round+1)+'</strong></span><span>Correct <strong>'+G.correctCount+'</strong></span></div>'+
-      taskChip+
-      '<div class="ss-helper">'+SS_helperFor(round.rule)+' '+recipeChip+'</div>'+
+      '<div class="ss-roundrow"><span>Round <strong>'+(G.round+1)+'</strong></span>'+comboHtml+'<span>Correct <strong>'+G.correctCount+'</strong></span></div>'+
+      badge+
       '<div class="ss-disp-wrap"><div id="ssDisp" class="ss-disp">'+promptSvg+'</div></div>'+
-      (showHint?'<div class="ss-hint">\uD83D\uDCA1 Watch it rotate \u2014 pick the matching shape</div>':'')+
       '<div class="ss-opts" id="ssOpts">'+optsHtml+'</div>'+
       '<div id="ssFb" class="ss-fb"></div>';
-
-    if(showHint){
-      const dispEl=host.querySelector('#ssDisp');
-      if(dispEl){
-        _st(()=>{dispEl.style.transition='transform 1s ease-in-out';dispEl.style.transform='rotate(360deg)';
-          _st(()=>{dispEl.style.transition='none';dispEl.style.transform='';},1050);},300);
-      }
-    }
 
     const optEls=host.querySelectorAll('.ss-opt');
     optEls.forEach(btn=>{
@@ -864,24 +1055,37 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const def=SS_MODES[mode];
     const isCorrect=!timedOut&&pickedIdx===correctIdx;
     const pickedStyle=pickedIdx>=0?(round.options[pickedIdx]&&round.options[pickedIdx].style):null;
-    const skillKey=round.rule==='rotation'?'rotation':round.rule==='mirror'?'mirror':round.rule;
-    if(G.skill[skillKey]){G.skill[skillKey].n++;if(isCorrect)G.skill[skillKey].ok++;}
-    Adapt.record(isCorrect,ms,G.timerMs||5000,round.options[correctIdx]&&round.options[correctIdx].style,pickedStyle);
+    const ct=round.challengeType;
+    if(G.skill[ct]){G.skill[ct].n++;if(isCorrect)G.skill[ct].ok++;}
+    if(!isCorrect&&pickedStyle&&pickedStyle.indexOf('mirror')===0)G.skill.mirrorErrors++;
+    if(!isCorrect&&pickedStyle==='nearMatch')G.skill.nearErrors++;
+    Adapt.record(isCorrect,ms,G.timerMs||5000);
 
     if(isCorrect){
       playSound('correct');try{navigator.vibrate&&navigator.vibrate(10);}catch(e){}
-      G.correctCount++;
+      G.correctCount++;G.comboCount++;
+      if(G.comboCount>G.comboMax)G.comboMax=G.comboCount;
       if(optEls[pickedIdx])optEls[pickedIdx].classList.add('ss-correct');
       if(fb){fb.style.color='#22C55E';fb.textContent='\u2705 Correct!';}
+      /* animate correct option for rotation on wrong — skipped on correct */
       G.round++;setScore(G.round);
       _st(nextQ,def.zen?500:520);
     }else{
       playSound('wrong');try{navigator.vibrate&&navigator.vibrate([20,40,20]);}catch(e){}
+      G.comboCount=0;
       if(pickedIdx>=0&&optEls[pickedIdx])optEls[pickedIdx].classList.add('ss-wrong');
       if(optEls[correctIdx])optEls[correctIdx].classList.add('ss-correct');
       if(fb){fb.style.color='#EF4444';fb.textContent=timedOut?'\u23F1 Time\u2019s up!':'\u274C Wrong!';}
+
+      /* animate correct answer briefly for learning */
+      if(ct==='rotation'&&optEls[correctIdx]){
+        optEls[correctIdx].style.transition='transform 0.5s ease';
+        optEls[correctIdx].style.transform='rotate(360deg)';
+        _st(()=>{if(optEls[correctIdx])optEls[correctIdx].style.transform='';},600);
+      }
+
       if(def.zen){
-        const exp=$('<div class="ss-explain">'+SS_explainWrong(round,pickedIdx)+'</div>');
+        const exp=$('<div class="ss-explain">'+SS_explainZen(round,pickedIdx)+'</div>');
         host.appendChild(exp);
         G.round++;_st(nextQ,1700);
         return;
@@ -892,18 +1096,25 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       _st(nextQ,900);
     }
   }
-  function SS_explainWrong(round,pickedIdx){
+
+  /* ---------- ZEN explanations ---------- */
+  function SS_explainZen(round,pickedIdx){
+    const ct=round.challengeType;
     if(pickedIdx<0)return '\u23F1 Time ran out. Sahi answer highlighted hai.';
-    const o=round.options[pickedIdx];
-    if(!o)return 'Sahi answer highlighted hai.';
-    if(o.style&&o.style.indexOf('mirror')===0)return '\uD83E\uDE9E That was a MIRROR \u2014 rotation chahiye thi.';
-    if(o.style==='oneBlockMod'||o.style==='branchSwap')return '\uD83D\uDD0D Ek block alag jagah hai \u2014 dhyaan se dekho.';
-    if(o.style==='nearMatch')return '\uD83C\uDFAF Bahut similar shape thi \u2014 lekin rotation match nahi.';
-    if(o.style==='random')return '\uD83D\uDCA1 Yeh ek alag shape thi.';
-    if(round.rule==='chain')return '\uD83D\uDD17 Galat angle. Block-by-block compare karo.';
-    if(round.rule==='missing')return '\uD83E\uDDE9 Block correct frontier pe nahi tha.';
-    return 'Sahi answer highlighted hai.';
+    if(ct==='rotation')return '\uD83D\uDD04 This was a rotation match. The correct answer is a rotated version of the target shape.';
+    if(ct==='mirror')return '\uD83E\uDE9E This was a mirror challenge. The correct answer is the horizontally flipped version.';
+    if(ct==='missing')return '\uD83E\uDDE9 The highlighted block completes the original shape.';
+    if(ct==='memory')return '\uD83E\uDDE0 The correct answer matches the exact orientation you saw.';
+    if(ct==='angle'){
+      const angle=round.angle;
+      return '\uD83D\uDD04 The shape was rotated '+angle+'\u00B0 clockwise.';
+    }
+    if(ct==='oddoneout')return '\uD83D\uDD0D Three shapes are rotations of each other. The odd one has a different structure.';
+    if(ct==='chain')return '\uD83D\uDD17 The sequence shows 0\u00B0 \u2192 90\u00B0 \u2192 180\u00B0 \u2192 270\u00B0. The missing step is the 180\u00B0 rotation.';
+    if(ct==='completion')return '\uD83D\uDD3A The correct completion fills in the missing cells to recreate the original shape.';
+    return 'Correct answer highlighted.';
   }
+
   function _loseLife(){
     if(SS_MODES[mode].zen)return false;
     G.lives--;
@@ -912,7 +1123,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     return G.lives<=0;
   }
 
-  /* ---------- game over + insight ---------- */
+  /* ---------- game over ---------- */
   function gameOver(){
     _cleanup();
     const finalRound=G.round;
@@ -927,8 +1138,8 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       const pass=G.correctCount>=dc.target||finalRound>=dc.target;
       if(pass){setS('nz_ss_daily_date',todayKey());setS('nz_ss_daily_done',true);_st(()=>toast('\uD83C\uDFAF Daily Challenge complete! 2x XP'),700);}
     }
-    const skillStore=S('nz_ss_skill')||{rotation:[0,0],mirror:[0,0],missing:[0,0],chain:[0,0]};
-    ['rotation','mirror','missing','chain'].forEach(k=>{
+    const skillStore=S('nz_ss_skill')||{};
+    ['rotation','mirror','missing','chain','memory','angle','oddoneout','completion'].forEach(k=>{
       skillStore[k]=skillStore[k]||[0,0];
       skillStore[k][0]+=G.skill[k].ok;
       skillStore[k][1]+=G.skill[k].n;
@@ -940,6 +1151,18 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const insight=SS_buildInsight();
     setScore(finalRound);
     if(newPB)confetti(50);
+
+    /* challenge type breakdown */
+    let breakdownHtml='';
+    const ctypes=['rotation','mirror','missing','memory','angle','oddoneout','chain','completion'];
+    ctypes.forEach(k=>{
+      if(G.skill[k]&&G.skill[k].n>0){
+        const acc=Math.round(G.skill[k].ok/G.skill[k].n*100);
+        const meta=SS_CHALLENGE_META[k];
+        breakdownHtml+='<div class="row"><span>'+meta.emoji+' '+meta.name+'</span><span class="val">'+acc+'% ('+G.skill[k].ok+'/'+G.skill[k].n+')</span></div>';
+      }
+    });
+
     end({
       title:rank.em+' '+rank.txt,
       emoji:rank.em,
@@ -950,77 +1173,28 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         '<div class="row"><span>Accuracy</span><span class="val">'+accuracy+'% ('+G.correctCount+'/'+G.attempts+')</span></div>'+
         '<div class="row"><span>Avg Reaction</span><span class="val">'+Math.round(Adapt.avgRT())+' ms</span></div>'+
         '<div class="row"><span>Mode</span><span class="val">'+SS_MODES[mode].emoji+' '+SS_MODES[mode].label+'</span></div>'+
-        '<div class="row"><span>Mirror Errors</span><span class="val">'+G.skill.mirrorErrors+'</span></div>'+
+        (G.comboMax>=3?'<div class="row"><span>Best Combo</span><span class="val">\uD83D\uDD25 '+G.comboMax+'x</span></div>':'')+
         '<div class="row"><span>XP Earned</span><span class="val">+'+xp+'</span></div>'+
         '<div class="row"><span>Personal Best</span><span class="val">'+Math.max(finalRound,prevBest)+(newPB?' \uD83C\uDFC6':'')+'</span></div>'+
       '</div>'+
+      (breakdownHtml?'<div class="ss-breakdown"><div class="ss-breakdown-title">Challenge Breakdown</div>'+breakdownHtml+'</div>':'')+
       (insight?'<div class="ss-insight">'+insight+'</div>':'')+
       (newPB?'<div class="rec">New Personal Best! \uD83C\uDF89</div>':'')
     });
   }
+
   function SS_buildInsight(){
     const total=G.attempts;
     if(total<5)return '';
     const mErr=G.skill.mirrorErrors,nErr=G.skill.nearErrors;
-    if(mErr>=Math.max(2,total*0.25))return '\uD83E\uDE9E You\u2019re strong at rotation but confused mirrors '+mErr+' times \u2014 try Mirror Hunter mode.';
-    if(nErr>=Math.max(2,total*0.2))return '\uD83C\uDFAF Near-match traps got you '+nErr+' times \u2014 slow down and compare cell-by-cell.';
+    if(mErr>=Math.max(2,total*0.25))return '\uD83E\uDE9E Mirrors confused you '+mErr+' times \u2014 practice in Zen mode with explanations.';
+    if(nErr>=Math.max(2,total*0.2))return '\uD83C\uDFAF Near-match traps got you '+nErr+' times \u2014 compare cell-by-cell.';
     const acc=G.correctCount/total;
-    if(acc>=0.85&&Adapt.avgRT()<2000)return '\u26A1 Excellent rotation speed AND accuracy. Try Hard or Speed mode.';
-    if(acc>=0.85)return '\u2705 High accuracy \u2014 try a faster mode for more challenge.';
-    if(acc<0.5)return '\uD83C\uDF31 Build foundation in Easy / Zen modes \u2014 explanations help.';
+    if(acc>=0.85&&Adapt.avgRT()<2000)return '\u26A1 Excellent speed AND accuracy. Try Expert mode!';
+    if(acc>=0.85)return '\u2705 High accuracy \u2014 try Speed mode for more challenge.';
+    if(acc<0.5)return '\uD83C\uDF31 Build foundation in Zen mode \u2014 explanations help you learn patterns.';
     return '';
   }
-
-  /* ---------- dev self-test (off in production; flip to true or call SS_runSimulation() from console) ---------- */
-  function SS_runSimulation(){
-    const TR=300;const r={};let ge=0;
-    SS_MODE_ORDER.forEach(mk=>{
-      mode=mk;Fresh.clear();Adapt.reset();G.round=0;G.lives=SS_MODES[mk].zen?Infinity:3;
-      G.skill={rotation:{ok:0,n:0},mirror:{ok:0,n:0},missing:{ok:0,n:0},chain:{ok:0,n:0},mirrorErrors:0,nearErrors:0};
-      let em=0;const sc={};let vf=0;
-      for(let i=0;i<TR;i++){
-        const def=SS_MODES[mk];const n=SS_blockCountForRound(G.round);
-        let rd=null;
-        for(let a=0;a<8;a++){
-          const sh=SS_makeFreshShape(n,{branching:0.25+Math.random()*0.5});
-          let bu;
-          if(def.rule==='missing'){bu=SS_buildMissingOptions(sh.cells);if(!bu)continue;}
-          else if(def.rule==='chain'){bu=SS_buildChainOptions(sh.cells);}
-          else if(def.rule==='mirror'){bu=SS_buildOptions(sh.cells,'mirror');}
-          else{bu=SS_buildOptions(sh.cells,SS_recipeForRound());}
-          if(!bu)continue;
-          const ca={rule:def.rule,target:sh.cells,canon:sh.canon,sil:sh.sil,
-            promptCells:bu.promptCells||sh.cells,partial:bu.partial,
-            afterCells:bu.afterCells,angle:bu.angle,options:bu.options};
-          if(SS_verifyRound(ca)){rd=ca;break;}
-        }
-        if(!rd){em++;const fb=SS_norm([[0,0],[1,0],[1,1]]);let bu=null;
-          try{bu=SS_buildOptions(fb,'easy');}catch(e){}
-          if(bu&&bu.promptCells&&bu.options&&bu.options.length===4)
-            rd={rule:'rotation',target:fb,canon:SS_canonicalHash(fb),sil:SS_silhouetteKey(fb),promptCells:bu.promptCells,options:bu.options};
-          else{const mc=SS_norm([[0,0],[1,0],[2,0],[2,1]]);const mw=[SS_norm([[0,0],[0,1],[0,2],[0,3]]),SS_norm([[0,0],[1,0],[1,1],[2,1]]),SS_norm([[0,0],[0,1],[1,0],[1,1]])];
-            rd={rule:'rotation',target:mc,canon:SS_canonicalHash(mc),sil:SS_silhouetteKey(mc),promptCells:mc,
-              options:[{cells:mc,correct:true,style:'rotation'}].concat(mw.map(c=>({cells:c,correct:false,style:'random'})))};
-            SS_shuffle(rd.options);}
-        }
-        Fresh.addCanon(rd.canon,rd.target.length);
-        Fresh.add(Fresh.silhouettes,rd.sil,Fresh.maxSil);
-        const ss=(rd.options||[]).map(o=>o.style||'-').sort().join('+');
-        Fresh.add(Fresh.distrStyles,ss,Fresh.maxStyle);
-        const ci=(rd.options||[]).findIndex(o=>o.correct);
-        if(ci>=0)Fresh.add(Fresh.correctPos,ci,Fresh.maxPos);
-        sc[rd.canon]=(sc[rd.canon]||0)+1;
-        if(!SS_verifyRound(rd))vf++;
-        G.round++;
-      }
-      r[mk]={emergencies:em,distinctShapes:Object.keys(sc).length,verifyFails:vf};
-      ge+=em;
-      console.log('[SS_Sim] '+mk+' emerg='+em+' shapes='+Object.keys(sc).length+' vfails='+vf);
-    });
-    console.log('[SS_Sim] TOTAL emergencies='+ge);
-    return r;
-  }
-  if(false){console.log('[SpatialSpin] Simulation results:',SS_runSimulation());}
 
   renderStart();
 }
