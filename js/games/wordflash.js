@@ -141,10 +141,9 @@ function showFloatingText(x, y, text, color = '#34D399') {
 
 function playWordFlash(body, setScore, end, wrap, startClock) {
   let q = 0, score = 0, streak = 0, bestStreak = 0, fastest = null, correctCount = 0, lives = 3;
-  let typeModeUnlocked = false, currentMode = 'select'; // 'select' or 'type'
+  let typeModeUnlocked = false, currentMode = 'select';
   const record = S('nz_wf_best') || 0;
 
-  // shuffled, recycling pools
   const pools = { 1: [...WF_T1].sort(() => Math.random() - .5), 2: [...WF_T2].sort(() => Math.random() - .5), 3: [...WF_T3].sort(() => Math.random() - .5) };
   const used = { 1: 0, 2: 0, 3: 0 };
   function takeGroup(tier) { const p = pools[tier]; const g = p[used[tier] % p.length]; used[tier]++; if (used[tier] % p.length === 0) p.sort(() => Math.random() - .5); return g; }
@@ -194,7 +193,6 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     });
   }
 
-  // Countdown before showing word
   function showCountdown(onDone) {
     let count = 3;
     host.innerHTML = `
@@ -228,18 +226,16 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
   function next() {
     if (lives <= 0) { gameOver(); return; }
 
-    // Milestone celebration every 10 rounds
     if (q > 0 && q % 10 === 0) {
       createMilestoneEffect(q);
       confetti(30);
     }
 
-    // Determine difficulty parameters
     const tier = q < 5 ? 1 : q < 11 ? 2 : 3;
     const flashMs = Math.max(280, 900 - q * 35);
     const decoy = q >= 7;
-    const blinkMode = q >= 12; // Ultra-fast flash
-    const typeMode = q >= 5 && Math.random() < 0.35; // 35% chance after round 5
+    const blinkMode = q >= 12;
+    const typeMode = q >= 5 && Math.random() < 0.35;
     currentMode = typeMode ? 'type' : 'select';
     if (typeMode) typeModeUnlocked = true;
 
@@ -256,7 +252,6 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     const askGroup = decoy && askSide === 1 ? group2 : group;
     const askWord = askGroup[0];
 
-    // Mode indicator text
     const modeText = typeMode ? '⌨️ TYPE MODE — Word likho!' : blinkMode ? '👁️ BLINK MODE — Bahut fast!' : '';
     const modeColor = typeMode ? '#F59E0B' : blinkMode ? '#EF4444' : 'var(--primary)';
 
@@ -289,17 +284,13 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     });
 
     _st(() => {
-      // Fade out word with flip effect
-      const stage = host.querySelector('.wf-stage');
       const wordsEl = host.querySelector('#wfWords');
       if (wordsEl) {
         wordsEl.style.transition = 'all 0.25s ease';
         wordsEl.style.opacity = '0';
         wordsEl.style.transform = 'scale(0.8) rotateX(20deg)';
       }
-      if (stage) stage.style.transition = 'opacity .2s';
       _st(() => {
-        // TYPE MODE: user types the word
         if (typeMode) {
           showTypeMode(askWord, askGroup, decoy, askSide);
         } else {
@@ -343,7 +334,12 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
         <div style="font-size: 13px; color: #F59E0B; font-weight: 700; margin-bottom: 10px; letter-spacing: 0.1em;">⌨️ TYPE THE WORD</div>
         ${decoy ? `<div style="font-size: 13px; color: #A78BFA; font-weight: 600; margin-bottom: 10px;">${askSide === 0 ? '⬅ LEFT' : 'RIGHT ➡'} wala word type karo</div>` : ''}
         <div id="typeDisplay" style="font-size: 42px; font-weight: 800; color: var(--text); min-height: 56px; letter-spacing: 0.2em; font-family: monospace;">_</div>
-        <div style="font-size: 12px; color: var(--text2); margin-top: 10px;">Word type karo aur Enter dabao</div>
+        <input type="text" id="typeInput" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+          style="width: 100%; max-width: 280px; margin-top: 14px; padding: 14px 18px; font-size: 20px; font-weight: 700; text-align: center;
+          letter-spacing: 0.25em; border: 2px solid rgba(167,139,250,0.4); border-radius: 14px; background: var(--card); color: var(--text);
+          outline: none; transition: border-color 0.2s, box-shadow 0.2s; font-family: monospace; caret-color: var(--primary);"
+          placeholder="Type here..." maxlength="${displayWord.length}">
+        <div style="font-size: 12px; color: var(--text2); margin-top: 10px;">Yaha type karo 👆</div>
       </div>
       <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;" id="typeHint"></div>
       <div style="text-align: center; font-size: 13px; color: var(--text2); margin-top: 10px; font-weight: 500;">
@@ -352,7 +348,21 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     `;
 
     const typeDisplay = host.querySelector('#typeDisplay');
+    const typeInput = host.querySelector('#typeInput');
     const typeHint = host.querySelector('#typeHint');
+
+    // Auto-focus input after a short delay (to let render complete)
+    _st(() => {
+      if (typeInput) typeInput.focus();
+    }, 100);
+
+    // Re-focus if user taps anywhere on the stage
+    const stageEl = host.querySelector('.wf-stage');
+    if (stageEl) {
+      stageEl.addEventListener('click', () => {
+        if (typeInput) typeInput.focus();
+      });
+    }
 
     // Show letter count hint
     for (let i = 0; i < displayWord.length; i++) {
@@ -367,24 +377,24 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     }
 
     function updateDisplay() {
+      const val = typeInput.value.toUpperCase();
       let html = '';
       for (let i = 0; i < displayWord.length; i++) {
-        if (i < typedText.length) {
-          html += `<span style="color: ${typedText[i].toUpperCase() === displayWord[i] ? '#34D399' : '#EF4444'};">${typedText[i].toUpperCase()}</span>`;
+        if (i < val.length) {
+          html += `<span style="color: ${val[i] === displayWord[i] ? '#34D399' : '#EF4444'};">${val[i]}</span>`;
         } else {
           html += '<span style="color: rgba(167,139,250,0.3);">_</span>';
         }
       }
       typeDisplay.innerHTML = html;
 
-      // Update slots
       for (let i = 0; i < displayWord.length; i++) {
         const slot = host.querySelector(`#typeSlot_${i}`);
         if (slot) {
-          if (i < typedText.length) {
-            slot.textContent = typedText[i].toUpperCase();
-            slot.style.borderColor = typedText[i].toUpperCase() === displayWord[i] ? '#34D399' : '#EF4444';
-            slot.style.background = typedText[i].toUpperCase() === displayWord[i] ? 'rgba(52,211,153,0.1)' : 'rgba(239,68,68,0.1)';
+          if (i < val.length) {
+            slot.textContent = val[i];
+            slot.style.borderColor = val[i] === displayWord[i] ? '#34D399' : '#EF4444';
+            slot.style.background = val[i] === displayWord[i] ? 'rgba(52,211,153,0.1)' : 'rgba(239,68,68,0.1)';
           } else {
             slot.textContent = '';
             slot.style.borderColor = 'rgba(167,139,250,0.3)';
@@ -395,41 +405,52 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     }
 
     function submitAnswer() {
-      if (typedText.length === 0) return;
-      const isCorrect = typedText.toUpperCase().trim() === displayWord.toUpperCase();
-
-      // Create a fake button element for the handler
+      const val = typeInput.value.toUpperCase().trim();
+      if (!val) return;
+      const isCorrect = val === displayWord;
       const fakeBtn = document.createElement('button');
       fakeBtn.style.display = 'none';
       handleAnswer(isCorrect, fakeBtn, null, askWord, askTs, null);
     }
 
-    // Keyboard handler
-    const keyHandler = (e) => {
+    // Listen to input changes (works with both virtual and physical keyboards)
+    typeInput.addEventListener('input', () => {
+      // Force uppercase
+      typeInput.value = typeInput.value.toUpperCase().replace(/[^A-Z]/g, '');
+      if (typeInput.value.length > displayWord.length) {
+        typeInput.value = typeInput.value.slice(0, displayWord.length);
+      }
+      updateDisplay();
+      playSound('tap');
+      // Auto-submit when all letters are filled
+      if (typeInput.value.length === displayWord.length) {
+        _st(submitAnswer, 200);
+      }
+    });
+
+    // Handle Enter key on physical keyboard
+    typeInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         submitAnswer();
-      } else if (e.key === 'Backspace') {
+      }
+    });
+
+    // Handle keyboard for backspace etc.
+    const keyHandler = (e) => {
+      if (e.key === 'Backspace') {
+        // Let the default backspace work through input event
+      } else if (e.key === 'Enter') {
         e.preventDefault();
-        typedText = typedText.slice(0, -1);
-        updateDisplay();
-      } else if (e.key.length === 1 && e.key.match(/[a-zA-Z]/)) {
-        e.preventDefault();
-        if (typedText.length < displayWord.length) {
-          typedText += e.key.toUpperCase();
-          updateDisplay();
-          playSound('tap');
-        }
+        submitAnswer();
       }
     };
     document.addEventListener('keydown', keyHandler);
-
-    // Store handler for cleanup
     host._keyHandler = keyHandler;
+    host._typeInput = typeInput;
   }
 
   function handleAnswer(isCorrect, b, optsEl, askWord, askTs, event) {
-    // Cleanup type mode handler if exists
     if (host._keyHandler) {
       document.removeEventListener('keydown', host._keyHandler);
       host._keyHandler = null;
@@ -441,7 +462,6 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     const ms = Date.now() - askTs;
 
     if (isCorrect) {
-      // CORRECT ANSWER
       playSound('correct'); correctCount++;
       const fast = ms < 500;
       if (fastest === null || ms < fastest) fastest = ms;
@@ -456,13 +476,11 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
 
       if (b && b.style) b.classList.add('wf-correct');
 
-      // Visual effects
       if (event) {
         const rect = event.target.getBoundingClientRect();
         createParticles(rect.left + rect.width / 2, rect.top + rect.height / 2);
         showFloatingText(rect.left + rect.width / 2, rect.top, `+${pts}`, '#34D399');
       } else {
-        // Type mode - show effect at center
         const stage = host.querySelector('.wf-stage');
         if (stage) {
           const rect = stage.getBoundingClientRect();
@@ -474,29 +492,25 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       q++;
       _st(next, 700);
     } else {
-      // WRONG ANSWER
       playSound('wrong');
       streak = 0;
       haptic([30, 50, 30]);
       if (b && b.style) b.classList.add('wf-wrong');
 
-      // Show correct answer
       if (optsEl) {
         optsEl.querySelectorAll('.word-opt').forEach(bb => {
           if (bb.dataset.w === askWord) bb.classList.add('wf-correct');
         });
       } else {
-        // Type mode - reveal correct word
         const typeDisplay = host.querySelector('#typeDisplay');
         if (typeDisplay) {
-          typeDisplay.innerHTML = `<span style="color: #EF4444; text-decoration: line-through;">${typedText || '?'}</span> <span style="color: #34D399;">${askWord}</span>`;
+          const inputVal = host._typeInput ? host._typeInput.value.toUpperCase() : '';
+          typeDisplay.innerHTML = `<span style="color: #EF4444; text-decoration: line-through;">${inputVal || '?'}</span> <span style="color: #34D399;">${askWord}</span>`;
         }
       }
 
-      // Screen shake effect
       shakeScreen(wrap);
 
-      // Life lost animation
       const heartsContainer = host.querySelector('#wfHearts');
       if (heartsContainer) {
         const heartToLose = heartsContainer.querySelector(`.wc-heart:not(.lost)[data-idx="${lives - 1}"]`);
@@ -506,7 +520,6 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       lives--;
       toast('💔 -1 Life');
 
-      // Show floating text for wrong
       if (event) {
         const rect = event.target.getBoundingClientRect();
         showFloatingText(rect.left + rect.width / 2, rect.top, '❌', '#EF4444');
