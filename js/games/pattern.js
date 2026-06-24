@@ -71,8 +71,52 @@ function playPattern(body,setScore,end,wrap,startClock){
     chainPending:null, /* {expectedPos:number} for Chain Round */
     /* skill profile per-category (n attempted, ok correct) */
     skill:Object.fromEntries(PT_CATEGORY_IDS.map(c=>[c,{n:0,ok:0,ms:0}])),
-    pending:false
+    pending:false,
+    /* ── EXPERIENCE LAYER STATE ── */
+    brainPower:0,          /* 0-100, flow meter */
+    flowActive:false,
+    flowEndsAt:0,
+    flowTimer:null,        /* interval checking flow expiry */
+    flowCount:0,           /* how many times flow triggered this run */
+    flowFirstRound:0,      /* round when first flow triggered */
+    bossRoundsTriggered:[], /* tracks which boss milestones fired */
+    activeBoss:null,       /* current boss config or null */
+    mysteryLastRound:-99,  /* last round mystery fired */
+    mysteryActive:false,   /* true during a mystery round */
+    nextChoiceRound:8,     /* next round a choice panel shows */
+    titleUnlocked:0,       /* highest title index toasted this run */
+    _choiceMult:1          /* transient choice-round multiplier */
   };
+
+  /* ── TITLES (inside playPattern, not top-level) ── */
+  const PT_TITLES=[
+    {min:0,   label:'\uD83C\uDF31 Logic Explorer',    color:'#34D399'},
+    {min:10,  label:'\uD83D\uDCDA Pattern Apprentice', color:'#4F8EF7'},
+    {min:25,  label:'\uD83E\uDDE0 Pattern Thinker',   color:'#7C3AED'},
+    {min:50,  label:'\u26A1 IQ Challenger',            color:'#F97316'},
+    {min:80,  label:'\uD83D\uDC51 IQ Master',         color:'#EF4444'},
+    {min:120, label:'\uD83D\uDD2E Logic Sage',        color:'#A855F7'},
+    {min:180, label:'\uD83C\uDF1F Pattern Legend',     color:'#FBBF24'}
+  ];
+  function _getTitle(score){
+    let t=PT_TITLES[0];
+    for(let i=PT_TITLES.length-1;i>=0;i--){if(score>=PT_TITLES[i].min){t=PT_TITLES[i];break;}}
+    return t;
+  }
+  function _getTitleIdx(score){
+    let idx=0;
+    for(let i=PT_TITLES.length-1;i>=0;i--){if(score>=PT_TITLES[i].min){idx=i;break;}}
+    return idx;
+  }
+
+  /* ── BOSS CONFIG ── */
+  const PT_BOSSES=[
+    {round:5,  type:'Mini Boss', label:'\u26A1 MINI BOSS',      mult:2, timerMul:0.85, forceCats:['mixed','matrix','color','rotate']},
+    {round:10, type:'Boss',      label:'\uD83D\uDC51 BOSS ROUND',mult:3, timerMul:1.0,  forceCats:['matrix','mixed']},
+    {round:20, type:'Elite',     label:'\uD83E\uDDE0 ELITE ROUND',mult:3, timerMul:1.0,  forceCats:null, shieldLife:true},
+    {round:35, type:'Master',    label:'\uD83D\uDD25 MASTER ROUND',mult:4,timerMul:0.80, forceCats:['matrix','mixed','rotate']},
+    {round:50, type:'Legend',    label:'\uD83D\uDC41 LEGEND ROUND', mult:5,timerMul:1.0,  forceCats:null}
+  ];
 
   /* anti-repetition rings */
   const Fresh={
@@ -122,6 +166,7 @@ function playPattern(body,setScore,end,wrap,startClock){
   function _cleanup(){
     document.removeEventListener('visibilitychange',_onVis);
     if(G.arcTimer){_cti(G.arcTimer);G.arcTimer=null;}
+    if(G.flowTimer){clearInterval(G.flowTimer);G.flowTimer=null;}
   }
   wrap.addEventListener('remove_game',_cleanup);
 
@@ -442,6 +487,8 @@ function playPattern(body,setScore,end,wrap,startClock){
     let s=7000+(complexityCost-1)*1000-phase*500-Adapt.bias*400;
     if(ev&&ev.timeBonus)s+=ev.timeBonus;
     if(ev&&ev.timerMul)s*=ev.timerMul;
+    /* boss timer reduction */
+    if(G.activeBoss&&G.activeBoss.timerMul)s*=G.activeBoss.timerMul;
     return PT_clamp(Math.round(s),3000,10000);
   }
 
@@ -460,6 +507,12 @@ function playPattern(body,setScore,end,wrap,startClock){
     else if(G.streak>=6)m*=1.5;
     else if(G.streak>=3)m*=1.25;
     if(G.activeEvent&&G.activeEvent.mult)m*=G.activeEvent.mult;
+    /* boss multiplier */
+    if(G.activeBoss)m*=G.activeBoss.mult;
+    /* mystery multiplier */
+    if(G.mysteryActive)m*=3;
+    /* flow state 2× */
+    if(G.flowActive&&G.flowEndsAt>Date.now())m*=2;
     return m;
   }
 
@@ -470,6 +523,7 @@ function playPattern(body,setScore,end,wrap,startClock){
     body.innerHTML='';
     const record=S('nz_pattern_best')||0;
     const games=S('nz_pattern_games')||0;
+    const title=_getTitle(record);
     const screen=$('<div class="pat-start-screen">'+
       '<div class="pat-start-hero">'+
         '<div style="font-size:60px;margin-bottom:6px;">\uD83D\uDCA1</div>'+
@@ -478,12 +532,13 @@ function playPattern(body,setScore,end,wrap,startClock){
           '8 reasoning categories \u00B7 procedural \u00B7 endless'+
         '</p>'+
         (record?'<div class="pat-best-chip">\uD83C\uDFC6 Best: '+record+' \u00B7 '+games+' games</div>':'')+
+        (record?'<div class="pat-title-chip" style="color:'+title.color+';">'+title.label+'</div>':'')+
       '</div>'+
       '<div class="pat-rules">'+
-        '<div class="pat-rule"><span>\u26A1</span><span>Fast answers earn speed bonus</span></div>'+
-        '<div class="pat-rule"><span>\uD83D\uDD25</span><span>Streak \u2265 3 \u2192 1.25\u00D7, \u2265 6 \u2192 1.5\u00D7, \u2265 10 \u2192 2\u00D7</span></div>'+
+        '<div class="pat-rule"><span>\u26A1</span><span>Brain Power meter \u2192 reach 100 for Flow State (2\u00D7 XP!)</span></div>'+
+        '<div class="pat-rule"><span>\uD83D\uDD25</span><span>Boss rounds at 5/10/20/35/50 \u2014 big XP multipliers</span></div>'+
         '<div class="pat-rule"><span>\uD83D\uDCA1</span><span>Wrong reveals the rule \u00B7 -1 life</span></div>'+
-        '<div class="pat-rule"><span>\uD83C\uDFAF</span><span>Adaptive difficulty \u00B7 surprise events</span></div>'+
+        '<div class="pat-rule"><span>\uD83C\uDFAF</span><span>Mystery & Choice rounds \u00B7 adaptive difficulty</span></div>'+
       '</div>'+
       '<button class="btn-primary" id="patStart" style="width:100%;margin-top:16px;padding:16px;">Start Game \u25B6</button>'+
     '</div>');
@@ -505,6 +560,13 @@ function playPattern(body,setScore,end,wrap,startClock){
     G.lives=3;G.streak=0;G.bestStreak=0;G.combo=1;
     G.activeEvent=null;G.eventCooldown=0;G.chainPending=null;
     G.skill=Object.fromEntries(PT_CATEGORY_IDS.map(c=>[c,{n:0,ok:0,ms:0}]));
+    /* reset experience layer */
+    G.brainPower=0;G.flowActive=false;G.flowEndsAt=0;
+    if(G.flowTimer){clearInterval(G.flowTimer);G.flowTimer=null;}
+    G.flowCount=0;G.flowFirstRound=0;
+    G.bossRoundsTriggered=[];G.activeBoss=null;
+    G.mysteryLastRound=-99;G.mysteryActive=false;
+    G.nextChoiceRound=8;G.titleUnlocked=0;G._choiceMult=1;
     Fresh.clear();Adapt.reset();
     body.innerHTML='';
     host=$('<div class="pat-host"></div>');body.appendChild(host);
@@ -532,17 +594,206 @@ function playPattern(body,setScore,end,wrap,startClock){
     },80);
   }
 
+  /* ====================================================================== */
+  /*  FLOW STATE HELPERS (System 1)                                         */
+  /* ====================================================================== */
+  function _startFlowTimer(){
+    if(G.flowTimer)clearInterval(G.flowTimer);
+    G.flowTimer=setInterval(()=>{
+      if(!G.flowActive)return;
+      if(Date.now()>=G.flowEndsAt){
+        G.flowActive=false;
+        G.brainPower=50; /* reward reset */
+        if(G.flowTimer){clearInterval(G.flowTimer);G.flowTimer=null;}
+        if(host)host.classList.remove('pat-flow');
+        toast('Flow State ended \uD83D\uDD25');
+      }
+    },500);
+  }
+  function _activateFlow(){
+    G.flowActive=true;G.flowEndsAt=Date.now()+20000;
+    G.flowCount++;if(G.flowCount===1)G.flowFirstRound=G.round;
+    if(host)host.classList.add('pat-flow');
+    PT_haptic(200);
+    _startFlowTimer();
+    /* brief overlay */
+    const ov=$('<div class="pat-flow-overlay">\u26A1 FLOW STATE \u2014 20s Double XP</div>');
+    document.body.appendChild(ov);
+    _st(()=>{ov.classList.add('pat-flow-overlay-out');},1200);
+    _st(()=>ov.remove(),1800);
+  }
+  function _checkBrainPower(){
+    if(G.brainPower>=100&&!G.flowActive)_activateFlow();
+  }
+  function _checkTitle(){
+    const idx=_getTitleIdx(G.score);
+    if(idx>G.titleUnlocked){
+      G.titleUnlocked=idx;
+      toast('\uD83C\uDF89 New Title: '+PT_TITLES[idx].label);
+    }
+  }
+
+  /* ====================================================================== */
+  /*  BOSS / MYSTERY / CHOICE DETECTION (Systems 2-4)                      */
+  /* ====================================================================== */
+  function _checkBoss(){
+    G.activeBoss=null;
+    for(let i=0;i<PT_BOSSES.length;i++){
+      const b=PT_BOSSES[i];
+      if(G.round+1===b.round&&G.bossRoundsTriggered.indexOf(b.round)===-1){
+        G.activeBoss=b;
+        G.bossRoundsTriggered.push(b.round);
+        return true;
+      }
+    }
+    return false;
+  }
+  function _checkMystery(){
+    G.mysteryActive=false;
+    if(G.round<10)return false;
+    if(G.round-G.mysteryLastRound<12)return false;
+    const target=G.mysteryLastRound+15+(Math.floor(Math.random()*7)-3);
+    if(G.round+1>=target){
+      G.mysteryActive=true;
+      G.mysteryLastRound=G.round+1;
+      return true;
+    }
+    return false;
+  }
+  function _checkChoice(){
+    return G.round+1===G.nextChoiceRound;
+  }
+
+  /* ── CHOICE ROUND UI ── */
+  function _showChoicePanel(cb){
+    const phase=PT_phase()+Math.max(0,Adapt.bias);
+    let elig=PT_CATEGORY_IDS.filter(id=>PT_CATEGORIES[id].phaseMin<=phase);
+    elig=PT_shuffle(elig).slice(0,3);
+    /* assign multipliers: harder cats get higher mult */
+    const mults=elig.map(id=>{
+      const pm=PT_CATEGORIES[id].phaseMin;
+      if(pm>=2)return{id:id,mult:3,label:'3\u00D7 XP (harder)'};
+      if(pm>=1)return{id:id,mult:2,label:'2\u00D7 XP'};
+      return{id:id,mult:1.5,label:'1.5\u00D7 XP'};
+    });
+    const panel=$('<div class="pat-choice-panel">'+
+      '<div class="pat-choice-title">\uD83C\uDFAF CHOOSE YOUR CHALLENGE</div>'+
+      '<div class="pat-choice-sub">Select a category for this round</div>'+
+      '<div class="pat-choice-opts">'+mults.map(m=>{
+        const cat=PT_CATEGORIES[m.id];
+        return '<button class="pat-choice-btn" data-cat="'+m.id+'" data-mult="'+m.mult+'">'+
+          '<span class="pat-choice-icon">'+cat.icon+'</span>'+
+          '<span class="pat-choice-label">'+cat.label+'</span>'+
+          '<span class="pat-choice-mult">'+m.label+'</span>'+
+        '</button>';
+      }).join('')+'</div>'+
+      '<div class="pat-choice-timer"><div class="pat-choice-timer-fill" id="patChoiceFill"></div></div>'+
+    '</div>');
+    host.innerHTML='';host.appendChild(panel);
+    let chosen=false;
+    const expire=Date.now()+8000;
+    panel.querySelectorAll('.pat-choice-btn').forEach(btn=>{
+      btn.onclick=()=>{
+        if(chosen)return;chosen=true;
+        playSound('tap');PT_haptic(10);
+        clearInterval(animI);
+        const catId=btn.dataset.cat;
+        const mult=parseFloat(btn.dataset.mult);
+        G.nextChoiceRound=G.round+1+12;
+        cb(catId,mult);
+      };
+    });
+    /* animate timer bar */
+    const fillEl=panel.querySelector('#patChoiceFill');
+    const animI=_si(()=>{
+      const rem=Math.max(0,expire-Date.now());
+      if(fillEl)fillEl.style.width=(rem/8000*100)+'%';
+      if(rem<=0){clearInterval(animI);}
+    },60);
+    /* auto-select middle after 8s */
+    _st(()=>{
+      if(!chosen){
+        chosen=true;
+        clearInterval(animI);
+        const mid=mults[1]||mults[0];
+        G.nextChoiceRound=G.round+1+12;
+        cb(mid.id,mid.mult);
+      }
+    },8000);
+  }
+
+  /* ── BOSS BANNER ── */
+  function _showBossBanner(boss,cb){
+    const banner=$('<div class="pat-boss-banner">'+
+      '<div class="pat-boss-label">'+boss.label+'</div>'+
+      '<div class="pat-boss-sub">'+boss.mult+'\u00D7 XP \u2014 Push your limits!</div>'+
+    '</div>');
+    host.innerHTML='';host.appendChild(banner);
+    PT_haptic([30,60,30]);
+    _st(cb,1500);
+  }
+
+  /* ── MYSTERY BANNER ── */
+  function _showMysteryBanner(cb){
+    const banner=$('<div class="pat-mystery-banner">'+
+      '<div class="pat-mystery-label">\u2753 MYSTERY ROUND</div>'+
+      '<div class="pat-mystery-sub">What pattern awaits? \u2014 3\u00D7 XP</div>'+
+    '</div>');
+    host.innerHTML='';host.appendChild(banner);
+    PT_haptic([20,40,20]);
+    _st(cb,1500);
+  }
+
+  /* ====================================================================== */
+  /*  NEXT ROUND — boss/mystery/choice checks then normal flow              */
+  /* ====================================================================== */
   function next(){
     if(G.lives<=0){gameOver();return;}
     if(G.arcTimer){_cti(G.arcTimer);G.arcTimer=null;}
+
+    /* ── EXPERIENCE LAYER: check boss → mystery → choice → normal ── */
+    const isBoss=_checkBoss();
+    const isMystery=!isBoss&&_checkMystery();
+    const isChoice=!isBoss&&!isMystery&&_checkChoice();
+
+    if(isBoss){
+      _showBossBanner(G.activeBoss,()=>_doRound(true,false,false,null,null));
+      return;
+    }
+    if(isMystery){
+      _showMysteryBanner(()=>_doRound(false,true,false,null,null));
+      return;
+    }
+    if(isChoice){
+      _showChoicePanel((catId,mult)=>{
+        _doRound(false,false,true,catId,mult);
+      });
+      return;
+    }
+    _doRound(false,false,false,null,null);
+  }
+
+  function _doRound(isBoss,isMystery,isChoice,choiceCat,choiceMult){
     PT_maybeEvent();
-    /* Trap event override: force a near-rule violation generator (uses num with shifted sequence) */
-    /* For simplicity, Trap reuses normal generators; the multiplier already rewards it. */
-    let categoryId=PT_pickCategory();
+    /* category selection with boss/mystery/choice overrides */
+    let categoryId;
+    if(isBoss&&G.activeBoss&&G.activeBoss.forceCats){
+      const phase=PT_phase()+Math.max(0,Adapt.bias);
+      const elig=G.activeBoss.forceCats.filter(id=>PT_CATEGORIES[id]&&PT_CATEGORIES[id].phaseMin<=phase);
+      categoryId=elig.length?PT_pick(elig):PT_pickCategory();
+    }else if(isMystery){
+      categoryId=PT_pick(PT_CATEGORY_IDS);
+    }else if(isChoice&&choiceCat){
+      categoryId=choiceCat;
+    }else{
+      categoryId=PT_pickCategory();
+    }
+    /* difficulty bias override for mystery */
+    const diffOverride=isMystery?Adapt.bias+2:(isBoss?Adapt.bias+1:Adapt.bias);
     let q=null,tries=0;
     while(!q&&tries<6){
       tries++;
-      const cand=Gen[categoryId]?Gen[categoryId](Adapt.bias):null;
+      const cand=Gen[categoryId]?Gen[categoryId](diffOverride):null;
       if(!cand)continue;
       /* freshness gates (relax after 3 tries) */
       const stem=PT_signatureStem(cand.sig);
@@ -552,9 +803,11 @@ function playPattern(body,setScore,end,wrap,startClock){
       if(tooSoon||sameAnsShape||sameDistr)continue;
       q=cand;
     }
-    if(!q)q=Gen.num(Adapt.bias);
+    if(!q)q=Gen.num(diffOverride);
     /* enforce correct-position balance */
     q=PT_avoidStalePos(q);
+    /* store choice multiplier override for scoring */
+    G._choiceMult=isChoice&&choiceMult?choiceMult:1;
     /* record freshness */
     Fresh.add(Fresh.categories,categoryId,Fresh.maxC);
     Fresh.add(Fresh.sigs,q.sig,Fresh.maxSig);
@@ -590,6 +843,9 @@ function playPattern(body,setScore,end,wrap,startClock){
     return q;
   }
 
+  /* ====================================================================== */
+  /*  RENDER ROUND — HUD with Brain Power bar + title                      */
+  /* ====================================================================== */
   function renderRound(categoryId,q){
     const cat=PT_CATEGORIES[categoryId];
     const ev=G.activeEvent;
@@ -597,6 +853,9 @@ function playPattern(body,setScore,end,wrap,startClock){
     const phaseLabel=PT_phaseLabel();
     const taskChip='<div class="pat-task-chip" style="background:'+cat.hue+';"><span class="pat-task-icon">'+cat.icon+'</span><span class="pat-task-text">'+cat.label+'</span></div>';
     const eventBanner=ev?'<div class="pat-event-banner">'+ev.icon+' '+ev.label+' \u00B7 '+ev.sub+'</div>':'';
+    /* boss/mystery badge */
+    const bossBadge=G.activeBoss?'<div class="pat-event-banner pat-boss-active">'+G.activeBoss.label+' \u00B7 '+G.activeBoss.mult+'\u00D7 XP</div>':'';
+    const mysteryBadge=G.mysteryActive?'<div class="pat-event-banner pat-mystery-active">\u2753 MYSTERY \u00B7 3\u00D7 XP</div>':'';
     const phaseChip='<span class="pat-phase-chip">'+phaseLabel+'</span>';
     const accChip=Adapt.win.length>=5?'<span class="pat-acc-chip">'+Math.round(Adapt.accuracy()*100)+'%</span>':'';
 
@@ -608,6 +867,17 @@ function playPattern(body,setScore,end,wrap,startClock){
       '<div class="arc-num" id="arcNum">'+Math.ceil(G.timerMs/1000)+'</div>'+
     '</div>';
 
+    /* ── BRAIN POWER BAR (System 7) ── */
+    const bpPct=Math.min(100,Math.max(0,G.brainPower));
+    const bpBar='<div class="pat-bp-wrap">'+
+      '<div class="pat-bp-bar"><div class="pat-bp-fill" style="width:'+bpPct+'%;"></div></div>'+
+      '<div class="pat-bp-label">\u26A1 BRAIN POWER'+(G.flowActive?' \u2014 FLOW ACTIVE!':'')+'</div>'+
+    '</div>';
+
+    /* ── TITLE DISPLAY (System 7) ── */
+    const curTitle=_getTitle(G.score);
+    const titleHtml='<div class="pat-title-hud" style="color:'+curTitle.color+';">'+curTitle.label+'</div>';
+
     const heartsHtml=focusMode?'':
       '<div class="pat-hud">'+
         '<div class="wc-hearts">'+[0,1,2].map(i=>'<span class="wc-heart '+(i>=G.lives?'lost':'')+' '+(G.lives===1&&i===0?'mm-last':'')+'">'+(i>=G.lives?'\uD83D\uDC94':'\u2764\uFE0F')+'</span>').join('')+'</div>'+
@@ -615,7 +885,8 @@ function playPattern(body,setScore,end,wrap,startClock){
           '<span class="pat-score-badge">'+G.score+' pts</span>'+
           (G.streak>=2?'<span class="pat-streak-badge">\uD83D\uDD25'+G.streak+'</span>':'')+
         '</div>'+
-      '</div>';
+      '</div>'+
+      bpBar+titleHtml;
 
     host.innerHTML=
       heartsHtml+
@@ -624,11 +895,15 @@ function playPattern(body,setScore,end,wrap,startClock){
         arcHtml+
         '<div class="pat-q-meta">'+accChip+' <span style="font-size:11px;color:var(--text2);">Q'+(G.round+1)+'</span></div>'+
       '</div>'+
-      eventBanner+
+      eventBanner+bossBadge+mysteryBadge+
       taskChip+
       '<div class="pat-instruction">'+_helperFor(categoryId,ev)+'</div>'+
       q.html+
       q.optsHtml;
+
+    /* maintain flow glow class on host */
+    if(G.flowActive&&G.flowEndsAt>Date.now())host.classList.add('pat-flow');
+    else host.classList.remove('pat-flow');
 
     /* Memory event: hide last 2 elements after 1.5s */
     if(ev&&ev.memHide){
@@ -671,6 +946,9 @@ function playPattern(body,setScore,end,wrap,startClock){
     return map[categoryId]||map.num;
   }
 
+  /* ====================================================================== */
+  /*  ANSWER HANDLERS                                                       */
+  /* ====================================================================== */
   function _onCorrect(q,chosen,elapsed,categoryId,btn){
     playSound('correct');PT_haptic(10);
     Adapt.record(true,elapsed,G.timerMs,categoryId,q.complexityCost);
@@ -680,18 +958,27 @@ function playPattern(body,setScore,end,wrap,startClock){
     const fast=elapsed<G.timerMs*0.4;
     const fastBonus=fast?1.5:elapsed<G.timerMs*0.7?1.2:1;
     const baseScore=q.complexityCost; /* simpler patterns 1pt, hardest 4pts */
-    const m=PT_scoreMult();
+    const m=PT_scoreMult()*(G._choiceMult||1);
     const pts=Math.max(1,Math.round(baseScore*m*fastBonus));
     G.score+=pts;setScore(G.score);
     if(fast)G.bonus++;
+    /* ── BRAIN POWER (System 1) ── */
+    G.brainPower=Math.min(100,G.brainPower+12);
+    _checkBrainPower();
+    /* ── TITLE CHECK (System 5) ── */
+    _checkTitle();
     /* combo banners */
     if(G.streak===3)PT_showCombo('\uD83D\uDD25 STREAK x3');
     else if(G.streak===6)PT_showCombo('\u26A1 ON FIRE x6');
-    else if(G.streak===10)PT_showCombo('\uD83D\uDC51 FLOW STATE x10');
+    else if(G.streak===10)PT_showCombo('\uD83D\uDC51 UNSTOPPABLE x10');
+    /* boss defeated toast */
+    if(G.activeBoss){toast('BOSS DEFEATED \uD83D\uDCA5');G.activeBoss=null;}
+    if(G.mysteryActive){G.mysteryActive=false;}
     /* points popup */
     const popup=$('<div class="pat-pts-popup" style="color:#34D399;">+'+pts+(fast?' \u26A1':'')+'</div>');
     document.body.appendChild(popup);_st(()=>popup.remove(),900);
     G.round++;
+    G._choiceMult=1;
     _st(next,440);
   }
   function _onWrong(q,chosen,elapsed,categoryId,btn){
@@ -701,7 +988,17 @@ function playPattern(body,setScore,end,wrap,startClock){
     /* highlight correct */
     const opts=host.querySelectorAll('.pat-opt');
     if(opts[q.answerIdx])opts[q.answerIdx].classList.add('correct-ans');
-    G.streak=0;G.attempts++;G.lives--;
+    G.streak=0;G.attempts++;
+    /* ── BOSS SHIELD: elite boss only costs 1 life max ── */
+    if(G.activeBoss&&G.activeBoss.shieldLife){
+      G.lives=Math.max(0,G.lives-1);
+    }else{
+      G.lives--;
+    }
+    /* ── BRAIN POWER (System 1) ── */
+    G.brainPower=Math.max(0,G.brainPower-20);
+    /* clear boss/mystery state */
+    G.activeBoss=null;G.mysteryActive=false;G._choiceMult=1;
     /* hint reveal */
     const hintEl=$('<div class="pat-hint-box pat-hint-wrong">\u274C Wrong \u00B7 <span>\uD83D\uDCA1 '+PT_escape(q.hint)+'</span></div>');
     host.appendChild(hintEl);
@@ -716,7 +1013,16 @@ function playPattern(body,setScore,end,wrap,startClock){
     opts.forEach(b=>b.disabled=true);
     const hintEl=$('<div class="pat-hint-box pat-hint-wrong">\u23F1 Time up</div>');
     host.appendChild(hintEl);
-    G.streak=0;G.attempts++;G.lives--;
+    G.streak=0;G.attempts++;
+    /* boss shield */
+    if(G.activeBoss&&G.activeBoss.shieldLife){
+      G.lives=Math.max(0,G.lives-1);
+    }else{
+      G.lives--;
+    }
+    /* brain power penalty */
+    G.brainPower=Math.max(0,G.brainPower-20);
+    G.activeBoss=null;G.mysteryActive=false;G._choiceMult=1;
     Adapt.record(false,G.timerMs,G.timerMs,Fresh.categories[Fresh.categories.length-1]||'num',1);
     if(G.lives<=0){_st(gameOver,1100);return;}
     G.round++;
@@ -724,7 +1030,7 @@ function playPattern(body,setScore,end,wrap,startClock){
   }
 
   /* ====================================================================== */
-  /*  GAME OVER + SKILL INSIGHT                                              */
+  /*  GAME OVER + SKILL INSIGHT (Enhanced End Screen — System 6)            */
   /* ====================================================================== */
   function gameOver(){
     _cleanup();
@@ -733,14 +1039,40 @@ function playPattern(body,setScore,end,wrap,startClock){
     if(newPB)setS('nz_pattern_best',G.score);
     setS('nz_pattern_games',(S('nz_pattern_games')||0)+1);
     /* persist skill profile (additive) */
-    const skillStore=S('nz_pattern_skill')||{};
+    const prevSkill=S('nz_pattern_skill')||{};
+    const skillStore=JSON.parse(JSON.stringify(prevSkill));
     PT_CATEGORY_IDS.forEach(c=>{
       const a=skillStore[c]||{n:0,ok:0,ms:0};
       skillStore[c]={n:a.n+G.skill[c].n,ok:a.ok+G.skill[c].ok,ms:a.ms+G.skill[c].ms};
     });
     setS('nz_pattern_skill',skillStore);
     if(newPB)confetti(60);
-    const acc=G.attempts?Math.round((G.attempts-G.lives>=0?(G.attempts-(3-G.lives)):G.attempts)/G.attempts*100):0;
+
+    /* ── SKILL DELTA (System 6) ── */
+    let deltaHtml='';
+    const played=PT_CATEGORY_IDS.filter(c=>G.skill[c].n>=1);
+    if(played.length){
+      deltaHtml='<div class="pat-skill-delta"><div class="pat-delta-title">\uD83D\uDCCA Skill Growth This Run</div>';
+      played.forEach(c=>{
+        const prev=prevSkill[c];
+        const cur=G.skill[c];
+        const prevAcc=prev&&prev.n>=2?Math.round(prev.ok/prev.n*100):null;
+        const curAcc=cur.n>=1?Math.round(cur.ok/cur.n*100):null;
+        const cat=PT_CATEGORIES[c];
+        let badge='';
+        if(prevAcc!==null&&curAcc!==null){
+          const diff=curAcc-prevAcc;
+          badge=diff>0?'<span style="color:#34D399;">+'+diff+'% \u2191</span>':
+                diff<0?'<span style="color:#EF4444;">'+diff+'% \u2193</span>':
+                '<span style="color:var(--text2);">same</span>';
+        }else if(curAcc!==null){
+          badge='<span style="color:#4F8EF7;">new! '+curAcc+'%</span>';
+        }
+        deltaHtml+='<div class="pat-delta-row"><span>'+cat.icon+' '+cat.label+'</span>'+badge+'</div>';
+      });
+      deltaHtml+='</div>';
+    }
+
     /* compute strongest/weakest category from THIS run only */
     let best=null,worst=null;
     PT_CATEGORY_IDS.forEach(c=>{
@@ -753,10 +1085,23 @@ function playPattern(body,setScore,end,wrap,startClock){
     });
     let insight='';
     if(best&&worst&&best.id!==worst.id){
-      insight='Strongest: '+PT_CATEGORIES[best.id].label+' \u00B7 '+Math.round(best.a*100)+'%. Work on: '+PT_CATEGORIES[worst.id].label+' \u00B7 '+Math.round(worst.a*100)+'%.';
+      insight='\uD83D\uDCAA Strongest: '+PT_CATEGORIES[best.id].label+' ('+Math.round(best.a*100)+'%)'+
+        ' \u00B7 \uD83D\uDCC8 Improve: '+PT_CATEGORIES[worst.id].label+' ('+Math.round(worst.a*100)+'%)';
     }else if(best){
-      insight='Strong run on '+PT_CATEGORIES[best.id].label+' ('+Math.round(best.a*100)+'%).';
+      insight='\uD83D\uDCAA Strong run on '+PT_CATEGORIES[best.id].label+' ('+Math.round(best.a*100)+'%)';
     }
+
+    /* ── FLOW INFO (System 6) ── */
+    let flowInfo='';
+    if(G.flowCount>0){
+      flowInfo='\u26A1 Flow State reached '+G.flowCount+' time'+(G.flowCount>1?'s':'')+
+        ' \u2014 first at Round '+(G.flowFirstRound+1);
+    }
+
+    /* ── TITLE (System 6) ── */
+    const finalTitle=_getTitle(G.score);
+    const titleLine='<div class="pat-end-title" style="color:'+finalTitle.color+';">You reached: '+finalTitle.label+'</div>';
+
     end({
       title:newPB?'New Best! \uD83C\uDFC6':'Pattern Master! \uD83D\uDCA1',
       emoji:'\uD83D\uDCA1',
@@ -770,7 +1115,10 @@ function playPattern(body,setScore,end,wrap,startClock){
         '<div class="row"><span>Avg Reaction</span><span class="val">'+Math.round(Adapt.avgRT())+' ms</span></div>'+
         '<div class="row"><span>Personal Best</span><span class="val">'+Math.max(G.score,record)+(newPB?' \uD83C\uDFC6':'')+'</span></div>'+
       '</div>'+
+      titleLine+
       (insight?'<div class="pat-insight">'+insight+'</div>':'')+
+      deltaHtml+
+      (flowInfo?'<div class="pat-insight">'+flowInfo+'</div>':'')+
       (newPB?'<div class="rec">New Personal Best! \uD83C\uDF89</div>':'')
     });
   }
