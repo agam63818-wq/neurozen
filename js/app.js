@@ -289,10 +289,13 @@ function awardScore(rawPts,skillKey,gameId,gameScore){
     toast('🔥 Streak already locked in for today — come back tomorrow for the next one!');
     setS('nz_today_games',S('nz_today_games')+1);
   }
-  // score history
-  const h=S('nz_score_history');
-  h.push(next);if(h.length>7)h.shift();
-  setS('nz_score_history',h);
+  // date-keyed daily history: {'YYYY-MM-DD': score} — max 7 calendar days
+  const _dh=S('nz_daily_history')||{};
+  const _dk=todayKey();
+  _dh[_dk]=Math.max(_dh[_dk]||0,next); // keep best score of the day
+  const _allKeys=Object.keys(_dh).sort();
+  while(_allKeys.length>7){const _old=_allKeys.shift();delete _dh[_old];}
+  setS('nz_daily_history',_dh);
   // skill
   if(skillKey){
     const prev=S('nz_skill_scores');
@@ -1142,9 +1145,20 @@ function renderProfile(){
     .sort((a,b)=>b.v-a.v).slice(0,3);
   /* Last 3 unlocked achievements */
   const recentAch=ACHIEVEMENTS.filter(a=>ach.includes(a.id)).slice(-3);
-  /* 7-day mini-bars data */
-  const histMax=Math.max(1,...hist);
-  const dayLbl=['M','T','W','T','F','S','S'];
+  /* Last 7 Days — date-keyed history */
+  const _dailyH=S('nz_daily_history')||{};
+  // build array for last 7 calendar days (oldest→newest)
+  const _dayLabels=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const _shortLbls=['S','M','T','W','T','F','S'];
+  const _7days=[];
+  for(let _i=6;_i>=0;_i--){
+    const _d=new Date(Date.now()-_i*86400000);
+    const _k=_d.toISOString().slice(0,10);
+    _7days.push({key:_k,val:_dailyH[_k]||0,dow:_d.getDay(),isToday:_i===0});
+  }
+  const _histMax=Math.max(1,..._7days.map(d=>d.val));
+  const _weekTotal=_7days.reduce((a,d)=>a+d.val,0);
+  const _todayVal=_7days[_7days.length-1].val;
 
   p.innerHTML=`
     <div class="hdr"><div><div class="greet">Your account</div><h1>Profile</h1></div></div>
@@ -1189,13 +1203,12 @@ function renderProfile(){
     <div class="sec-title"><h2>Last 7 Days</h2></div>
     <div class="card pf-week">
       <div class="pf-week-bars">
-        ${hist.map((v,i)=>{
-          const h=Math.max(4,Math.round((v/histMax)*46));
-          const isToday=i===hist.length-1;
-          return `<div class="pf-day"><div class="pf-day-bar ${isToday?'today':''}" style="height:${h}px;"></div><div class="pf-day-lbl">${dayLbl[i]||''}</div></div>`;
+        ${_7days.map((d)=>{
+          const h=Math.max(4,Math.round((d.val/_histMax)*46));
+          return `<div class="pf-day"><div class="pf-day-bar ${d.isToday?'today':''}" style="height:${h}px;" title="${d.key}: ${d.val}"></div><div class="pf-day-lbl ${d.isToday?'today':''}">${_shortLbls[d.dow]}</div></div>`;
         }).join('')}
       </div>
-      <div class="pf-week-foot">${hist[hist.length-1]||0} today · ${hist.reduce((a,b)=>a+b,0)} this week</div>
+      <div class="pf-week-foot">${_todayVal} today · ${_weekTotal} this week</div>
     </div>
 
     ${recentAch.length?`
