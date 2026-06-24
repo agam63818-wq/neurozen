@@ -363,7 +363,7 @@ body.dark .relax-bg{opacity:.25;}
 .skill-bar-bg{flex:1;height:8px;background:var(--border);border-radius:50px;overflow:hidden;}
 .skill-bar-fill{height:100%;border-radius:50px;background:var(--grad);transition:width 1s ease;}
 .skill-bar-val{font-size:12px;font-weight:700;width:30px;text-align:right;}
-.start-btn{display:block;margin:10px auto;padding:12px 32px;background:var(--grad);color:#fff;border-radius:14px;font-weight:700;font-size:15px;box-shadow:var(--shadow);}
+.start-btn{display:block;margin:10px auto;padding:12px 32px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;font-size:15px;box-shadow:var(--shadow);}
 /* Featured card float */
 @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
 .feat-float{animation:float 3s ease-in-out infinite;}
@@ -838,6 +838,173 @@ body.dark .mm-zen .mm-cell{background:linear-gradient(135deg,#2A2150,#1E2A45);}
 .wc-hearts{display:flex;gap:6px;align-items:center;}
 .wc-heart{font-size:20px;transition:filter .3s,transform .3s;}
 .wc-heart.lost{filter:grayscale(1);opacity:.5;}
+
+/* ===================== WORD FLASH 2.0 — NEW ANIMATIONS ===================== */
+/* Word flash cinematic animation */
+@keyframes wordFlashIn {
+  0% { transform: scale(0.3) rotate(-8deg); opacity: 0; filter: blur(8px); }
+  40% { transform: scale(1.15) rotate(2deg); opacity: 1; filter: blur(0); }
+  70% { transform: scale(0.95) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+/* Question mark pulse */
+@keyframes questionPulse {
+  0%, 100% { transform: scale(1); text-shadow: 0 0 20px rgba(167,139,250,0.3); }
+  50% { transform: scale(1.08); text-shadow: 0 0 40px rgba(167,139,250,0.6); }
+}
+
+/* Fade in up for options */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Particle burst effect */
+@keyframes particleBurst {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+}
+
+/* Heart shatter animation */
+@keyframes heartShatter {
+  0% { transform: scale(1); filter: none; }
+  20% { transform: scale(1.4) rotate(-15deg); filter: brightness(2); }
+  40% { transform: scale(0.9) rotate(10deg); filter: grayscale(0.5); }
+  60% { transform: scale(1.1) rotate(-5deg); filter: grayscale(0.8); }
+  100% { transform: scale(1) rotate(0); filter: grayscale(1); opacity: 0.4; }
+}
+
+/* Screen shake for wrong answer */
+@keyframes shakeScreen {
+  0%, 100% { transform: translateX(0); }
+  10% { transform: translateX(-8px) translateY(2px); }
+  20% { transform: translateX(8px) translateY(-2px); }
+  30% { transform: translateX(-6px) translateY(1px); }
+  40% { transform: translateX(6px) translateY(-1px); }
+  50% { transform: translateX(-4px); }
+  60% { transform: translateX(4px); }
+  70% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+/* Milestone celebration */
+@keyframes milestonePop {
+  0% { transform: scale(0.5); opacity: 0; }
+  40% { transform: scale(1.15); opacity: 1; }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Floating text up */
+@keyframes floatUp {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.8; transform: translate(-50%, -120%) scale(1.2); }
+  100% { opacity: 0; transform: translate(-50%, -200%) scale(0.8); }
+}
+
+/* Blink mode warning pulse */
+@keyframes blinkWarning {
+  0%, 100% { color: #EF4444; text-shadow: 0 0 10px rgba(239,68,68,0.3); }
+  50% { color: #F87171; text-shadow: 0 0 25px rgba(239,68,68,0.6); }
+}
+
+/* Type mode slot styles */
+.type-slot {
+  width: 36px;
+  height: 44px;
+  border: 2px solid rgba(167,139,250,0.3);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  transition: all 0.2s ease;
+  background: transparent;
+}
+.type-slot.filled-correct {
+  border-color: #34D399;
+  background: rgba(52,211,153,0.1);
+  color: #34D399;
+}
+.type-slot.filled-wrong {
+  border-color: #EF4444;
+  background: rgba(239,68,68,0.1);
+  color: #EF4444;
+}
+
+/* Countdown number pop */
+@keyframes countPop {
+  from { transform: scale(1.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Streak fire animation */
+@keyframes streakFire {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(249,115,22,0.4)); }
+  50% { transform: scale(1.15); filter: drop-shadow(0 0 12px rgba(249,115,22,0.8)); }
+}
+.wf-streak-active {
+  animation: streakFire 0.8s ease-in-out infinite;
+}
+
+/* Word glow effect */
+@keyframes wordGlow {
+  0%, 100% { text-shadow: 0 0 20px rgba(167,139,250,0.3), 0 0 40px rgba(79,142,247,0.15); }
+  50% { text-shadow: 0 0 30px rgba(167,139,250,0.5), 0 0 60px rgba(79,142,247,0.3); }
+}
+
+/* Smooth word exit */
+.wf-word-exit {
+  animation: wordExit 0.25s ease forwards;
+}
+@keyframes wordExit {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.8) rotateX(20deg); opacity: 0; }
+}
+
+/* Type mode container */
+.type-container {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+/* Blink mode indicator */
+.blink-indicator {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  animation: blinkWarning 1s ease-in-out infinite;
+}
+
+/* Enhanced combo badge for Word Flash */
+.wf-combo-badge {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  background: linear-gradient(135deg, #F97316, #EF4444);
+  color: #fff;
+  padding: 14px 28px;
+  border-radius: 50px;
+  font-weight: 900;
+  font-size: 20px;
+  z-index: 150;
+  pointer-events: none;
+  box-shadow: 0 8px 32px rgba(239, 68, 68, 0.5);
+  animation: comboPop 0.4s cubic-bezier(.16,1,.3,1) forwards;
+}
+@keyframes comboPop {
+  from { transform: translate(-50%, -50%) scale(0) rotate(-8deg); opacity: 0; }
+  60% { transform: translate(-50%, -50%) scale(1.2) rotate(3deg); }
+  to { transform: translate(-50%, -50%) scale(1) rotate(0); opacity: 1; }
+}
+
 /* ===================== COLOR STROOP XTREME v2 ===================== */
 .sx-start{animation:fadeUp .3s ease;padding:4px 0;}
 .sx-hero{text-align:center;background:var(--card);border-radius:24px;padding:28px 20px 22px;box-shadow:var(--shadow);margin-bottom:16px;}
@@ -912,7 +1079,6 @@ body.dark .mm-zen .mm-cell{background:linear-gradient(135deg,#2A2150,#1E2A45);}
 .sx-hearts-row{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:10px;}
 .wx-heart{font-size:18px;transition:filter .3s,transform .3s;}
 .wx-heart.lost{filter:grayscale(1);opacity:.4;}
-.sx-lives-count{font-size:12px;font-weight:700;color:var(--text2);margin-left:6px;}
 /* Stimulus container v2 */
 .sx-stim{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70px;margin:8px 0 14px;position:relative;}
 .sx-deco{position:absolute;bottom:-6px;right:4px;font-size:18px;opacity:.2;pointer-events:none;}
@@ -939,6 +1105,42 @@ body.dark .mm-zen .mm-cell{background:linear-gradient(135deg,#2A2150,#1E2A45);}
 /* Compare previous variant */
 .sx-compare{text-align:center;margin:8px 0 14px;}
 .sx-compare-prev{font-size:13px;font-weight:700;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:8px;}
+
+/* ===================== STROOP X v3 ADDITIONS ===================== */
+/* Task chip — primary read, large + bold */
+.sx-task-chip{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 18px;border-radius:50px;color:#fff;font-weight:900;font-size:16px;letter-spacing:.04em;margin:6px auto 8px;max-width:340px;box-shadow:0 8px 24px rgba(0,0,0,.18);text-shadow:0 1px 2px rgba(0,0,0,.25);animation:sxChipPop .35s cubic-bezier(.16,1,.3,1);}
+.sx-task-icon{font-size:22px;line-height:1;}
+.sx-task-text{font-size:15px;letter-spacing:.06em;}
+@keyframes sxChipPop{0%{opacity:0;transform:translateY(-6px) scale(.92)}60%{transform:translateY(0) scale(1.04)}100%{opacity:1;transform:none}}
+/* Helper line — secondary read */
+.sx-helper{text-align:center;font-size:12px;color:var(--text2);font-weight:600;margin:0 auto 12px;max-width:320px;line-height:1.35;}
+.sx-helper-dim{opacity:.25;transition:opacity .3s;}
+/* Event banner */
+.sx-event-banner{display:block;text-align:center;padding:8px 14px;border-radius:14px;color:#fff;font-weight:800;font-size:13px;margin:0 auto 8px;max-width:340px;letter-spacing:.04em;box-shadow:0 6px 18px rgba(0,0,0,.18);animation:sxEventSlide .4s cubic-bezier(.16,1,.3,1);}
+.sx-event-sub{font-weight:600;opacity:.9;font-size:11px;}
+@keyframes sxEventSlide{0%{opacity:0;transform:translateY(-10px) scale(.95)}100%{opacity:1;transform:none}}
+/* Stim wrapper — supports ghost fade */
+.sx-stim-wrap{transition:opacity .8s ease,filter .8s ease;}
+.sx-ghost-fade{opacity:.08;filter:blur(2px);}
+/* Accuracy mini-badge */
+.sx-acc-mini{font-size:11px;font-weight:700;color:var(--text2);background:var(--card);padding:3px 10px;border-radius:50px;box-shadow:var(--shadow);}
+/* Combo banner — mid-screen flash */
+.sx-combo-banner{position:fixed;top:30%;left:50%;transform:translate(-50%,-50%) scale(.6);background:linear-gradient(135deg,#F97316,#EF4444,#A855F7);color:#fff;font-weight:900;font-size:22px;letter-spacing:.06em;padding:14px 28px;border-radius:50px;box-shadow:0 16px 48px rgba(239,68,68,.45);z-index:200;pointer-events:none;animation:sxComboIn .35s cubic-bezier(.16,1,.3,1) forwards;text-shadow:0 2px 8px rgba(0,0,0,.3);}
+@keyframes sxComboIn{0%{opacity:0;transform:translate(-50%,-50%) scale(.6) rotate(-4deg)}60%{transform:translate(-50%,-50%) scale(1.12) rotate(2deg)}100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(0)}}
+.sx-combo-banner.sx-combo-out{animation:sxComboOut .55s ease forwards;}
+@keyframes sxComboOut{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-90%) scale(.85)}}
+/* Color option — color-blind letter prefix */
+.sx-opt-letter-cb{display:inline-block;width:20px;height:20px;line-height:20px;border-radius:6px;background:rgba(0,0,0,.28);font-size:11px;font-weight:900;text-align:center;margin-right:6px;letter-spacing:0;}
+/* Zen explanation */
+.sx-explain{margin-top:12px;padding:12px 14px;border-radius:14px;font-size:13px;font-weight:600;line-height:1.4;animation:fadeUp .25s ease;border:1.5px solid;}
+.sx-explain-wrong{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);color:#DC2626;}
+.sx-explain-ok{background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.4);color:#059669;}
+/* Tighter HUD on small screens */
+@media (max-width:360px){
+  .sx-task-text{font-size:13px;}
+  .sx-task-chip{padding:10px 14px;font-size:14px;}
+  .sx-helper{font-size:11px;}
+}
 
 /* ===================== SPATIAL SPIN v4 — 4 modes × 8 challenge types ===================== */
 /* Mode grid (2×2 for 4 modes) */
@@ -994,40 +1196,4 @@ body.dark .mm-zen .mm-cell{background:linear-gradient(135deg,#2A2150,#1E2A45);}
   .ss-chain-arrow{font-size:12px;}
   .ss-chain-seq{gap:3px;}
   .ss-chain-card{padding:6px 8px;min-width:48px;}
-}
-
-/* ===================== STROOP X v3 ADDITIONS ===================== */
-/* Task chip — primary read, large + bold */
-.sx-task-chip{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 18px;border-radius:50px;color:#fff;font-weight:900;font-size:16px;letter-spacing:.04em;margin:6px auto 8px;max-width:340px;box-shadow:0 8px 24px rgba(0,0,0,.18);text-shadow:0 1px 2px rgba(0,0,0,.25);animation:sxChipPop .35s cubic-bezier(.16,1,.3,1);}
-.sx-task-icon{font-size:22px;line-height:1;}
-.sx-task-text{font-size:15px;letter-spacing:.06em;}
-@keyframes sxChipPop{0%{opacity:0;transform:translateY(-6px) scale(.92)}60%{transform:translateY(0) scale(1.04)}100%{opacity:1;transform:none}}
-/* Helper line — secondary read */
-.sx-helper{text-align:center;font-size:12px;color:var(--text2);font-weight:600;margin:0 auto 12px;max-width:320px;line-height:1.35;}
-.sx-helper-dim{opacity:.25;transition:opacity .3s;}
-/* Event banner */
-.sx-event-banner{display:block;text-align:center;padding:8px 14px;border-radius:14px;color:#fff;font-weight:800;font-size:13px;margin:0 auto 8px;max-width:340px;letter-spacing:.04em;box-shadow:0 6px 18px rgba(0,0,0,.18);animation:sxEventSlide .4s cubic-bezier(.16,1,.3,1);}
-.sx-event-sub{font-weight:600;opacity:.9;font-size:11px;}
-@keyframes sxEventSlide{0%{opacity:0;transform:translateY(-10px) scale(.95)}100%{opacity:1;transform:none}}
-/* Stim wrapper — supports ghost fade */
-.sx-stim-wrap{transition:opacity .8s ease,filter .8s ease;}
-.sx-ghost-fade{opacity:.08;filter:blur(2px);}
-/* Accuracy mini-badge */
-.sx-acc-mini{font-size:11px;font-weight:700;color:var(--text2);background:var(--card);padding:3px 10px;border-radius:50px;box-shadow:var(--shadow);}
-/* Combo banner — mid-screen flash */
-.sx-combo-banner{position:fixed;top:30%;left:50%;transform:translate(-50%,-50%) scale(.6);background:linear-gradient(135deg,#F97316,#EF4444,#A855F7);color:#fff;font-weight:900;font-size:22px;letter-spacing:.06em;padding:14px 28px;border-radius:50px;box-shadow:0 16px 48px rgba(239,68,68,.45);z-index:200;pointer-events:none;animation:sxComboIn .35s cubic-bezier(.16,1,.3,1) forwards;text-shadow:0 2px 8px rgba(0,0,0,.3);}
-@keyframes sxComboIn{0%{opacity:0;transform:translate(-50%,-50%) scale(.6) rotate(-4deg)}60%{transform:translate(-50%,-50%) scale(1.12) rotate(2deg)}100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(0)}}
-.sx-combo-banner.sx-combo-out{animation:sxComboOut .55s ease forwards;}
-@keyframes sxComboOut{from{opacity:1;transform:translate(-50%,-50%) scale(1)}to{opacity:0;transform:translate(-50%,-90%) scale(.85)}}
-/* Color option — color-blind letter prefix */
-.sx-opt-letter-cb{display:inline-block;width:20px;height:20px;line-height:20px;border-radius:6px;background:rgba(0,0,0,.28);font-size:11px;font-weight:900;text-align:center;margin-right:6px;letter-spacing:0;}
-/* Zen explanation */
-.sx-explain{margin-top:12px;padding:12px 14px;border-radius:14px;font-size:13px;font-weight:600;line-height:1.4;animation:fadeUp .25s ease;border:1.5px solid;}
-.sx-explain-wrong{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);color:#DC2626;}
-.sx-explain-ok{background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.4);color:#059669;}
-/* Tighter HUD on small screens */
-@media (max-width:360px){
-  .sx-task-text{font-size:13px;}
-  .sx-task-chip{padding:10px 14px;font-size:14px;}
-  .sx-helper{font-size:11px;}
 }
