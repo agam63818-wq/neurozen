@@ -1,4 +1,4 @@
-/* ===================== WORD FLASH (endless) ===================== */
+/* ===================== WORD FLASH (endless) v2 ===================== */
 const WF_T1=[
   ['CALM','CLAM','COAL','CALF'],['FORM','FROM','FORT','FOAM'],
   ['SALT','SLAT','SLOT','SILT'],['WORD','WARD','WARM','CORD'],
@@ -139,10 +139,45 @@ function showFloatingText(x, y, text, color = '#34D399') {
   setTimeout(() => el.remove(), 1000);
 }
 
+/* Speed label helper */
+function getSpeedLabel(ms) {
+  if (ms >= 1000) return '🟢 NORMAL';
+  if (ms >= 700) return '🟡 FAST';
+  if (ms >= 500) return '🟠 RAPID';
+  if (ms >= 300) return '🔴 LIGHTNING';
+  return '⚡ BLINK';
+}
+
+/* Streak badge config */
+function getStreakBadge(streak) {
+  if (streak >= 8) return { label: '👑 LOCKED IN', color: '#A78BFA', shadow: 'rgba(167,139,250,0.6)' };
+  if (streak >= 5) return { label: '⚡ SHARP', color: '#60A5FA', shadow: 'rgba(96,165,250,0.6)' };
+  if (streak >= 3) return { label: '🔥 HOT', color: '#FBBF24', shadow: 'rgba(251,191,36,0.6)' };
+  return null;
+}
+
+/* Announcement interstitial */
 function playWordFlash(body, setScore, end, wrap, startClock) {
   let q = 0, score = 0, streak = 0, bestStreak = 0, fastest = null, correctCount = 0, lives = 3;
   let typeModeUnlocked = false, currentMode = 'select';
+  let blinkAnnounced = false, decoyAnnounced = false;
+  let highestSpeedLabel = '';
+  let answerTimeout = null;
+  let answerTimedOut = false;
+  let activeTimers = [];
   const record = S('nz_wf_best') || 0;
+
+  /* Cleanup helper for remove_game */
+  function _cleanup() {
+    activeTimers.forEach(t => clearTimeout(t));
+    activeTimers = [];
+    if (answerTimeout) { clearTimeout(answerTimeout); answerTimeout = null; }
+    if (host && host._keyHandler) {
+      document.removeEventListener('keydown', host._keyHandler);
+      host._keyHandler = null;
+    }
+  }
+  wrap.addEventListener('remove_game', _cleanup);
 
   const pools = { 1: [...WF_T1].sort(() => Math.random() - .5), 2: [...WF_T2].sort(() => Math.random() - .5), 3: [...WF_T3].sort(() => Math.random() - .5) };
   const used = { 1: 0, 2: 0, 3: 0 };
@@ -155,10 +190,10 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       <span style="color: var(--primary); font-weight: 600;">Endless:</span> jab tak 3 lives hain khelte raho.
     </div>
     <div style="margin-top: 10px; padding: 10px 14px; background: rgba(167,139,250,0.1); border-radius: 10px; font-size: 12px; color: var(--text2);">
-      <span style="color: var(--primary); font-weight: 700;">🎯 NEW:</span> Type Mode (Round 5+), Blink Mode (Round 12+), Milestone Celebrations!
+      <span style="color: var(--primary); font-weight: 700;">🎯 IMPROVED:</span> Smooth speed curve, streak badges, mode announcements & more!
     </div>
     <div style="margin-top: 8px; font-size: 11px; color: var(--primary);">
-      ⚡ &lt;500ms = bonus · ❌ galat = -1 life · 🔥 Streak = x1.5
+      ⚡ Fast = bonus · ❌ Galat = -1 life · 🔥 Streak = x1.5
     </div>
     ${record ? `<div style="margin-top: 10px; font-size: 14px; font-weight: 700; color: var(--mint); padding: 6px 12px; background: rgba(52,211,153,0.1); border-radius: 8px; display: inline-block;">🏆 Best: ${record} pts</div>` : ''}
     <br>
@@ -168,6 +203,17 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
   const host = $(`<div></div>`);
   body.appendChild(host);
 
+  function showAnnouncement(title, subtitle, icon, onDone) {
+    host.innerHTML = `
+      <div class="wf-announcement">
+        <div class="wf-announce-icon">${icon}</div>
+        <div class="wf-announce-title">${title}</div>
+        <div class="wf-announce-sub">${subtitle}</div>
+      </div>
+    `;
+    _st(onDone, 1500);
+  }
+
   function heartsHtml() {
     return `<div class="wc-hearts" id="wfHearts">${[0, 1, 2].map(i => `<span class="wc-heart ${i >= lives ? 'lost' : ''} ${(lives === 1 && i === 0) ? 'mm-last' : ''}" data-idx="${i}">${i >= lives ? '💔' : '❤️'}</span>`).join('')}</div>`;
   }
@@ -175,6 +221,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
   function gameOver() {
     const acc = q ? Math.round(correctCount / q * 100) : 0;
     const newPB = score > record;
+    const speedRow = highestSpeedLabel ? `<div class="row"><span>Speed Reached</span><span class="val">${highestSpeedLabel}</span></div>` : '';
     if (newPB) setS('nz_wf_best', score);
     setS('nz_wf_games', (S('nz_wf_games') || 0) + 1);
     if (newPB) confetti(80);
@@ -183,11 +230,12 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       emoji: '📝', sub: `${score} pts · ${q} rounds · ${acc}%`, value: score, points: Math.max(2, score * 0.7), starThresh: [20, 40, 70],
       statsHtml: `<div class="end-stats">
         <div class="row"><span>Score</span><span class="val">${score} pts</span></div>
-        <div class="row"><span>Rounds Survived</span><span class="val">${q}</span></div>
+        <div class="row"><span>Words Seen</span><span class="val">${q}</span></div>
         <div class="row"><span>Accuracy</span><span class="val">${acc}% (${correctCount}/${q})</span></div>
         <div class="row"><span>Fastest Response</span><span class="val">${fastest !== null ? fastest + 'ms' : '—'}</span></div>
-        <div class="row"><span>Longest Streak</span><span class="val">${bestStreak} 🔥</span></div>
+        <div class="row"><span>Best Streak</span><span class="val">${bestStreak} 🔥</span></div>
         <div class="row"><span>Type Mode Used</span><span class="val">${typeModeUnlocked ? '✅' : '❌'}</span></div>
+        ${speedRow}
         <div class="row"><span>Personal Best</span><span class="val">${Math.max(score, record)}${newPB ? ' 🏆' : ''}</span></div>
       </div>${newPB ? '<div class="rec">🎉 New Personal Best!</div>' : ''}`
     });
@@ -209,7 +257,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
         numEl.style.animation = 'none';
         void numEl.offsetWidth;
         numEl.style.animation = 'countPop 0.4s cubic-bezier(.16,1,.3,1)';
-        _st(tick, 600);
+        activeTimers.push(setTimeout(tick, 600));
       } else {
         numEl.textContent = 'GO!';
         numEl.style.color = '#34D399';
@@ -217,10 +265,30 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
         void numEl.offsetWidth;
         numEl.style.animation = 'countPop 0.5s cubic-bezier(.16,1,.3,1)';
         playSound('complete');
-        _st(onDone, 400);
+        activeTimers.push(setTimeout(onDone, 400));
       }
     }
-    _st(tick, 600);
+    activeTimers.push(setTimeout(tick, 600));
+  }
+
+  function showAnswerTimeoutBar(durationMs) {
+    const existingBar = host.querySelector('#wfAnswerBarWrap');
+    if (existingBar) existingBar.remove();
+    const wrapBar = document.createElement('div');
+    wrapBar.id = 'wfAnswerBarWrap';
+    wrapBar.style.cssText = 'height:4px;background:rgba(255,255,255,.1);border-radius:50px;overflow:hidden;margin:10px 20px 0;';
+    wrapBar.innerHTML = `<div id="wfAnswerBar" style="height:100%;width:100%;background:linear-gradient(90deg,#EF4444,#F59E0B);border-radius:50px;"></div>`;
+    const stage = host.querySelector('.wf-stage');
+    if (stage) stage.after(wrapBar);
+    const bar = host.querySelector('#wfAnswerBar');
+    if (bar) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          bar.style.transition = `width ${durationMs}ms linear`;
+          bar.style.width = '0%';
+        });
+      });
+    }
   }
 
   function next() {
@@ -232,79 +300,137 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     }
 
     const tier = q < 5 ? 1 : q < 11 ? 2 : 3;
-    const flashMs = Math.max(280, 900 - q * 35);
+    /* PROBLEM 1 — New humane timing curve */
+    const flashMs = Math.max(450, 1400 - q * 25);
     const decoy = q >= 7;
-    const blinkMode = q >= 12;
+    const blinkMode = q >= 15;
     const typeMode = q >= 5 && Math.random() < 0.35;
     currentMode = typeMode ? 'type' : 'select';
     if (typeMode) typeModeUnlocked = true;
 
-    const blinkFlashMs = blinkMode ? Math.max(150, flashMs * 0.4) : flashMs;
-    const actualFlashMs = typeMode ? Math.max(350, blinkFlashMs * 1.2) : blinkFlashMs;
+    const blinkFlashMs = blinkMode ? Math.max(280, flashMs * 0.6) : flashMs;
+    let actualFlashMs = typeMode ? Math.max(550, blinkFlashMs * 1.3) : blinkFlashMs;
 
-    const group = takeGroup(tier);
-    let words = [group[0]], askSide = 0, group2 = null;
+    /* Decoy mode: more time since brain tracks two words */
     if (decoy) {
-      group2 = takeGroup(tier);
-      words = [group[0], group2[0]];
-      askSide = Math.random() < 0.5 ? 0 : 1;
+      actualFlashMs = Math.round(actualFlashMs * (blinkMode ? 1.5 : 1.3));
     }
-    const askGroup = decoy && askSide === 1 ? group2 : group;
-    const askWord = askGroup[0];
 
-    const modeText = typeMode ? '⌨️ TYPE MODE — Word likho!' : blinkMode ? '👁️ BLINK MODE — Bahut fast!' : '';
-    const modeColor = typeMode ? '#F59E0B' : blinkMode ? '#EF4444' : 'var(--primary)';
+    /* Track highest speed label for end screen */
+    const label = getSpeedLabel(actualFlashMs);
+    if (highestSpeedLabel === '' || ['🟢 NORMAL','🟡 FAST','🟠 RAPID','🔴 LIGHTNING','⚡ BLINK'].indexOf(label) > ['🟢 NORMAL','🟡 FAST','🟠 RAPID','🔴 LIGHTNING','⚡ BLINK'].indexOf(highestSpeedLabel)) {
+      highestSpeedLabel = label;
+    }
 
-    host.innerHTML = `
-      ${heartsHtml()}
-      <div class="wf-stage">
-        <div class="wf-bar"><div class="wf-bar-fill" id="wfBar"></div></div>
-        ${modeText ? `<div style="font-size: 11px; font-weight: 700; color: ${modeColor}; margin-bottom: 8px; letter-spacing: 0.08em;">${modeText}</div>` : ''}
-        <div class="wf-words" id="wfWords">${words.map((w, wi) => `
-          <div class="wf-word" data-side="${wi}" style="font-size: ${decoy ? '28px' : '52px'}; 
-            animation: wordFlashIn 0.3s cubic-bezier(.16,1,.3,1) ${wi * 0.08}s both;
-            text-shadow: 0 0 30px rgba(167,139,250,0.3), 0 0 60px rgba(79,142,247,0.15);
-            letter-spacing: 0.15em; font-weight: 800;">${w}</div>
-        `).join('')}</div>
-        ${decoy ? '<div style="font-size: 11px; color: rgba(255,255,255,.7); margin-top: 14px; letter-spacing: 0.1em; font-weight: 700;">🧠 DECOY MODE — DONO YAAD RAKHO!</div>' : ''}
-      </div>
-      <div style="text-align: center; font-size: 13px; color: var(--text2); margin-top: 12px; font-weight: 500;">
-        Round ${q + 1} · ${actualFlashMs}ms flash${streak >= 3 ? ' · 🔥 x1.5' : ''}${typeMode ? ' · ⌨️ Type' : ''}
-      </div>
-    `;
+    /* IMPROVEMENT 4 — Mode announcements (before showing the round) */
+    if (decoy && !decoyAnnounced && q === 7) {
+      decoyAnnounced = true;
+      showAnnouncement('🧠 DECOY MODE', 'Two words now! Dono yaad rakho!', '🧠', () => proceedToRound());
+      return;
+    }
+    if (blinkMode && !blinkAnnounced && q === 15) {
+      blinkAnnounced = true;
+      showAnnouncement('👁️ BLINK MODE', 'Words flash even faster. Stay focused!', '👁️', () => proceedToRound());
+      return;
+    }
+    proceedToRound();
 
-    const bar = host.querySelector('#wfBar');
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (bar) {
-          bar.style.transition = `width ${actualFlashMs}ms linear`;
-          bar.style.width = '0%';
-        }
-      });
-    });
+    function proceedToRound() {
+      if (lives <= 0) { gameOver(); return; }
 
-    _st(() => {
-      const wordsEl = host.querySelector('#wfWords');
-      if (wordsEl) {
-        wordsEl.style.transition = 'all 0.25s ease';
-        wordsEl.style.opacity = '0';
-        wordsEl.style.transform = 'scale(0.8) rotateX(20deg)';
+      const group = takeGroup(tier);
+      let words = [group[0]], askSide = 0, group2 = null;
+      if (decoy) {
+        group2 = takeGroup(tier);
+        words = [group[0], group2[0]];
+        askSide = Math.random() < 0.5 ? 0 : 1;
       }
-      _st(() => {
-        if (typeMode) {
-          showTypeMode(askWord, askGroup, decoy, askSide);
-        } else {
-          showSelectMode(askWord, askGroup, decoy, askSide);
+      const askGroup = decoy && askSide === 1 ? group2 : group;
+      const askWord = askGroup[0];
+
+      const modeText = typeMode ? '⌨️ TYPE MODE — Word likho!' : blinkMode ? '👁️ BLINK MODE — Bahut fast!' : '';
+      const modeColor = typeMode ? '#F59E0B' : blinkMode ? '#EF4444' : 'var(--primary)';
+
+      /* Streak badge */
+      const badge = getStreakBadge(streak);
+      const badgeHtml = badge ? `<div class="wf-streak-badge" style="background:${badge.color};box-shadow:0 0 20px ${badge.shadow};">${badge.label}</div>` : '';
+
+      /* PROBLEM 2 — Speed label instead of raw ms */
+      const roundInfoLabel = `Round ${q + 1} · ${label}${streak >= 3 ? ' · 🔥 x1.5' : ''}${typeMode ? ' · ⌨️ Type' : ''}`;
+
+      host.innerHTML = `
+        ${heartsHtml()}
+        ${badge ? `<div class="wf-badge-area">${badgeHtml}</div>` : ''}
+        <div class="wf-stage">
+          <div class="wf-bar"><div class="wf-bar-fill" id="wfBar"></div></div>
+          ${modeText ? `<div style="font-size: 11px; font-weight: 700; color: ${modeColor}; margin-bottom: 8px; letter-spacing: 0.08em;">${modeText}</div>` : ''}
+          <div class="wf-words" id="wfWords">${words.map((w, wi) => `
+            <div class="wf-word${blinkMode ? ' wf-word-blink' : ''}" data-side="${wi}" style="font-size: ${decoy ? '28px' : '52px'}; 
+              animation: wordFlashIn 0.3s cubic-bezier(.16,1,.3,1) ${wi * 0.08}s both;
+              text-shadow: 0 0 30px rgba(167,139,250,0.3), 0 0 60px rgba(79,142,247,0.15);
+              letter-spacing: 0.15em; font-weight: 800;">${w}</div>
+          `).join('')}</div>
+          ${decoy ? '<div style="font-size: 11px; color: rgba(255,255,255,.7); margin-top: 14px; letter-spacing: 0.1em; font-weight: 700;">🧠 DECOY MODE — DONO YAAD RAKHO!</div>' : ''}
+        </div>
+        <div style="text-align: center; font-size: 13px; color: var(--text2); margin-top: 12px; font-weight: 500;">
+          ${roundInfoLabel}
+        </div>
+      `;
+
+      const bar = host.querySelector('#wfBar');
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (bar) {
+            bar.style.transition = `width ${actualFlashMs}ms linear`;
+            bar.style.width = '0%';
+          }
+        });
+      });
+
+      /* PROBLEM 3 — Warning glow at 75% of flash duration (blink mode) */
+      if (blinkMode) {
+        const warnTimer = setTimeout(() => {
+          const wordsEl = host.querySelector('#wfWords');
+          if (wordsEl) {
+            wordsEl.querySelectorAll('.wf-word').forEach(el => {
+              el.classList.add('wf-word-warning');
+            });
+          }
+        }, Math.round(actualFlashMs * 0.75));
+        activeTimers.push(warnTimer);
+      }
+
+      const flashEndTimer = setTimeout(() => {
+        const wordsEl = host.querySelector('#wfWords');
+        if (wordsEl) {
+          wordsEl.style.transition = 'all 0.25s ease';
+          wordsEl.style.opacity = '0';
+          wordsEl.style.transform = 'scale(0.8) rotateX(20deg)';
         }
-      }, 280);
-    }, actualFlashMs);
+        activeTimers.push(setTimeout(() => {
+          if (typeMode) {
+            showTypeMode(askWord, askGroup, decoy, askSide);
+          } else {
+            showSelectMode(askWord, askGroup, decoy, askSide);
+          }
+        }, 280));
+      }, actualFlashMs);
+      activeTimers.push(flashEndTimer);
+    }
   }
 
   function showSelectMode(askWord, askGroup, decoy, askSide) {
     const opts = [...askGroup].sort(() => Math.random() - .5);
     const askTs = Date.now();
+    answerTimedOut = false;
+
+    /* Badge */
+    const badge = getStreakBadge(streak);
+    const badgeHtml = badge ? `<div class="wf-streak-badge" style="background:${badge.color};box-shadow:0 0 20px ${badge.shadow};">${badge.label}</div>` : '';
+
     host.innerHTML = `
       ${heartsHtml()}
+      ${badge ? `<div class="wf-badge-area">${badgeHtml}</div>` : ''}
       <div class="wf-stage" style="padding: 22px 16px; animation: fadeInUp 0.3s ease;">
         <div class="wf-word" style="font-size: 56px; animation: questionPulse 1.5s ease-in-out infinite;">?</div>
         ${decoy ? `<div style="font-size: 13px; color: #A78BFA; font-weight: 700; margin-bottom: 10px; animation: fadeInUp 0.4s ease 0.1s both;">${askSide === 0 ? '⬅ LEFT' : 'RIGHT ➡'} wala word kaunsa tha?</div>` : ''}
@@ -321,15 +447,32 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       b.onclick = (e) => handleAnswer(w === askWord, b, optsEl, askWord, askTs, e);
       optsEl.appendChild(b);
     });
+
+    /* Answer timeout — 6 seconds to answer */
+    if (answerTimeout) clearTimeout(answerTimeout);
+    answerTimeout = setTimeout(() => {
+      if (!answerTimedOut) {
+        answerTimedOut = true;
+        toast('⏱️ Too slow!');
+        playSound('wrong');
+        handleTimeout(askWord, optsEl, askTs);
+      }
+    }, 6000);
   }
 
   function showTypeMode(askWord, askGroup, decoy, askSide) {
     const askTs = Date.now();
+    answerTimedOut = false;
     let typedText = '';
     const displayWord = askWord;
 
+    /* Badge */
+    const badge = getStreakBadge(streak);
+    const badgeHtml = badge ? `<div class="wf-streak-badge" style="background:${badge.color};box-shadow:0 0 20px ${badge.shadow};">${badge.label}</div>` : '';
+
     host.innerHTML = `
       ${heartsHtml()}
+      ${badge ? `<div class="wf-badge-area">${badgeHtml}</div>` : ''}
       <div class="wf-stage" style="padding: 22px 16px; animation: fadeInUp 0.3s ease;">
         <div style="font-size: 13px; color: #F59E0B; font-weight: 700; margin-bottom: 10px; letter-spacing: 0.1em;">⌨️ TYPE THE WORD</div>
         ${decoy ? `<div style="font-size: 13px; color: #A78BFA; font-weight: 600; margin-bottom: 10px;">${askSide === 0 ? '⬅ LEFT' : 'RIGHT ➡'} wala word type karo</div>` : ''}
@@ -352,9 +495,9 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     const typeHint = host.querySelector('#typeHint');
 
     // Auto-focus input after a short delay (to let render complete)
-    _st(() => {
+    activeTimers.push(setTimeout(() => {
       if (typeInput) typeInput.focus();
-    }, 100);
+    }, 100));
 
     // Re-focus if user taps anywhere on the stage
     const stageEl = host.querySelector('.wf-stage');
@@ -405,8 +548,10 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     }
 
     function submitAnswer() {
+      if (answerTimedOut) return;
       const val = typeInput.value.toUpperCase().trim();
       if (!val) return;
+      if (answerTimeout) { clearTimeout(answerTimeout); answerTimeout = null; }
       const isCorrect = val === displayWord;
       const fakeBtn = document.createElement('button');
       fakeBtn.style.display = 'none';
@@ -415,6 +560,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
 
     // Listen to input changes (works with both virtual and physical keyboards)
     typeInput.addEventListener('input', () => {
+      if (answerTimedOut) return;
       // Force uppercase
       typeInput.value = typeInput.value.toUpperCase().replace(/[^A-Z]/g, '');
       if (typeInput.value.length > displayWord.length) {
@@ -424,7 +570,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       playSound('tap');
       // Auto-submit when all letters are filled
       if (typeInput.value.length === displayWord.length) {
-        _st(submitAnswer, 200);
+        activeTimers.push(setTimeout(submitAnswer, 200));
       }
     });
 
@@ -448,9 +594,65 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     document.addEventListener('keydown', keyHandler);
     host._keyHandler = keyHandler;
     host._typeInput = typeInput;
+
+    /* Answer timeout — 6 seconds */
+    if (answerTimeout) clearTimeout(answerTimeout);
+    answerTimeout = setTimeout(() => {
+      if (!answerTimedOut) {
+        answerTimedOut = true;
+        toast('⏱️ Too slow!');
+        playSound('wrong');
+        handleTimeout(askWord, null, askTs);
+      }
+    }, 6000);
+  }
+
+  function handleTimeout(askWord, optsEl, askTs) {
+    if (host._keyHandler) {
+      document.removeEventListener('keydown', host._keyHandler);
+      host._keyHandler = null;
+    }
+    const ms = Date.now() - askTs;
+    streak = 0;
+    haptic([30, 50, 30]);
+
+    if (optsEl) {
+      optsEl.querySelectorAll('.word-opt').forEach(bb => bb.disabled = true);
+    }
+
+    /* Highlight correct answer */
+    if (optsEl) {
+      optsEl.querySelectorAll('.word-opt').forEach(bb => {
+        if (bb.dataset.w === askWord) bb.classList.add('wf-correct');
+      });
+    } else {
+      const typeDisplay = host.querySelector('#typeDisplay');
+      if (typeDisplay) {
+        typeDisplay.innerHTML = `<span style="color: #34D399;">${askWord}</span>`;
+      }
+    }
+
+    shakeScreen(wrap);
+
+    const heartsContainer = host.querySelector('#wfHearts');
+    if (heartsContainer) {
+      const heartToLose = heartsContainer.querySelector(`.wc-heart:not(.lost)[data-idx="${lives - 1}"]`);
+      if (heartToLose) animateHeartLoss(heartToLose);
+    }
+
+    lives--;
+    const wrapBar = host.querySelector('#wfAnswerBarWrap');
+    if (wrapBar) wrapBar.remove();
+
+    q++;
+    activeTimers.push(setTimeout(next, 1200));
   }
 
   function handleAnswer(isCorrect, b, optsEl, askWord, askTs, event) {
+    if (answerTimeout) { clearTimeout(answerTimeout); answerTimeout = null; }
+    if (answerTimedOut) return;
+    answerTimedOut = true;
+
     if (host._keyHandler) {
       document.removeEventListener('keydown', host._keyHandler);
       host._keyHandler = null;
@@ -460,6 +662,10 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       optsEl.querySelectorAll('.word-opt').forEach(bb => bb.disabled = true);
     }
     const ms = Date.now() - askTs;
+
+    /* Remove answer bar */
+    const wrapBar = host.querySelector('#wfAnswerBarWrap');
+    if (wrapBar) wrapBar.remove();
 
     if (isCorrect) {
       playSound('correct'); correctCount++;
@@ -490,13 +696,23 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       }
 
       q++;
-      _st(next, 700);
+      activeTimers.push(setTimeout(next, 700));
     } else {
       playSound('wrong');
       streak = 0;
       haptic([30, 50, 30]);
-      if (b && b.style) b.classList.add('wf-wrong');
 
+      if (b && b.style) {
+        b.classList.add('wf-wrong');
+        /* IMPROVEMENT 6 — Streak badge break animation */
+        const badgeEl = host.querySelector('.wf-streak-badge');
+        if (badgeEl) {
+          badgeEl.classList.add('wf-streak-broken');
+          setTimeout(() => badgeEl.remove(), 600);
+        }
+      }
+
+      /* IMPROVEMENT 6 — Highlight correct answer on wrong pick */
       if (optsEl) {
         optsEl.querySelectorAll('.word-opt').forEach(bb => {
           if (bb.dataset.w === askWord) bb.classList.add('wf-correct');
@@ -526,7 +742,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       }
 
       q++;
-      _st(next, typeModeUnlocked && currentMode === 'type' ? 1200 : 900);
+      activeTimers.push(setTimeout(next, typeModeUnlocked && currentMode === 'type' ? 1200 : 900));
     }
   }
 
