@@ -701,7 +701,17 @@ function openGame(id,wkCtx){
 /* ===================== PROGRESS ===================== */
 function renderProgress(){
   const p=$(`<div></div>`);
-  const h=S('nz_score_history');
+  // Build last-7-days array from date-keyed nz_daily_history
+  const _dh7=S('nz_daily_history')||{};
+  const _dow7=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const _short7=['S','M','T','W','T','F','S'];
+  const h=[];const hDays=[];
+  for(let _i=6;_i>=0;_i--){
+    const _d=new Date(Date.now()-_i*86400000);
+    const _k=_d.toISOString().slice(0,10);
+    h.push(_dh7[_k]||0);
+    hDays.push({label:_dow7[_d.getDay()],short:_short7[_d.getDay()],isToday:_i===0});
+  }
   const delta=h[h.length-1]-(h[h.length-2]||0);
   p.innerHTML=`
     <div class="hdr"><div><div class="greet">Track your gains</div><h1>Your Progress</h1></div></div>
@@ -753,13 +763,13 @@ function renderProgress(){
     achGrid.appendChild(el);
   });
   setTimeout(()=>{
-    drawLineChart(p.querySelector('#lineChart'),h);
+    drawLineChart(p.querySelector('#lineChart'),h,hDays);
     const pct=Math.min(100,S('nz_brain_score')/100);
     p.querySelector('#pbarFill').style.width=pct+'%';
   },40);
   return p;
 }
-function drawLineChart(host,data){
+function drawLineChart(host,data,dayMeta){
   const W=320,H=150,pad=20;
   const filled=data.filter(v=>v>0);
   if(filled.length<2){host.innerHTML='<div style="text-align:center;padding:20px;color:var(--text2);font-size:13px;">Play games to see your progress chart!</div>';return;}
@@ -770,7 +780,7 @@ function drawLineChart(host,data){
   for(let i=0;i<xs.length-1;i++){const cx=(xs[i]+xs[i+1])/2;path+=` Q ${xs[i]} ${ys[i]} ${cx} ${(ys[i]+ys[i+1])/2}`;}
   path+=` T ${xs[xs.length-1]} ${ys[ys.length-1]}`;
   const area=path+` L ${xs[xs.length-1]} ${H-pad} L ${xs[0]} ${H-pad} Z`;
-  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const days=dayMeta?dayMeta.map(d=>d.label):['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%">
     <defs><linearGradient id="lcG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7C3AED" stop-opacity=".35"/><stop offset="1" stop-color="#7C3AED" stop-opacity="0"/></linearGradient></defs>
     <path d="${area}" fill="url(#lcG)"/>
