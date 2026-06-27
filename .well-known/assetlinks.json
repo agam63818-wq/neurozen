@@ -2,7 +2,7 @@
       "relation": ["delegate_permission/common.handle_all_urls"],
       "target": {
         "namespace": "android_app",
-        "package_name": "com.nexgen.neurozen",
-        "sha256_cert_fingerprints": ["8C:6B:5D:DA:18:91:BC:FA:22:CE:02:DD:3C:5A:21:91:3E:34:5D:0D:0C:75:1C:37:CD:F4:E1:7F:1D:CC:A7:52"]
+        "package_name": "com.nexzenstudio.neurozen",
+        "sha256_cert_fingerprints": ["F6:97:0B:68:48:66:2D:4C:8F:38:C2:03:C5:E2:C1:A3:38:C7:85:81:B1:80:60:E1:92:E1:8F:80:4C:1A:AB:9C"]
       }
     }]
