@@ -1106,7 +1106,7 @@ function playPattern(body,setScore,end,wrap,startClock){
       title:newPB?'New Best! \uD83C\uDFC6':'Pattern Master! \uD83D\uDCA1',
       emoji:'\uD83D\uDCA1',
       sub:G.score+' pts \u00B7 '+G.round+' rounds'+(newPB?' \u00B7 \uD83C\uDFC6':''),
-      value:G.score,points:Math.max(2,Math.round(G.score*1.4)),starThresh:[18,40,80],
+      value:G.score,points:G.score>=80?48:G.score>=40?32:G.score>=18?18:8,starThresh:[18,40,80],
       statsHtml:'<div class="end-stats">'+
         '<div class="row"><span>Score</span><span class="val">'+G.score+'</span></div>'+
         '<div class="row"><span>Rounds</span><span class="val">'+G.round+'</span></div>'+

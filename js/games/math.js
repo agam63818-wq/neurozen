@@ -161,8 +161,8 @@ function playMath(body,setScore,end,wrap,startClock){
   }
   function QM_scale(){
     const p=QM_phase()+QM_clamp(Adapt.bias,-1,2); /* small recovery, larger growth */
-    /* (a,b) = max-operand by phase */
-    const tiers=[{a:9,b:9,big:12},{a:25,b:11,big:30},{a:90,b:13,big:80},{a:200,b:14,big:160},{a:500,b:15,big:300}];
+    /* (a,b) = max-operand by phase. b is capped for ×/÷ to stay mentally solvable in <3s. */
+    const tiers=[{a:9,b:9,big:12},{a:20,b:9,big:24},{a:40,b:10,big:50},{a:75,b:11,big:90},{a:120,b:12,big:140}];
     return tiers[QM_clamp(p,0,4)];
   }
 
@@ -180,8 +180,16 @@ function playMath(body,setScore,end,wrap,startClock){
       let a,b,correct,disp;
       if(op==='+'){a=QM_rrand(2,sc.a);b=QM_rrand(2,sc.a);correct=a+b;disp=a+' + '+b;}
       else if(op==='-'){a=QM_rrand(3,sc.a)+QM_rrand(0,sc.a);b=QM_rrand(2,Math.max(3,Math.floor(a*0.9)));correct=a-b;disp=a+' \u2212 '+b;}
-      else if(op==='\u00D7'){a=QM_rrand(2,Math.min(sc.b,12));b=QM_rrand(2,Math.min(sc.b,12));correct=a*b;disp=a+' \u00D7 '+b;}
-      else{ /* ÷ */ const d=QM_rrand(2,Math.min(sc.b,12)),q=QM_rrand(2,Math.min(sc.b,12));a=d*q;b=d;correct=q;disp=a+' \u00F7 '+d;}
+      else if(op==='\u00D7'){
+        /* keep one factor ≤9 so it's mentally tractable; cap big factor at 12 max */
+        const big=QM_rrand(2,Math.min(sc.b,12));
+        const small=QM_rrand(2,Math.min(9,sc.b));
+        a=big;b=small;correct=a*b;disp=a+' \u00D7 '+b;
+      }
+      else{ /* ÷ — always exact, divisor ≤9, quotient ≤12 */
+        const d=QM_rrand(2,Math.min(9,sc.b)),q=QM_rrand(2,Math.min(sc.b,12));
+        a=d*q;b=d;correct=q;disp=a+' \u00F7 '+d;
+      }
       const cost=op==='\u00D7'||op==='\u00F7'?2:1;
       return{display:disp,correct:correct,sig:'arith|'+op+'|'+a+'|'+b,family:'arith',complexityCost:cost,distrStyle:'numNear',answerKind:'number',hint:disp+' = '+correct};
     },
@@ -191,7 +199,10 @@ function playMath(body,setScore,end,wrap,startClock){
       let a,b,res,disp;
       if(op==='+'){a=QM_rrand(2,sc.a);b=QM_rrand(2,sc.a);res=a+b;disp=a+' + ? = '+res;}
       else if(op==='-'){a=QM_rrand(5,sc.a)+QM_rrand(0,sc.a);b=QM_rrand(2,Math.max(3,Math.floor(a*0.7)));res=a-b;disp=a+' \u2212 ? = '+res;}
-      else{a=QM_rrand(2,Math.min(sc.b,11));b=QM_rrand(2,Math.min(sc.b,11));res=a*b;disp=a+' \u00D7 ? = '+res;}
+      else{
+        /* cap to keep mental load reasonable */
+        a=QM_rrand(2,Math.min(sc.b,9));b=QM_rrand(2,Math.min(sc.b,9));res=a*b;disp=a+' \u00D7 ? = '+res;
+      }
       return{display:disp,correct:b,sig:'missing|'+op+'|'+a+'|='+res,family:'missing',complexityCost:2,distrStyle:'numNear',answerKind:'number',hint:'? = '+b};
     },
     balance(){
@@ -199,7 +210,8 @@ function playMath(body,setScore,end,wrap,startClock){
       /* form: ax + b = c → solve x; or ? + a = b */
       const variant=QM_rand(2);
       if(variant===0){
-        const a=QM_rrand(2,Math.min(sc.b,9)),x=QM_rrand(2,Math.min(sc.b,9)),b=QM_rrand(1,Math.min(sc.b,9));
+        /* ax + b = c — keep a ≤6, x ≤9, b ≤9 to keep mental math achievable in ~3s */
+        const a=QM_rrand(2,Math.min(sc.b,6)),x=QM_rrand(2,Math.min(sc.b,9)),b=QM_rrand(1,Math.min(sc.b,9));
         return{display:a+'x + '+b+' = '+(a*x+b)+', x = ?',correct:x,sig:'balance|'+a+'x+'+b+'='+(a*x+b),family:'balance',complexityCost:3,distrStyle:'numNear',answerKind:'number',hint:'x = '+x};
       }else{
         const a=QM_rrand(2,Math.min(sc.a,12)),target=QM_rrand(a+2,a+sc.a);
@@ -210,7 +222,8 @@ function playMath(body,setScore,end,wrap,startClock){
       const sc=QM_scale();
       const op=QM_pick(['+','-','\u00D7']);
       if(op==='\u00D7'){
-        const a=QM_rrand(3,Math.min(sc.b,12)),b=QM_rrand(3,Math.min(sc.b,12));
+        /* keep both factors ≤9 for fast mental reverse */
+        const a=QM_rrand(3,Math.min(sc.b,9)),b=QM_rrand(3,Math.min(sc.b,9));
         return{display:(a*b)+' = '+a+' \u00D7 ?',correct:b,sig:'reverse|'+(a*b)+'|x|'+a,family:'reverse',complexityCost:2,distrStyle:'numNear',answerKind:'number',hint:'? = '+b};
       }
       if(op==='+'){
@@ -222,23 +235,34 @@ function playMath(body,setScore,end,wrap,startClock){
     },
     multistep(){
       const sc=QM_scale();
-      const a=QM_rrand(2,Math.min(sc.b,11)),b=QM_rrand(2,Math.min(sc.b,11)),c=QM_rrand(1,Math.min(sc.b,11));
+      /* keep a×b achievable in ~2s: cap factors at 9, c small (1-9). */
+      const a=QM_rrand(2,Math.min(sc.b,9)),b=QM_rrand(2,Math.min(sc.b,9)),c=QM_rrand(1,Math.min(sc.b,9));
       const op2=QM_pick(['+','-']);
-      const correct=op2==='+'?a*b+c:a*b-c;
-      return{display:a+' \u00D7 '+b+' '+(op2==='+'?'+':'\u2212')+' '+c,correct:correct,sig:'multistep|'+a+'x'+b+op2+c,family:'multistep',complexityCost:3,distrStyle:'wrongOp',answerKind:'number',hint:a+'\u00D7'+b+'='+(a*b)+', then '+(op2==='+'?'+':'-')+c};
+      let correct=op2==='+'?a*b+c:a*b-c;
+      /* ensure non-negative for subtraction (always true since a*b≥4 > c≤9 sometimes) */
+      if(correct<0){correct=a*b+c;}
+      const finalOp=correct===a*b+c?'+':'-';
+      return{display:a+' \u00D7 '+b+' '+(finalOp==='+'?'+':'\u2212')+' '+c,correct:correct,sig:'multistep|'+a+'x'+b+finalOp+c,family:'multistep',complexityCost:3,distrStyle:'wrongOp',answerKind:'number',hint:a+'\u00D7'+b+'='+(a*b)+', then '+(finalOp==='+'?'+':'-')+c};
     },
     compare(){
       const sc=QM_scale();
       const variant=QM_rand(2);
       if(variant===0){
-        /* which is larger? two arithmetic results */
-        const exprs=[];
-        for(let i=0;i<2;i++){
-          const a=QM_rrand(2,Math.min(sc.b,12)),b=QM_rrand(2,Math.min(sc.b,12)),op=QM_pick(['+','\u00D7']);
-          const v=op==='+'?a+b:a*b;
-          exprs.push({txt:a+' '+op+' '+b,v:v});
+        /* which is larger? two arithmetic results — ensure a clear gap (≥3) so it doesn't feel ambiguous */
+        let exprs=null;
+        for(let attempt=0;attempt<6;attempt++){
+          const tmp=[];
+          for(let i=0;i<2;i++){
+            const a=QM_rrand(2,Math.min(sc.b,9)),b=QM_rrand(2,Math.min(sc.b,9)),op=QM_pick(['+','\u00D7']);
+            const v=op==='+'?a+b:a*b;
+            tmp.push({txt:a+' '+op+' '+b,v:v});
+          }
+          if(Math.abs(tmp[0].v-tmp[1].v)>=3){exprs=tmp;break;}
         }
-        if(exprs[0].v===exprs[1].v)exprs[1].v++;
+        if(!exprs){
+          /* guaranteed fallback */
+          exprs=[{txt:'4 + 5',v:9},{txt:'3 \u00D7 5',v:15}];
+        }
         const winner=exprs[0].v>exprs[1].v?'A':'B';
         return{display:'Larger?<br><span class="qm-cmp">A: '+exprs[0].txt+' \u00B7 B: '+exprs[1].txt+'</span>',correct:winner,sig:'compare|larger|'+exprs[0].v+'|'+exprs[1].v,family:'compare',complexityCost:2,distrStyle:'closeOption',answerKind:'choice',choices:['A','B','Equal'],hint:'A='+exprs[0].v+', B='+exprs[1].v};
       }
@@ -270,17 +294,24 @@ function playMath(body,setScore,end,wrap,startClock){
         const idx=arr.indexOf(max);
         return{display:'Highest:',correct:String(max),sig:'sense|max|'+arr.join(','),family:'sense',complexityCost:1,distrStyle:'closeOption',answerKind:'pick',choices:arr.map(String),fixedAnswerIdx:idx,hint:max+' is the max'};
       }
-      /* divisibility by 3 */
-      const arr=[];
-      while(arr.length<4){const v=QM_rrand(11,99);if(arr.indexOf(v)<0)arr.push(v);}
-      let target=arr.find(v=>v%3===0);
-      if(target===undefined){target=arr[0]-(arr[0]%3);if(target<10)target=12;arr[0]=target;}
-      const idx=arr.indexOf(target);
-      return{display:'Divisible by 3:',correct:String(target),sig:'sense|div3|'+arr.join(','),family:'sense',complexityCost:2,distrStyle:'closeOption',answerKind:'pick',choices:arr.map(String),fixedAnswerIdx:idx,hint:target+' \u00F7 3 = '+(target/3)};
+      /* divisibility by 3 — exactly ONE multiple of 3, no duplicates */
+      const multiplesOf3=[12,15,18,21,24,27,33,36,39,42,45,48,51,54,57,63,66,69,72,75,78,81,84,87,93,96];
+      const nonMultiples=[];
+      for(let v=11;v<=99;v++){if(v%3!==0)nonMultiples.push(v);}
+      const target=multiplesOf3[QM_rand(multiplesOf3.length)];
+      const arr=[target];
+      const shufNon=QM_shuffle(nonMultiples);
+      for(let i=0;i<shufNon.length&&arr.length<4;i++){
+        if(arr.indexOf(shufNon[i])<0)arr.push(shufNon[i]);
+      }
+      const shuffled=QM_shuffle(arr);
+      const idx=shuffled.indexOf(target);
+      return{display:'Divisible by 3:',correct:String(target),sig:'sense|div3|'+shuffled.join(','),family:'sense',complexityCost:2,distrStyle:'closeOption',answerKind:'pick',choices:shuffled.map(String),fixedAnswerIdx:idx,hint:target+' \u00F7 3 = '+(target/3)};
     },
     algebra(){
       const sc=QM_scale();
-      const a=QM_rrand(2,Math.min(sc.b,9)),x=QM_rrand(2,Math.min(sc.b,12)),b=QM_rrand(1,Math.min(sc.b,12));
+      /* keep coefficient ≤6 and operands ≤9 — solvable in ~3s mentally */
+      const a=QM_rrand(2,Math.min(sc.b,6)),x=QM_rrand(2,Math.min(sc.b,9)),b=QM_rrand(1,Math.min(sc.b,9));
       return{display:a+'x + '+b+' = '+(a*x+b)+', x = ?',correct:x,sig:'algebra|'+a+'x+'+b+'='+(a*x+b),family:'algebra',complexityCost:3,distrStyle:'numNear',answerKind:'number',hint:'x = '+x};
     }
   };
@@ -397,9 +428,14 @@ function playMath(body,setScore,end,wrap,startClock){
     if(m.zen)return 0;
     const ev=G.activeEvent;
     if(ev&&ev.timer)return ev.timer;
-    let t=m.baseTime+(cost-1)*600-G.q*m.decay-Adapt.bias*200;
+    /* cost 1 = simple add/sub, cost 2 = ×/÷/missing/reverse, cost 3 = multistep/algebra/balance(0) */
+    /* Give more generous time for cost 2 and 3 since they need 2+ mental ops */
+    const costBonus=cost===3?1200:cost===2?700:0;
+    let t=m.baseTime+costBonus-G.q*m.decay-Adapt.bias*200;
     if(ev&&ev.timerMul)t*=ev.timerMul;
-    return QM_clamp(Math.round(t),m.minTime,m.baseTime+1500);
+    /* Floor: even hard rounds get at least minTime + 400ms padding for cost ≥2 */
+    const floor=cost>=2?m.minTime+400:m.minTime;
+    return QM_clamp(Math.round(t),floor,m.baseTime+2000);
   }
   function QM_scoreFor(q,fast){
     const ev=G.activeEvent;
@@ -681,7 +717,7 @@ function playMath(body,setScore,end,wrap,startClock){
     end({
       title:rank.em+' '+rank.txt,emoji:rank.em,
       sub:'Score '+G.score+(newPB?' \u00B7 \uD83C\uDFC6 New Best!':''),
-      value:G.score,points:Math.max(2,G.score+Math.round(G.bestStreak/3)),starThresh:[10,22,40],
+      value:G.score,points:G.score>=40?48:G.score>=22?32:G.score>=10?18:8,starThresh:[10,22,40],
       statsHtml:'<div class="end-stats">'+
         '<div class="row"><span>Questions Answered</span><span class="val">'+G.q+'</span></div>'+
         '<div class="row"><span>Accuracy</span><span class="val">'+accuracy+'% ('+G.correctCount+'/'+G.attempts+')</span></div>'+

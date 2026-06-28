@@ -55,7 +55,7 @@ const LS={
 };
 const FRESH={
   nz_brain_score:0,nz_streak:0,nz_games_played:0,nz_today_goal:3,
-  nz_dark_mode:false,nz_score_history:[0,0,0,0,0,0,0],
+  nz_dark_mode:false,
   nz_achievements:[],nz_skill_scores:{memory:0,focus:0,logic:0,speed:0},
   nz_skill_scores_prev:{memory:0,focus:0,logic:0,speed:0},
   nz_best_scores:{},nz_last_played:null,
@@ -63,6 +63,7 @@ const FRESH={
   nz_onboarded:false,nz_username:'Player',
   nz_schulte_level:0,nz_today_games:0,
   nz_xp:0,nz_daily_challenge_date:null,nz_daily_challenge_done:false,nz_daily_challenge_xp:0,
+  nz_brain_goal:'focus',nz_daily_goal_type:'balanced',nz_calib_done:false,
   nz_game_plays:{}
 };
 function S(k){return LS.get(k,FRESH[k])}
@@ -125,12 +126,17 @@ function toast(msg){
   el.textContent=msg;el.classList.add('show');
   clearTimeout(_toastT);_toastT=setTimeout(()=>el.classList.remove('show'),2800);
 }
-function todayKey(){return new Date().toISOString().slice(0,10);}
+function todayKey(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 function isPlayedToday(){return S('nz_last_played')===todayKey();}
 /* Brain-score tier ladder, scaled for the 0–10000 brain-score range.
    Returns a short label (max 8 chars) so the existing home-page ring chip
    (“🧠 ${brainLevel(score)}”) keeps fitting without UI breakage. */
 function brainLevel(s){
+  const p=prestigeLevel(s);
+  if(p)return p.badge+' '+p.title.toUpperCase();
   if(s<=250)return'NOVICE';
   if(s<=800)return'LEARNER';
   if(s<=1800)return'FOCUSED';
@@ -188,11 +194,29 @@ function showAchToast(msg){
 
 /* ===================== XP / LEVELS ===================== */
 const LEVELS=[
-  {lv:1,name:'Novice',xp:0},{lv:2,name:'Apprentice',xp:1500},{lv:3,name:'Thinker',xp:3600},
-  {lv:4,name:'Scholar',xp:7500},{lv:5,name:'Expert',xp:13500},{lv:6,name:'Genius',xp:21000},
-  {lv:7,name:'Prodigy',xp:30000},{lv:8,name:'Mastermind',xp:42000},{lv:9,name:'Sage',xp:57000},
-  {lv:10,name:'Legend',xp:75000},
+  {lv:1,name:'Novice',xp:0},
+  {lv:2,name:'Apprentice',xp:400},
+  {lv:3,name:'Thinker',xp:900},
+  {lv:4,name:'Scholar',xp:1800},
+  {lv:5,name:'Expert',xp:3200},
+  {lv:6,name:'Genius',xp:5000},
+  {lv:7,name:'Prodigy',xp:7500},
+  {lv:8,name:'Mastermind',xp:11000},
+  {lv:9,name:'Sage',xp:15000},
+  {lv:10,name:'Legend',xp:20000},
 ];
+const PRESTIGE_TIERS=[
+  {score:10000, badge:'⭐', title:'Ascended'},
+  {score:20000, badge:'🌟', title:'Transcendent'},
+  {score:35000, badge:'💫', title:'Enlightened'},
+  {score:55000, badge:'✨', title:'Cosmic'},
+  {score:80000, badge:'🌌', title:'Eternal'},
+];
+function prestigeLevel(score){
+  let tier=null;
+  for(const t of PRESTIGE_TIERS){if(score>=t.score)tier=t;}
+  return tier;
+}
 function xpLevel(xp){
   let cur=LEVELS[0];
   for(const l of LEVELS){if(xp>=l.xp)cur=l;}
@@ -267,60 +291,102 @@ function checkAchievements(gameId,score){
 }
 
 /* ===================== SCORE SYSTEM ===================== */
-function awardScore(rawPts,skillKey,gameId,gameScore){
-  const skillLvl=(S('nz_skill_scores')[skillKey]||0);
-  const mult=skillLvl<30?1.0:skillLvl<60?0.8:0.6;
-  const pts=Math.round(rawPts*mult);
+function awardScore(rawPts,skillKey,gameId,gameScore,starThresh){
+  /* --- 1. Points: NO skill penalty, straightforward addition --- */
+  const pts=Math.max(1,rawPts);
   const cur=S('nz_brain_score');
-  const next=Math.max(0,Math.min(10000,cur+pts));
+  const next=Math.max(0,cur+pts);
   setS('nz_brain_score',next);
+
+  /* --- 2. Prestige milestone check --- */
+  const prevPrestige=prestigeLevel(cur);
+  const newPrestige=prestigeLevel(next);
+  if(newPrestige&&(!prevPrestige||newPrestige.score>prevPrestige.score)){
+    setTimeout(()=>{confetti(120);toast(newPrestige.badge+' Prestige Unlocked! You are now '+newPrestige.title+'!');},1000);
+  }
+
+  /* --- 3. Game plays counter --- */
   setS('nz_games_played',S('nz_games_played')+1);
-  const gPlays=S('nz_game_plays');gPlays[gameId]=(gPlays[gameId]||0)+1;setS('nz_game_plays',gPlays);
-  // streak
+  const gPlays=S('nz_game_plays');
+  gPlays[gameId]=(gPlays[gameId]||0)+1;
+  setS('nz_game_plays',gPlays);
+
+  /* --- 4. Streak — only toast on FIRST game of the day --- */
   const prevLast=S('nz_last_played');
   const today=todayKey();
   if(prevLast!==today){
-    const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+    const yDate=new Date(Date.now()-86400000);
+    const yesterday=yDate.getFullYear()+'-'+String(yDate.getMonth()+1).padStart(2,'0')+'-'+String(yDate.getDate()).padStart(2,'0');
     const newStreak=prevLast===yesterday?S('nz_streak')+1:1;
     setS('nz_streak',newStreak);
     setS('nz_last_played',today);
     setS('nz_today_games',1);
-  } else {
-    toast('🔥 Streak already locked in for today — come back tomorrow for the next one!');
+    if(newStreak>1)setTimeout(()=>toast('🔥 '+newStreak+' day streak! Keep it up!'),400);
+  }else{
     setS('nz_today_games',S('nz_today_games')+1);
+    /* No toast for 2nd+ game in same day */
   }
-  // date-keyed daily history: {'YYYY-MM-DD': score} — max 7 calendar days
+
+  /* --- 5. Daily history for 7-day chart --- */
   const _dh=S('nz_daily_history')||{};
-  const _dk=todayKey();
-  _dh[_dk]=Math.max(_dh[_dk]||0,next); // keep best score of the day
+  _dh[today]=Math.max(_dh[today]||0,next);
   const _allKeys=Object.keys(_dh).sort();
   while(_allKeys.length>7){const _old=_allKeys.shift();delete _dh[_old];}
   setS('nz_daily_history',_dh);
-  // skill
+
+  /* --- 6. Skill scores — grow 0→100, NO penalty --- */
   if(skillKey){
     const prev=S('nz_skill_scores');
     const prevPrev=S('nz_skill_scores_prev');
     prevPrev[skillKey]=prev[skillKey]||0;
-    prev[skillKey]=Math.min(100,Math.max(0,(prev[skillKey]||0)+Math.round(pts*0.12)));
-    setS('nz_skill_scores',prev);setS('nz_skill_scores_prev',prevPrev);
+    const skillGain=Math.max(1,Math.round(pts*0.15));
+    prev[skillKey]=Math.min(100,Math.max(0,(prev[skillKey]||0)+skillGain));
+    setS('nz_skill_scores',prev);
+    setS('nz_skill_scores_prev',prevPrev);
   }
+
+  /* --- 7. Achievements --- */
   checkAchievements(gameId,gameScore);
-  // XP + level system
-  let xpGain=Math.max(0,Math.round((gameScore||0)*10));
+
+  /* --- 8. XP — tier-based, normalized per game --- */
+  const _st2=starThresh||[5,10,15];
+  const _xpTiers={
+    schulte:   [10,22,38,55],
+    memory:    [10,20,35,50],
+    pattern:   [10,22,38,55],
+    wordflash: [10,20,35,50],
+    wordchain: [10,20,35,48],
+    math:      [10,22,38,55],
+    stroopx:   [10,20,35,50],
+    iqtest:    [12,25,42,60],
+    reactionlab:[10,20,35,50],
+    spatialspin:[10,22,38,55],
+  };
+  const tiers=_xpTiers[gameId]||[10,20,35,50];
+  /* tiers[0]=base, [1]=1-star, [2]=2-star, [3]=3-star */
+  let xpGain;
+  if(gameScore>=(_st2[2]||_st2[1]*2))xpGain=tiers[3];
+  else if(gameScore>=(_st2[1]||_st2[0]*1.5))xpGain=tiers[2];
+  else if(gameScore>=_st2[0])xpGain=tiers[1];
+  else xpGain=tiers[0];
+
+  /* Daily challenge: 1.5x XP (not 2x — more balanced) */
   const dch=todayChallenge();
   if(dch&&gameId===dch.game&&!dailyDoneToday()&&dch.check(gameScore)){
-    xpGain*=2;
-    setS('nz_daily_challenge_date',todayKey());
+    xpGain=Math.round(xpGain*1.5);
+    setS('nz_daily_challenge_date',today);
     setS('nz_daily_challenge_done',true);
     setS('nz_daily_challenge_xp',xpGain);
-    setTimeout(()=>toast('🎯 Daily Challenge complete! 2x XP earned!'),600);
+    setTimeout(()=>toast('🎯 Daily Challenge complete! Bonus XP!'),600);
   }
+
   const oldXp=S('nz_xp');
   const newXp=oldXp+xpGain;
   setS('nz_xp',newXp);
   const prevLv=xpLevel(oldXp).cur.lv;
   const newLv=xpLevel(newXp).cur;
   if(newLv.lv>prevLv)setTimeout(()=>showLevelUp(newLv),900);
+
   return pts;
 }
 
@@ -631,7 +697,7 @@ function openGame(id,wkCtx){
     const isRec=opts.bestVal!==undefined?(!best[id]||opts.bestVal>best[id]):(!best[id]||opts.value>best[id]);
     const recVal=opts.bestVal!==undefined?opts.bestVal:opts.value;
     if(isRec){best[id]=recVal;setS('nz_best_scores',best);}
-    const pts=awardScore(Math.max(2,opts.points||2),g.skill,id,opts.value);
+    const pts=awardScore(Math.max(2,opts.points||2),g.skill,id,opts.value,opts.starThresh);
     playSound('complete');
     const starThresh=opts.starThresh||[5,10,15];
     const stars=opts.value>=starThresh[2]?3:opts.value>=starThresh[1]?2:opts.value>=starThresh[0]?1:0;
@@ -706,10 +772,14 @@ function renderProgress(){
   const _dow7=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const _short7=['S','M','T','W','T','F','S'];
   const h=[];const hDays=[];
+  let _lastKnown=0;
   for(let _i=6;_i>=0;_i--){
     const _d=new Date(Date.now()-_i*86400000);
-    const _k=_d.toISOString().slice(0,10);
-    h.push(_dh7[_k]||0);
+    /* Use LOCAL date — matches todayKey() fix */
+    const _k=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
+    const _val=_dh7[_k]||0;
+    if(_val>0)_lastKnown=_val;
+    h.push(_val>0?_val:_lastKnown); /* carry forward — no fake dips to 0 */
     hDays.push({label:_dow7[_d.getDay()],short:_short7[_d.getDay()],isToday:_i===0});
   }
   const delta=h[h.length-1]-(h[h.length-2]||0);
@@ -727,8 +797,14 @@ function renderProgress(){
       <div id="skillBarsP"></div>
     </div>
     <div class="cmp-card" style="margin-top:16px;">
-      <h3>🏆 Brain Score: ${S('nz_brain_score')}/10000</h3>
-      <div style="font-size:12px;opacity:.85;">Keep training to reach 10000!</div>
+      ${(()=>{
+        const _sc=S('nz_brain_score');
+        const _p=prestigeLevel(_sc);
+        const _nxt=PRESTIGE_TIERS.find(t=>t.score>_sc);
+        if(_p&&!_nxt)return`<h3>${_p.badge} Brain Score: ${_sc}</h3><div style="font-size:12px;opacity:.85;">Maximum Prestige achieved! 🌌</div>`;
+        if(_nxt)return`<h3>🏆 Brain Score: ${_sc} / ${_nxt.score}</h3><div style="font-size:12px;opacity:.85;">Reach ${_nxt.score} to become ${_nxt.badge} ${_nxt.title}!</div>`;
+        return`<h3>🏆 Brain Score: ${_sc} / 10000</h3><div style="font-size:12px;opacity:.85;">Keep training to reach 10000!</div>`;
+      })()}
       <div class="pbar"><div id="pbarFill" style="width:0%"></div></div>
     </div>
     <div class="sec-title"><h2>All Time</h2></div>
@@ -764,7 +840,10 @@ function renderProgress(){
   });
   setTimeout(()=>{
     drawLineChart(p.querySelector('#lineChart'),h,hDays);
-    const pct=Math.min(100,S('nz_brain_score')/100);
+    const _scPct=S('nz_brain_score');
+    const _nxtPct=PRESTIGE_TIERS.find(t=>t.score>_scPct);
+    const _targetPct=_nxtPct?_nxtPct.score:Math.max(_scPct,10000);
+    const pct=Math.min(100,Math.round(_scPct/_targetPct*100));
     p.querySelector('#pbarFill').style.width=pct+'%';
   },40);
   return p;
@@ -1163,7 +1242,8 @@ function renderProfile(){
   const _7days=[];
   for(let _i=6;_i>=0;_i--){
     const _d=new Date(Date.now()-_i*86400000);
-    const _k=_d.toISOString().slice(0,10);
+    /* Use LOCAL date — matches todayKey() fix */
+    const _k=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');
     _7days.push({key:_k,val:_dailyH[_k]||0,dow:_d.getDay(),isToday:_i===0});
   }
   const _histMax=Math.max(1,..._7days.map(d=>d.val));
@@ -1311,52 +1391,314 @@ function showModal(type){
   });
 }
 
-/* ===================== ONBOARDING ===================== */
+/* ===================== ONBOARDING (premium 7-screen + calibration) ===================== */
 function showOnboarding(){
   const onb=$(`<div class="onb" id="onbScreen"></div>`);
   document.body.appendChild(onb);
-  let step=0,userName='',goal=3;
-  const steps=[
-    ()=>{onb.innerHTML=`<div class="onb-em">🧠</div><h1>Welcome to NeuroZen</h1><p>Train your brain with 10 science-inspired games. Build focus, memory, speed & more.</p>
-      <div class="dots"><div class="dot active"></div><div class="dot"></div><div class="dot"></div></div>
-      <button class="btn-primary next">Let's Start →</button>`;
-      onb.querySelector('.next').onclick=()=>{step=1;steps[step]();};
-    },
-    ()=>{onb.innerHTML=`<div class="onb-em">👤</div><h1>What's your name?</h1><p>We'll personalize your experience.</p>
-      <input type="text" id="nameIn" placeholder="Your name" maxlength="20" value="${userName}"/>
-      <div class="dots"><div class="dot"></div><div class="dot active"></div><div class="dot"></div></div>
-      <button class="btn-primary next" style="margin-top:20px;">Continue →</button>`;
-      const inp=onb.querySelector('#nameIn');inp.focus();
-      onb.querySelector('.next').onclick=()=>{
-        const v=inp.value.trim();if(!v){inp.style.borderColor='#EF4444';return;}
-        userName=v;step=2;steps[step]();
-      };
-    },
-    ()=>{onb.innerHTML=`<div class="onb-em">🎯</div><h1>Set your daily goal</h1><p>How many games per day?</p>
-      <div class="opts">
-        <button class="opt ${goal===1?'sel':''}" data-v="1">1 game &nbsp; <span style="color:var(--text2);">~3 min</span></button>
-        <button class="opt ${goal===3?'sel':''}" data-v="3">3 games &nbsp; <span style="color:var(--text2);">~10 min</span></button>
-        <button class="opt ${goal===5?'sel':''}" data-v="5">5 games &nbsp; <span style="color:var(--text2);">~18 min</span></button>
-      </div>
-      <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot active"></div></div>
-      <button class="btn-primary next">Start Training 🚀</button>`;
-      onb.querySelectorAll('.opt').forEach(b=>{b.onclick=()=>{goal=+b.dataset.v;onb.querySelectorAll('.opt').forEach(o=>o.classList.toggle('sel',+o.dataset.v===goal));};});
-      onb.querySelector('.next').onclick=()=>{
-        // Set fresh defaults
-        setS('nz_username',userName||'Player');
-        setS('nz_brain_score',0);setS('nz_streak',0);setS('nz_games_played',0);
-        setS('nz_today_goal',goal);setS('nz_score_history',[0,0,0,0,0,0,0]);
-        setS('nz_achievements',[]);setS('nz_skill_scores',{memory:0,focus:0,logic:0,speed:0});
-        setS('nz_skill_scores_prev',{memory:0,focus:0,logic:0,speed:0});
-        setS('nz_best_scores',{});setS('nz_last_played',null);
-        setS('nz_settings',{reminders:true,sfx:true,notifications:true});
-        setS('nz_onboarded',true);setS('nz_schulte_level',0);setS('nz_today_games',0);
-        onb.style.animation='fadeUp .35s reverse';
-        setTimeout(()=>{onb.remove();render('home');toast('Welcome, '+userName+'! 🧠');},300);
-      };
-    },
+
+  let userName='',brainGoal='focus',dailyGoalType='balanced',dailyGoalGames=3;
+  let reactionTimes=[],memoryScore=0,focusTimeSec=0;
+  let calibResults={speed:50,memory:50,focus:50};
+
+  const QUOTES=[
+    'Your brain becomes stronger every session.',
+    'Small improvements create extraordinary minds.',
+    'Focus is a superpower.',
+    'Every rep makes your mind sharper.',
+    'Consistency beats intensity. Train daily.',
   ];
-  steps[0]();
+  const quote=QUOTES[Math.floor(Math.random()*QUOTES.length)];
+
+  function makeParticles(n){
+    n=n||15;
+    let h='<div class="onb-particles">';
+    for(let i=0;i<n;i++){
+      const sz=4+Math.random()*8,lf=Math.random()*100,dl=Math.random()*5,dr=4+Math.random()*6;
+      h+='<div class="onb-particle" style="width:'+sz+'px;height:'+sz+'px;left:'+lf+'%;animation-delay:'+dl+'s;animation-duration:'+dr+'s"></div>';
+    }
+    return h+'</div>';
+  }
+
+  function dots(cur,total){
+    let h='<div class="onb-dots">';
+    for(let i=0;i<total;i++)h+='<div class="onb-dot'+(i===cur?' active':'')+'"></div>';
+    return h+'</div>';
+  }
+
+  function go(fn){
+    onb.style.cssText='opacity:0;transform:translateY(12px);transition:none';
+    _st(()=>{fn();onb.style.cssText='opacity:1;transform:translateY(0);transition:opacity .25s,transform .25s';},220);
+  }
+
+  /* ── SCREEN 1: Welcome ── */
+  function s0(){
+    onb.innerHTML=
+      makeParticles(18)+
+      '<div class="onb-mascot pulse">🧠</div>'+
+      '<h1 class="onb-title">Unlock Your Brain\'s<br>True Potential</h1>'+
+      '<p class="onb-sub">Improve Focus • Memory • Logic • Speed<br>through science-inspired training.</p>'+
+      '<div class="onb-feats">'+
+        '<div class="onb-feat"><span>⭐</span><span>10 Brain Games</span></div>'+
+        '<div class="onb-feat"><span>🧠</span><span>Adaptive Training</span></div>'+
+        '<div class="onb-feat"><span>📊</span><span>Personal Brain Analytics</span></div>'+
+        '<div class="onb-feat"><span>⏱</span><span>Only 5 minutes/day</span></div>'+
+      '</div>'+
+      '<p class="onb-quote">"'+quote+'"</p>'+
+      dots(0,7)+
+      '<button class="btn-primary onb-btn">Start Your Journey →</button>';
+    onb.querySelector('.onb-btn').onclick=()=>go(s1);
+  }
+
+  /* ── SCREEN 2: Name ── */
+  function s1(){
+    onb.innerHTML=
+      '<div class="onb-mascot">😊</div>'+
+      '<h1 class="onb-title">What should we<br>call you?</h1>'+
+      '<p class="onb-sub">We\'ll personalize your training experience.</p>'+
+      '<input type="text" id="nameIn" class="onb-input" placeholder="Enter your first name" maxlength="20" value="'+userName+'" autocomplete="off"/>'+
+      '<p class="onb-hint">🔒 Your progress is saved locally on your device.</p>'+
+      dots(1,7)+
+      '<button class="btn-primary onb-btn" style="margin-top:16px;">Continue →</button>';
+    const inp=onb.querySelector('#nameIn');
+    _st(()=>inp.focus(),150);
+    function tryNext(){
+      const v=inp.value.trim();
+      if(!v){inp.style.borderColor='#EF4444';inp.classList.add('onb-shake');_st(()=>{inp.classList.remove('onb-shake');inp.style.borderColor='';},400);return;}
+      userName=v.charAt(0).toUpperCase()+v.slice(1);
+      go(s2);
+    }
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter')tryNext();});
+    onb.querySelector('.onb-btn').onclick=tryNext;
+  }
+
+  /* ── SCREEN 3: Brain Goal ── */
+  function s2(){
+    const G=[
+      {id:'focus', icon:'🎯',label:'Improve Focus',   sub:'Sharpen attention & concentration'},
+      {id:'memory',icon:'🧠',label:'Boost Memory',    sub:'Enhance recall & retention'},
+      {id:'speed', icon:'⚡',label:'Think Faster',    sub:'Increase mental processing speed'},
+      {id:'logic', icon:'💡',label:'Sharpen Logic',   sub:'Strengthen reasoning & IQ'},
+      {id:'relax', icon:'😌',label:'Relax Mind',      sub:'Reduce stress, improve clarity'},
+    ];
+    onb.innerHTML=
+      '<div class="onb-mascot">🎯</div>'+
+      '<h1 class="onb-title">What\'s your<br>primary goal?</h1>'+
+      '<p class="onb-sub">We\'ll personalize your training plan.</p>'+
+      '<div class="onb-list">'+
+      G.map(g=>'<button class="onb-row'+(brainGoal===g.id?' sel':'')+'" data-g="'+g.id+'">'+
+        '<span class="onb-row-icon">'+g.icon+'</span>'+
+        '<div><div class="onb-row-label">'+g.label+'</div><div class="onb-row-sub">'+g.sub+'</div></div>'+
+      '</button>').join('')+
+      '</div>'+
+      dots(2,7)+
+      '<button class="btn-primary onb-btn" style="margin-top:16px;">Continue →</button>';
+    onb.querySelectorAll('.onb-row').forEach(b=>{
+      b.onclick=()=>{brainGoal=b.dataset.g;onb.querySelectorAll('.onb-row').forEach(x=>x.classList.toggle('sel',x.dataset.g===brainGoal));};
+    });
+    onb.querySelector('.onb-btn').onclick=()=>go(s3);
+  }
+
+  /* ── SCREEN 4: Daily Goal ── */
+  function s3(){
+    const D=[
+      {id:'light',    icon:'🌱',label:'Light',    sub:'5 min · 1–2 games/day',  g:1},
+      {id:'balanced', icon:'⚖️',label:'Balanced', sub:'10 min · 3 games/day',   g:3},
+      {id:'intensive',icon:'🔥',label:'Intensive',sub:'15 min · 5 games/day',   g:5},
+    ];
+    onb.innerHTML=
+      '<div class="onb-mascot">⏱️</div>'+
+      '<h1 class="onb-title">Choose your<br>daily training</h1>'+
+      '<p class="onb-sub">How much time can you commit each day?</p>'+
+      '<div class="onb-list">'+
+      D.map(d=>'<button class="onb-row'+(dailyGoalType===d.id?' sel':'')+'" data-t="'+d.id+'" data-g="'+d.g+'">'+
+        '<span class="onb-row-icon">'+d.icon+'</span>'+
+        '<div><div class="onb-row-label">'+d.label+'</div><div class="onb-row-sub">'+d.sub+'</div></div>'+
+      '</button>').join('')+
+      '</div>'+
+      dots(3,7)+
+      '<button class="btn-primary onb-btn" style="margin-top:16px;">Continue →</button>';
+    onb.querySelectorAll('.onb-row').forEach(b=>{
+      b.onclick=()=>{
+        dailyGoalType=b.dataset.t;dailyGoalGames=+b.dataset.g;
+        onb.querySelectorAll('.onb-row').forEach(x=>x.classList.toggle('sel',x.dataset.t===dailyGoalType));
+      };
+    });
+    onb.querySelector('.onb-btn').onclick=()=>go(s4);
+  }
+
+  /* ── SCREEN 5: Calibration Intro ── */
+  function s4(){
+    onb.innerHTML=
+      makeParticles(10)+
+      '<div class="onb-mascot">⚡</div>'+
+      '<h1 class="onb-title">Let\'s calibrate<br>your brain.</h1>'+
+      '<p class="onb-sub">3 quick challenges. Takes only <strong>30 seconds</strong>.</p>'+
+      '<div class="onb-calib-steps">'+
+        '<div class="onb-calib-step"><span>⚡</span><span>Reaction Speed</span><span class="onb-cs-time">~10s</span></div>'+
+        '<div class="onb-calib-step"><span>🧠</span><span>Memory Check</span><span class="onb-cs-time">~10s</span></div>'+
+        '<div class="onb-calib-step"><span>👁️</span><span>Focus Test</span><span class="onb-cs-time">~10s</span></div>'+
+      '</div>'+
+      '<p class="onb-hint">Results build your personal Brain Profile.</p>'+
+      dots(4,7)+
+      '<button class="btn-primary onb-btn">Start Calibration ⚡</button>';
+    onb.querySelector('.onb-btn').onclick=()=>go(()=>calib_reaction());
+  }
+
+  /* ── CALIBRATION A: Reaction ── */
+  function calib_reaction(round,times){
+    round=round||0;times=times||[];
+    if(round===5){reactionTimes=times;go(()=>calib_memory());return;}
+    const delay=900+Math.random()*1100;
+    onb.innerHTML=
+      '<div class="onb-calib-hdr"><span>⚡ Reaction Speed</span><span class="onb-calib-prog">'+(round+1)+' / 5</span></div>'+
+      '<p class="onb-sub" style="margin-bottom:24px;">Tap the circle the instant it turns green</p>'+
+      '<div class="onb-react-wrap" id="rWrap">'+
+        '<div class="onb-react-circle wait" id="rCircle"></div>'+
+        '<p id="rTxt" style="margin-top:20px;font-size:14px;color:var(--text2);">Wait for green...</p>'+
+      '</div>'+
+      dots(4,7);
+    const circle=onb.querySelector('#rCircle');
+    const txt=onb.querySelector('#rTxt');
+    const wrap=onb.querySelector('#rWrap');
+    let ready=false,t0=0;
+    const timer=_st(()=>{ready=true;t0=Date.now();circle.className='onb-react-circle go';txt.textContent='TAP NOW! 👆';},delay);
+    wrap.onclick=()=>{
+      if(!ready){clearTimeout(timer);circle.className='onb-react-circle wrong';txt.textContent='Too early! Wait for green ⚠️';_st(()=>calib_reaction(round,times),1000);return;}
+      const rt=Date.now()-t0;times.push(rt);
+      circle.className='onb-react-circle done';txt.textContent=rt+'ms ✓';
+      _st(()=>calib_reaction(round+1,times),700);
+    };
+  }
+
+  /* ── CALIBRATION B: Memory ── */
+  function calib_memory(round,correct){
+    round=round||0;correct=correct||0;
+    if(round===2){memoryScore=correct;go(()=>calib_focus());return;}
+    const targets=[];while(targets.length<3){const n=Math.floor(Math.random()*9);if(targets.indexOf(n)<0)targets.push(n);}
+    onb.innerHTML=
+      '<div class="onb-calib-hdr"><span>🧠 Memory Check</span><span class="onb-calib-prog">'+(round+1)+' / 2</span></div>'+
+      '<p class="onb-sub" style="margin-bottom:16px;">Memorize the highlighted cells</p>'+
+      '<div class="onb-mem-grid" id="mGrid">'+
+      Array.from({length:9},(_,i)=>'<div class="onb-mem-cell'+(targets.indexOf(i)>=0?' lit':'')+'" data-i="'+i+'"></div>').join('')+
+      '</div>'+
+      '<p id="mTxt" style="margin-top:16px;font-size:14px;color:var(--text2);">Memorizing...</p>'+
+      dots(4,7);
+    _st(()=>{
+      onb.querySelectorAll('.onb-mem-cell').forEach(c=>c.classList.remove('lit'));
+      const txt=onb.querySelector('#mTxt');
+      if(txt)txt.textContent='Now tap the 3 cells you saw!';
+      const sel=[];
+      onb.querySelectorAll('.onb-mem-cell').forEach((c,i)=>{
+        c.onclick=()=>{
+          if(sel.indexOf(i)>=0)return;
+          sel.push(i);c.classList.add('sel');
+          if(sel.length===3){
+            const hit=targets.filter(t=>sel.indexOf(t)>=0).length;
+            if(hit===3)correct++;
+            if(txt)txt.textContent=hit===3?'✓ Perfect! All correct!':'Done!';
+            _st(()=>calib_memory(round+1,correct),800);
+          }
+        };
+      });
+    },1800);
+  }
+
+  /* ── CALIBRATION C: Focus (Schulte 3×3) ── */
+  function calib_focus(){
+    const nums=[1,2,3,4,5,6,7,8,9].sort(()=>Math.random()-.5);
+    let next=1;
+    const t0=Date.now();
+    onb.innerHTML=
+      '<div class="onb-calib-hdr"><span>👁️ Focus Test</span><span class="onb-calib-prog">Find 1 → 9</span></div>'+
+      '<p class="onb-sub" style="margin-bottom:16px;">Tap numbers 1 to 9 in order, as fast as you can</p>'+
+      '<div class="onb-schulte" id="sGrid">'+
+      nums.map(n=>'<button class="onb-sch-cell" data-n="'+n+'">'+n+'</button>').join('')+
+      '</div>'+
+      '<p id="sFb" style="margin-top:14px;font-size:13px;color:var(--text2);">Find: <strong id="sNext">1</strong></p>'+
+      dots(4,7);
+    onb.querySelectorAll('.onb-sch-cell').forEach(b=>{
+      b.onclick=()=>{
+        if(+b.dataset.n===next){
+          b.classList.add('done');b.disabled=true;next++;
+          const nEl=onb.querySelector('#sNext');
+          if(next<=9&&nEl)nEl.textContent=next;
+          else if(next>9){focusTimeSec=(Date.now()-t0)/1000;go(()=>doAnalyzing());}
+        }else{b.classList.add('wrong');_st(()=>b.classList.remove('wrong'),250);}
+      };
+    });
+  }
+
+  /* ── SCREEN 6: Analyzing ── */
+  function doAnalyzing(){
+    onb.innerHTML=
+      '<div class="onb-mascot">🤔</div>'+
+      '<h1 class="onb-title">Analyzing your<br>brain data...</h1>'+
+      '<div class="onb-analyze">'+
+        '<div class="onb-arow"><span>⚡ Processing Speed</span><div class="onb-abar"><div class="onb-afill" style="animation-delay:.1s"></div></div></div>'+
+        '<div class="onb-arow"><span>🧠 Memory Patterns</span><div class="onb-abar"><div class="onb-afill" style="animation-delay:.6s"></div></div></div>'+
+        '<div class="onb-arow"><span>👁️ Attention Span</span><div class="onb-abar"><div class="onb-afill" style="animation-delay:1.1s"></div></div></div>'+
+        '<div class="onb-arow"><span>💡 Logic Baseline</span><div class="onb-abar"><div class="onb-afill" style="animation-delay:1.6s"></div></div></div>'+
+      '</div>'+
+      '<p id="aTxt" class="onb-hint">Processing reaction data...</p>'+
+      dots(5,7);
+    const msgs=['Processing reaction data...','Evaluating memory patterns...','Measuring attention span...','Building your brain profile...'];
+    let mi=0;
+    const iv=_si(()=>{mi++;const el=onb.querySelector('#aTxt');if(el&&msgs[mi])el.textContent=msgs[mi];},750);
+    _st(()=>{_cti(iv);go(()=>doProfile());},3400);
+  }
+
+  /* ── SCREEN 7: Brain Profile Reveal ── */
+  function doProfile(){
+    const avgRT=reactionTimes.length?reactionTimes.reduce((a,b)=>a+b,0)/reactionTimes.length:500;
+    const spd=avgRT<250?92:avgRT<350?78:avgRT<500?62:avgRT<700?46:30;
+    const mem=memoryScore===2?80:memoryScore===1?55:35;
+    const foc=focusTimeSec>0?(focusTimeSec<8?88:focusTimeSec<12?72:focusTimeSec<18?56:38):50;
+    calibResults={speed:spd,memory:mem,focus:foc};
+
+    const lbl=(v,hi,mid,lo)=>v>=hi?'Excellent':v>=mid?'Good':v>=lo?'Average':'Developing';
+    const rows=[
+      {icon:'⚡',label:'Speed',  val:spd, lbl:lbl(spd,80,65,50)},
+      {icon:'🧠',label:'Memory', val:mem, lbl:lbl(mem,75,55,40)},
+      {icon:'👁️',label:'Focus',  val:foc, lbl:lbl(foc,80,62,48)},
+      {icon:'💡',label:'Logic',  val:0,   lbl:'Not Tested'},
+    ];
+    onb.innerHTML=
+      makeParticles(12)+
+      '<div class="onb-mascot celebrate">🎉</div>'+
+      '<h1 class="onb-title">Welcome, '+userName+'! 👋</h1>'+
+      '<p class="onb-sub">Here\'s your initial Brain Profile</p>'+
+      '<div class="onb-profile">'+
+        '<div class="onb-profile-title">🧬 Initial Brain Profile</div>'+
+        rows.map(r=>'<div class="onb-prow">'+
+          '<span class="onb-plabel">'+r.icon+' '+r.label+'</span>'+
+          '<div class="onb-pbar"><div class="onb-pbar-fill" style="width:'+r.val+'%"></div></div>'+
+          '<span class="onb-pval">'+(r.val||'—')+' <small>'+r.lbl+'</small></span>'+
+        '</div>').join('')+
+        '<p class="onb-profile-note">We\'ll update these scores as you continue training.</p>'+
+      '</div>'+
+      '<div class="onb-level-badge">🏅 Starting Rank: <strong>Level 1 · Brain Explorer</strong></div>'+
+      dots(6,7)+
+      '<button class="btn-primary onb-btn" style="margin-top:20px;">Start Training 🚀</button>';
+    onb.querySelector('.onb-btn').onclick=()=>{
+      setS('nz_username',userName);
+      setS('nz_brain_goal',brainGoal);
+      setS('nz_daily_goal_type',dailyGoalType);
+      setS('nz_today_goal',dailyGoalGames);
+      setS('nz_brain_score',0);setS('nz_xp',0);setS('nz_streak',0);
+      setS('nz_games_played',0);setS('nz_today_games',0);
+      setS('nz_achievements',[]);
+      setS('nz_skill_scores',{memory:calibResults.memory,focus:calibResults.focus,speed:calibResults.speed,logic:0});
+      setS('nz_skill_scores_prev',{memory:0,focus:0,speed:0,logic:0});
+      setS('nz_best_scores',{});setS('nz_last_played',null);
+      setS('nz_settings',{reminders:true,sfx:true,notifications:true});
+      setS('nz_onboarded',true);setS('nz_schulte_level',0);setS('nz_daily_history',{});
+      setS('nz_calib_done',true);
+      onb.style.cssText='opacity:0;transform:translateY(10px);transition:opacity .3s,transform .3s';
+      _st(()=>{onb.remove();render('home');confetti(80);toast('Welcome, '+userName+'! Your brain training begins now. 🧠');},300);
+    };
+  }
+
+  s0();
 }
 
 /* game:spatialspin */

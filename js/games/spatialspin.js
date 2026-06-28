@@ -17,9 +17,9 @@
 
 /* ---------- MODE DEFS (4 clean modes) ---------- */
 const SS_MODES={
-  classic:{label:'Classic',emoji:'\uD83C\uDFAF',sub:'Mixed challenges \u00B7 all types',time:8000,minTime:4000,decay:200,nMin:4,nMax:7,zen:false,lives:3,combo:false},
-  speed  :{label:'Speed',  emoji:'\u26A1',       sub:'3.5s flat \u00B7 chain reflexes',  time:3500,minTime:3500,decay:0,  nMin:4,nMax:5,zen:false,lives:3,combo:true},
-  expert :{label:'Expert', emoji:'\uD83D\uDD25',sub:'Hard challenges \u00B7 6-8 blocks', time:6000,minTime:3500,decay:150,nMin:6,nMax:8,zen:false,lives:3,combo:false},
+  classic:{label:'Classic',emoji:'\uD83C\uDFAF',sub:'Mixed challenges \u00B7 all types',time:8000,minTime:4500,decay:180,nMin:4,nMax:7,zen:false,lives:3,combo:false},
+  speed  :{label:'Speed',  emoji:'\u26A1',       sub:'4.5s flat \u00B7 chain reflexes',  time:4500,minTime:4500,decay:0,  nMin:4,nMax:5,zen:false,lives:3,combo:true},
+  expert :{label:'Expert', emoji:'\uD83D\uDD25',sub:'Hard challenges \u00B7 6-8 blocks', time:7000,minTime:4500,decay:130,nMin:6,nMax:8,zen:false,lives:3,combo:false},
   zen    :{label:'Zen',    emoji:'\uD83E\uDDD8',sub:'No timer \u00B7 learn & explore',   time:0,   minTime:0,   decay:0,  nMin:4,nMax:6,zen:true, lives:Infinity,combo:false}
 };
 const SS_MODE_KEYS=['classic','speed','expert','zen'];
@@ -399,18 +399,29 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
 
   /* 1. ROTATION MATCH */
   function SS_buildRotation(target){
-    const banSet=new Set();
     const rotSet=SS_rotationSet(target);
     const rotList=Array.from(rotSet.values());
+    /* Require at least 2 distinct rotations — otherwise the shape has full rotational symmetry
+       and we can't distinguish prompt from a rotated answer (would be the SAME shape). */
+    if(rotList.length<2)return null;
     const promptCells=rotList[0];
-    let correctCells;
-    if(rotList.length>1){
-      const nonIdentity=rotList.slice(1);
-      correctCells=nonIdentity[Math.floor(Math.random()*nonIdentity.length)];
-    }else{correctCells=rotList[0];}
-    banSet.add(SS_hash(correctCells));
+    const nonIdentity=rotList.slice(1);
+    const correctCells=nonIdentity[Math.floor(Math.random()*nonIdentity.length)];
+    const banSet=new Set();
+    /* Ban all rotations of the correct answer — wrong options must be visually distinguishable */
+    rotSet.forEach((_,h)=>banSet.add(h));
     const wrong=[];
-    const tryAdd=(g)=>{if(g){const h=SS_hash(g.cells);if(!banSet.has(h)){banSet.add(h);wrong.push(g);}}};
+    const tryAdd=(g)=>{
+      if(!g)return;
+      const h=SS_hash(g.cells);
+      if(banSet.has(h))return;
+      /* extra safety: reject if rotation-equivalent to any existing option */
+      for(const w of wrong){
+        if(SS_rotationSet(w.cells).has(h))return;
+      }
+      banSet.add(h);
+      wrong.push(g);
+    };
     /* difficulty-aware distractors */
     const isHard=mode==='expert';
     if(isHard){
@@ -422,7 +433,13 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       tryAdd(SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet));
       tryAdd(SS_distRandom(target,banSet));
     }
-    while(wrong.length<3){const f=SS_distRandom(target,banSet);if(!f)break;banSet.add(SS_hash(f.cells));wrong.push(f);}
+    let safety=0;
+    while(wrong.length<3&&safety<8){
+      safety++;
+      const f=SS_distRandom(target,banSet);
+      if(!f)break;
+      tryAdd(f);
+    }
     if(wrong.length<3)return null;
     const opts=[{cells:correctCells,correct:true,style:'rotation'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
@@ -433,22 +450,39 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   function SS_buildMirror(target){
     const mirSet=SS_mirrorSet(target);
     const mirList=Array.from(mirSet.values());
+    /* Need at least 1 mirror that is DISTINCT from any rotation (asymmetric shape) */
     if(!mirList.length)return null;
     const correctCells=mirList[Math.floor(Math.random()*mirList.length)];
-    const banSet=new Set();
-    banSet.add(SS_hash(correctCells));
     const rotSet=SS_rotationSet(target);
+    /* Ban target's entire rotation set — prompt and its rotations are not the mirror answer */
+    const banSet=new Set();
+    rotSet.forEach((_,h)=>banSet.add(h));
+    /* Ban all rotations of the correct mirror too — wrong options can't be rotation-equivalent */
+    const correctRot=SS_rotationSet(correctCells);
+    correctRot.forEach((_,h)=>banSet.add(h));
     const rotList=Array.from(rotSet.values());
     const promptCells=rotList[0];
     const wrong=[];
-    const tryAdd=(g)=>{if(g){const h=SS_hash(g.cells);if(!banSet.has(h)){banSet.add(h);wrong.push(g);}}};
-    /* fillers: rotations that aren't mirrors */
+    const tryAdd=(g)=>{
+      if(!g)return;
+      const h=SS_hash(g.cells);
+      if(banSet.has(h))return;
+      /* reject if this is itself a mirror of the prompt (would be 2nd correct answer) */
+      if(mirSet.has(h))return;
+      banSet.add(h);
+      wrong.push(g);
+    };
+    /* fillers: rotations of the target (NOT mirrors) */
     const fillers=rotList.filter(c=>SS_hash(c)!==SS_hash(promptCells));
     for(let i=0;i<fillers.length&&wrong.length<3;i++){
-      const h=SS_hash(fillers[i]);
-      if(!banSet.has(h)){banSet.add(h);wrong.push({cells:fillers[i],style:'rotationFiller'});}
+      wrong.push({cells:fillers[i],style:'rotationFiller'});
+      banSet.add(SS_hash(fillers[i]));
     }
-    while(wrong.length<3){const f=SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet);if(!f)break;banSet.add(SS_hash(f.cells));wrong.push(f);}
+    let safety=0;
+    while(wrong.length<3&&safety<8){
+      safety++;
+      tryAdd(SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet));
+    }
     if(wrong.length<3)return null;
     const opts=[{cells:correctCells,correct:true,style:'mirrorAnswer'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
@@ -514,21 +548,21 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     return{challengeType:'memory',target:target,promptCells:promptCells,options:opts,memoryPhase:true};
   }
 
-  /* 5. ANGLE GUESS */
+  /* 5. ANGLE GUESS — 4 sensible options: 90/180/270 + one perceptual distractor (45 or 135) */
   function SS_buildAngle(target){
+    const rotSet=SS_rotationSet(target);
+    /* If shape has rotational symmetry (e.g. 180° sym → s2 === s0), the angle is ambiguous.
+       Require all 4 quarter-turn positions to be distinct so the user can perceive the rotation. */
+    if(rotSet.size<4)return null;
     const angles=[90,180,270];
     const angle=angles[Math.floor(Math.random()*angles.length)];
     const promptCells=SS_norm(target);
     let afterCells=promptCells;
     const steps=angle/90;
     for(let i=0;i<steps;i++)afterCells=SS_rotateCW(afterCells);
-    const allAngles=[90,180,270];
-    const optAngles=[angle];
-    const remaining=allAngles.filter(a=>a!==angle);
-    SS_shuffle(remaining);
-    for(let i=0;i<remaining.length&&optAngles.length<4;i++)optAngles.push(remaining[i]);
-    /* ensure 4 options: add 360 if needed */
-    while(optAngles.length<4){optAngles.push(360);}
+    /* 4 options: all 3 real angles + one perceptual distractor (45° or 135°) */
+    const distractor=Math.random()<0.5?45:135;
+    const optAngles=[90,180,270,distractor];
     const opts=optAngles.map(a=>({label:a+'\u00B0',angle:a,correct:a===angle,style:'angle'+a}));
     SS_shuffle(opts);SS_avoidStalePos(opts);
     return{challengeType:'angle',target:target,promptCells:promptCells,afterCells:afterCells,options:opts,angle:angle};
@@ -538,21 +572,28 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   function SS_buildOddOneOut(target){
     const rotSet=SS_rotationSet(target);
     const rotList=Array.from(rotSet.values());
+    /* Need at least 3 distinct rotations to form a family of 3 */
     if(rotList.length<3)return null;
-    /* pick 3 from the rotation family */
+    /* pick 3 distinct family members — already unique by Map */
     SS_shuffle(rotList);
     const familyPicks=rotList.slice(0,3);
-    /* generate an odd shape (different canonical) */
+    /* Hard verify: all 3 family picks have distinct hashes */
+    const famHashes=new Set(familyPicks.map(SS_hash));
+    if(famHashes.size!==3)return null;
+    /* Generate an odd shape: canonical hash must differ AND must not be rotation-equivalent
+       to any family pick (sanity — they share canonical so this is redundant but cheap) */
     let oddShape=null;
     const isExpert=mode==='expert';
-    for(let t=0;t<12;t++){
+    for(let t=0;t<15;t++){
       const sh=SS_makeFreshShape(target.length,{branching:0.4+Math.random()*0.4});
       if(SS_canonicalHash(sh.cells)===SS_canonicalHash(target))continue;
       if(isExpert){
-        /* near-identical: try to get a shape that differs by only 1 block */
         const bb1=SS_bbox(target),bb2=SS_bbox(sh.cells);
         if(Math.abs(bb1.rows-bb2.rows)+Math.abs(bb1.cols-bb2.cols)>2)continue;
       }
+      /* reject if odd shape happens to match any family member's hash */
+      const oh=SS_hash(sh.cells);
+      if(famHashes.has(oh))continue;
       oddShape=sh.cells;break;
     }
     if(!oddShape)return null;
@@ -564,19 +605,35 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
 
   /* 7. ROTATION CHAIN */
   function SS_buildChain(target){
-    /* Show: original -> step1 (90) -> [?] (180) -> step3 (270) */
+    /* Show: original (0°) -> step1 (90°) -> [?] (180°) -> step3 (270°) */
     const s0=SS_norm(target);
     const s1=SS_rotateCW(s0);
-    const s2=SS_rotateCW(s1); /* correct answer = 180 rotation */
+    const s2=SS_rotateCW(s1); /* correct answer = 180° rotation */
     const s3=SS_rotateCW(s2);
+    /* CRITICAL: if the shape has 180° rotational symmetry (s0 === s2), the "correct"
+       answer would be visually identical to the s0 "distractor", making it ambiguous.
+       Skip this shape — caller will try another type. */
+    if(SS_hash(s0)===SS_hash(s2))return null;
+    /* Also skip if 90° symmetry makes s1 === s3 (still solvable but visually 2 same options) */
+    if(SS_hash(s1)===SS_hash(s3))return null;
     const banSet=new Set();banSet.add(SS_hash(s2));
     const wrong=[];
-    const tryAdd=(g)=>{if(g){const h=SS_hash(g.cells);if(!banSet.has(h)){banSet.add(h);wrong.push(g);}}};
-    /* wrong: s0, s1, and a random */
-    if(SS_hash(s0)!==SS_hash(s2))tryAdd({cells:s0,style:'chainWrong0'});
-    if(SS_hash(s1)!==SS_hash(s2))tryAdd({cells:s1,style:'chainWrong1'});
-    if(SS_hash(s3)!==SS_hash(s2))tryAdd({cells:s3,style:'chainWrong3'});
-    while(wrong.length<3){const f=SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet);if(!f)break;banSet.add(SS_hash(f.cells));wrong.push(f);}
+    const tryAdd=(g)=>{
+      if(!g)return;
+      const h=SS_hash(g.cells);
+      if(banSet.has(h))return;
+      banSet.add(h);
+      wrong.push(g);
+    };
+    /* wrong: s0, s1, s3 (all guaranteed distinct from s2 now) */
+    tryAdd({cells:s0,style:'chainWrong0'});
+    tryAdd({cells:s1,style:'chainWrong1'});
+    tryAdd({cells:s3,style:'chainWrong3'});
+    let safety=0;
+    while(wrong.length<3&&safety<6){
+      safety++;
+      tryAdd(SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet));
+    }
     if(wrong.length<3)return null;
     const opts=[{cells:s2,correct:true,style:'chainCorrect'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
@@ -586,31 +643,39 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   /* 8. SHAPE COMPLETION */
   function SS_buildCompletion(target){
     if(target.length<4)return null;
-    /* show half the cells, hide the rest */
-    const half=Math.ceil(target.length/2);
-    const indices=target.map((_,i)=>i);
-    SS_shuffle(indices);
-    const visibleIdx=indices.slice(0,half);
-    const hiddenIdx=indices.slice(half);
-    const visible=visibleIdx.map(i=>target[i]);
-    /* make sure visible part is connected */
-    if(!SS_isConnected(visible))return null;
+    /* Try multiple random partitions — visible half must be connected AND the original target
+       must be the UNIQUE completion (no wrong option can also complete the visible part). */
+    let visible=null,hidden=null;
+    for(let attempt=0;attempt<8;attempt++){
+      const half=Math.ceil(target.length/2);
+      const indices=target.map((_,i)=>i);
+      SS_shuffle(indices);
+      const visibleIdx=indices.slice(0,half);
+      const hiddenIdx=indices.slice(half);
+      const vis=visibleIdx.map(i=>target[i]);
+      if(SS_isConnected(vis)){
+        visible=vis;hidden=hiddenIdx.map(i=>target[i]);break;
+      }
+    }
+    if(!visible)return null;
     const visibleNorm=SS_norm(visible);
-    /* correct option = full shape */
+    const targetCanon=SS_canonicalHash(target);
     const banSet=new Set();banSet.add(SS_hash(SS_norm(target)));
+    /* Also ban the rotation set of target to keep distractors visually distinct from correct */
+    SS_rotationSet(target).forEach((_,h)=>banSet.add(h));
     const wrong=[];
-    for(let t=0;t<12&&wrong.length<3;t++){
+    for(let t=0;t<15&&wrong.length<3;t++){
       const sh=SS_makeFreshShape(target.length,{branching:0.4+Math.random()*0.4});
       const h=SS_hash(sh.cells);
       if(banSet.has(h))continue;
-      if(SS_canonicalHash(sh.cells)===SS_canonicalHash(target))continue;
+      if(SS_canonicalHash(sh.cells)===targetCanon)continue;
       banSet.add(h);
       wrong.push({cells:sh.cells,style:'completionWrong'});
     }
     if(wrong.length<3)return null;
     const opts=[{cells:SS_norm(target),correct:true,style:'completionCorrect'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
-    return{challengeType:'completion',target:target,visibleCells:visibleNorm,hiddenCells:hiddenIdx.map(i=>target[i]),options:opts};
+    return{challengeType:'completion',target:target,visibleCells:visibleNorm,hiddenCells:hidden,options:opts};
   }
 
   /* ---------- master round builder ---------- */
@@ -632,6 +697,45 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   function SS_verifyRound(round){
     if(!round||!round.options||round.options.length!==4)return false;
     if(round.options.filter(o=>o.correct).length!==1)return false;
+    /* Hard guard: no two options should share the same shape hash (prevents 'two correct' feel) */
+    if(round.options[0].cells){
+      const seen=new Set();
+      for(const o of round.options){
+        if(!o.cells)continue;
+        const h=SS_hash(o.cells);
+        if(seen.has(h))return false;
+        seen.add(h);
+      }
+    }
+    /* For rotation challenge: ensure no WRONG option is rotation-equivalent to the correct one */
+    if(round.challengeType==='rotation'){
+      const correct=round.options.find(o=>o.correct);
+      if(!correct||!correct.cells)return false;
+      const correctRot=SS_rotationSet(correct.cells);
+      for(const o of round.options){
+        if(o.correct||!o.cells)continue;
+        if(correctRot.has(SS_hash(o.cells)))return false;
+      }
+    }
+    /* For mirror: wrong options must NOT also be mirrors of the prompt */
+    if(round.challengeType==='mirror'&&round.promptCells){
+      const promptMir=SS_mirrorSet(round.promptCells);
+      for(const o of round.options){
+        if(o.correct||!o.cells)continue;
+        if(promptMir.has(SS_hash(o.cells)))return false;
+      }
+    }
+    /* For oddoneout: the 3 wrong (family) options must all be in target's rotation set,
+       and the correct (odd) must NOT be */
+    if(round.challengeType==='oddoneout'&&round.target){
+      const targetRot=SS_rotationSet(round.target);
+      for(const o of round.options){
+        if(!o.cells)continue;
+        const inRot=targetRot.has(SS_hash(o.cells));
+        if(o.correct&&inRot)return false;
+        if(!o.correct&&!inRot)return false;
+      }
+    }
     return true;
   }
 
@@ -847,11 +951,13 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     let challengeType=SS_pickChallengeType();
     let round=null;
 
-    /* try up to 3 different challenge types if one fails to build */
-    for(let typeAttempt=0;typeAttempt<3&&!round;typeAttempt++){
+    /* Try up to 4 different challenge types if one fails to build cleanly.
+       Some challenge types (chain, angle, oddoneout, mirror) reject symmetric shapes,
+       so we may need to retry with a fresh shape or a different challenge type. */
+    for(let typeAttempt=0;typeAttempt<4&&!round;typeAttempt++){
       if(typeAttempt>0)challengeType=SS_pickChallengeType();
 
-      for(let attempt=0;attempt<8;attempt++){
+      for(let attempt=0;attempt<10;attempt++){
         const sh=SS_makeFreshShape(n,{branching:0.25+Math.random()*0.5});
         if(!SS_shapeOkForChallenge(sh.cells,challengeType))continue;
         const built=SS_buildRound(challengeType,sh.cells);
@@ -900,12 +1006,15 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     }
   }
 
-  /* ---------- MEMORY phase: show shape 2s then hide ---------- */
+  /* ---------- MEMORY phase: show shape for N seconds based on complexity ---------- */
   function renderMemoryPhase(round){
     const def=SS_MODES[mode];
     const zen=def.zen;
     const cs=26;
     const promptColor=SS_PALETTE[G.round%SS_PALETTE.length];
+    /* Dynamic duration: more blocks = more time to memorize. 4=1800, 5=2200, 6=2600, 7=3000, 8=3400 */
+    const blockCount=round.promptCells.length;
+    const memDuration=zen?4000:Math.min(3400,1400+blockCount*300);
     const heartsHtml=zen?'<div class="qm-zen-tag">\uD83E\uDDD8 Zen</div>':
       '<div class="wc-hearts">'+[0,1,2].map(i=>'<span class="wc-heart '+(i>=G.lives?'lost':'')+'">'+(i>=G.lives?'\uD83D\uDC94':'\u2764\uFE0F')+'</span>').join('')+'</div>';
 
@@ -916,15 +1025,15 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       SS_badgeHtml('memory')+
       '<div class="ss-memory-phase"><div class="ss-memory-label">\uD83D\uDCA1 Remember this shape!</div>'+
       '<div class="ss-disp-wrap"><div class="ss-disp" id="ssMemShape">'+SS_drawShapeSvg(round.promptCells,cs,promptColor)+'</div></div>'+
-      '<div class="ss-memory-timer" id="ssMemTimer">2.0s</div></div>';
+      '<div class="ss-memory-timer" id="ssMemTimer">'+(memDuration/1000).toFixed(1)+'s</div></div>';
 
     let elapsed=0;
     const memInterval=_si(()=>{
       elapsed+=100;
-      const remain=Math.max(0,(2000-elapsed)/1000).toFixed(1);
+      const remain=Math.max(0,(memDuration-elapsed)/1000).toFixed(1);
       const timerEl=host.querySelector('#ssMemTimer');
       if(timerEl)timerEl.textContent=remain+'s';
-      if(elapsed>=2000){
+      if(elapsed>=memDuration){
         _cti(memInterval);
         round.memoryPhase=false;
         renderRound(round);
@@ -1100,18 +1209,18 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   /* ---------- ZEN explanations ---------- */
   function SS_explainZen(round,pickedIdx){
     const ct=round.challengeType;
-    if(pickedIdx<0)return '\u23F1 Time ran out. Sahi answer highlighted hai.';
-    if(ct==='rotation')return '\uD83D\uDD04 This was a rotation match. The correct answer is a rotated version of the target shape.';
-    if(ct==='mirror')return '\uD83E\uDE9E This was a mirror challenge. The correct answer is the horizontally flipped version.';
-    if(ct==='missing')return '\uD83E\uDDE9 The highlighted block completes the original shape.';
-    if(ct==='memory')return '\uD83E\uDDE0 The correct answer matches the exact orientation you saw.';
+    if(pickedIdx<0)return '\u23F1 Time ran out. Correct answer is highlighted in green.';
+    if(ct==='rotation')return '\uD83D\uDD04 Rotation match: the correct shape is the prompt rotated by 90\u00B0, 180\u00B0, or 270\u00B0. Wrong options are mirrored or differently-structured shapes.';
+    if(ct==='mirror')return '\uD83E\uDE9E Mirror challenge: the correct shape is the prompt flipped horizontally (like in a mirror). Wrong options are only rotations \u2014 they don\'t flip.';
+    if(ct==='missing')return '\uD83E\uDDE9 The highlighted position is where the missing block belongs to recreate the original shape.';
+    if(ct==='memory')return '\uD83E\uDDE0 Memory recall: the correct shape matches the exact one you saw before it hid.';
     if(ct==='angle'){
       const angle=round.angle;
-      return '\uD83D\uDD04 The shape was rotated '+angle+'\u00B0 clockwise.';
+      return '\uD83D\uDD04 The shape was rotated '+angle+'\u00B0 clockwise. (45\u00B0 and 135\u00B0 are not quarter-turns.)';
     }
-    if(ct==='oddoneout')return '\uD83D\uDD0D Three shapes are rotations of each other. The odd one has a different structure.';
-    if(ct==='chain')return '\uD83D\uDD17 The sequence shows 0\u00B0 \u2192 90\u00B0 \u2192 180\u00B0 \u2192 270\u00B0. The missing step is the 180\u00B0 rotation.';
-    if(ct==='completion')return '\uD83D\uDD3A The correct completion fills in the missing cells to recreate the original shape.';
+    if(ct==='oddoneout')return '\uD83D\uDD0D Three shapes are rotations of each other (same shape, different angles). The odd one has a different structure.';
+    if(ct==='chain')return '\uD83D\uDD17 Sequence: 0\u00B0 \u2192 90\u00B0 \u2192 ? \u2192 270\u00B0. The missing step is the 180\u00B0 rotation \u2014 same shape, upside down.';
+    if(ct==='completion')return '\uD83D\uDD3A The correct completion fills the dashed positions to recreate the original shape exactly.';
     return 'Correct answer highlighted.';
   }
 
@@ -1147,7 +1256,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     setS('nz_ss_skill',skillStore);
 
     const rank=SS_rank(finalRound);
-    const xp=Math.max(2,Math.round(finalRound*2.7));
+    const xp=finalRound>=20?48:finalRound>=12?32:finalRound>=6?18:8;
     const insight=SS_buildInsight();
     setScore(finalRound);
     if(newPB)confetti(50);

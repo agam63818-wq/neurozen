@@ -803,7 +803,7 @@ function playStroopX(body,setScore,end,wrap,startClock){
       emoji:def.emoji,
       sub:G.score+' pts \u00B7 '+G.round+' rounds \u00B7 '+def.emoji+' '+def.label,
       value:G.score,
-      points:Math.max(2,Math.round(G.score*1.3)),
+      points:G.score>=35?45:G.score>=22?30:G.score>=10?18:8,
       starThresh:G.mode==='marathon'?[60,140,280]:G.mode==='speed'?[50,110,200]:[40,80,140],
       statsHtml:'<div class="end-stats">'+
         '<div class="row"><span>Score</span><span class="val">'+G.score+'</span></div>'+

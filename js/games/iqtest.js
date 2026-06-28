@@ -592,7 +592,7 @@ function playIQTest(body,setScore,end,wrap,startClock){
     end({
       title:cls.label,emoji:'\uD83E\uDDE0',
       sub:'Top '+(100-cls.pct)+'% \u00B7 '+correct+'/'+IQ_N+' correct'+(newPB?' \u00B7 \uD83C\uDFC6 New Best!':''),
-      value:iq,points:Math.max(3,Math.round((iq-60)*0.35)),starThresh:[90,110,130],
+      value:iq,points:iq>=130?50:iq>=110?35:iq>=90?20:10,starThresh:[90,110,130],
       statsHtml:gauge+
         '<div class="iq-result-title">\uD83E\uDDE0 Cognitive Report</div>'+
         '<div class="end-stats">'+

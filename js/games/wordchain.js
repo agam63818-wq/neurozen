@@ -106,7 +106,7 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
       title:newRec?'New Record! 🏆':(lives>0?'Chain Master! 🔗':'Chain Over! 💔'),
       emoji:'🔗',
       sub:`Longest chain: ${longest} words${perfect?' · ✨ PERFECT x2':''}`,
-      value:final,points:final*0.7,starThresh:[20,40,60],
+      value:final,points:final>=60?45:final>=40?30:final>=20?18:8,starThresh:[20,40,60],
       statsHtml:`<div class="end-stats">
         <div class="row"><span>Longest Chain</span><span class="val">${longest} words</span></div>
         <div class="row"><span>Chain Points${perfect?' (x2 perfect)':''}</span><span class="val">${chainPts}</span></div>
