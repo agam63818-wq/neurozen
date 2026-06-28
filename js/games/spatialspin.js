@@ -15,14 +15,15 @@
  *    mirror   set of shape T = { mirrorH(R) | R in rotation set } deduped, minus rotation set
  * ============================================================================ */
 
-/* ---------- MODE DEFS (4 clean modes) ---------- */
+/* ---------- MODE DEFS (5 modes, incl. Endless Survival) ---------- */
 const SS_MODES={
   classic:{label:'Classic',emoji:'\uD83C\uDFAF',sub:'Mixed challenges \u00B7 all types',time:8000,minTime:4500,decay:180,nMin:4,nMax:7,zen:false,lives:3,combo:false},
   speed  :{label:'Speed',  emoji:'\u26A1',       sub:'4.5s flat \u00B7 chain reflexes',  time:4500,minTime:4500,decay:0,  nMin:4,nMax:5,zen:false,lives:3,combo:true},
   expert :{label:'Expert', emoji:'\uD83D\uDD25',sub:'Hard challenges \u00B7 6-8 blocks', time:7000,minTime:4500,decay:130,nMin:6,nMax:8,zen:false,lives:3,combo:false},
-  zen    :{label:'Zen',    emoji:'\uD83E\uDDD8',sub:'No timer \u00B7 learn & explore',   time:0,   minTime:0,   decay:0,  nMin:4,nMax:6,zen:true, lives:Infinity,combo:false}
+  zen    :{label:'Zen',    emoji:'\uD83E\uDDD8',sub:'No timer \u00B7 learn & explore',   time:0,   minTime:0,   decay:0,  nMin:4,nMax:6,zen:true, lives:Infinity,combo:false},
+  endless:{label:'Endless',emoji:'\u267E\uFE0F', sub:'All types \u00B7 timer decays \u00B7 3 lives',time:8500,minTime:3500,decay:140,nMin:4,nMax:8,zen:false,lives:3,combo:true}
 };
-const SS_MODE_KEYS=['classic','speed','expert','zen'];
+const SS_MODE_KEYS=['classic','speed','expert','zen','endless'];
 const SS_PALETTE=['#7C3AED','#4F8EF7','#34D399','#F97316','#EC4899','#06B6D4','#A855F7','#EF4444'];
 
 /* ---------- CHALLENGE TYPE WEIGHTS PER MODE ---------- */
@@ -30,7 +31,8 @@ const SS_CHALLENGE_WEIGHTS={
   classic: {rotation:35,mirror:15,missing:15,memory:10,angle:10,oddoneout:10,completion:5,chain:0},
   speed:   {rotation:50,mirror:0,missing:0,memory:0,angle:30,oddoneout:20,completion:0,chain:0},
   expert:  {rotation:20,mirror:20,missing:10,memory:20,oddoneout:15,chain:15,completion:0,angle:0},
-  zen:     {rotation:12.5,mirror:12.5,missing:12.5,memory:12.5,angle:12.5,oddoneout:12.5,completion:12.5,chain:12.5}
+  zen:     {rotation:12.5,mirror:12.5,missing:12.5,memory:12.5,angle:12.5,oddoneout:12.5,completion:12.5,chain:12.5},
+  endless: {rotation:22,mirror:14,missing:12,memory:14,angle:10,oddoneout:12,completion:8,chain:8}
 };
 
 /* ---------- CHALLENGE TYPE META (badge system) ---------- */
@@ -147,6 +149,15 @@ function SS_isDegenerate(cells,opts){
   return false;
 }
 function SS_silhouetteKey(cells){const bb=SS_bbox(cells);return cells.length+'x'+bb.rows+'x'+bb.cols;}
+/* Perceptual overlap: how many cells of a are also in b (canonical positions).
+   Returns 0..1 ratio relative to smaller shape. Used to reject visual twins. */
+function SS_cellsOverlap(a,b){
+  const na=SS_norm(a),nb=SS_norm(b);
+  const sb=new Set(nb.map(c=>c[0]+','+c[1]));
+  let hit=0;
+  for(let i=0;i<na.length;i++){if(sb.has(na[i][0]+','+na[i][1]))hit++;}
+  return hit/Math.min(na.length,nb.length);
+}
 
 /* ====================================================================== */
 function playSpatialSpin(body,setScore,end,wrap,startClock){
@@ -339,14 +350,37 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   }
   function SS_distNearMatch(target,banSet){
     const targetBB=SS_bbox(target);
-    for(let t=0;t<10;t++){
+    const targetRot=SS_rotationSet(target);
+    for(let t=0;t<12;t++){
       const sh=SS_makeFreshShape(target.length,{branching:0.5+Math.random()*0.3});
       const bb=SS_bbox(sh.cells);
       if(Math.abs(bb.rows*bb.cols-targetBB.rows*targetBB.cols)>2)continue;
       const h=SS_hash(sh.cells);
       if(banSet.has(h))continue;
-      const rot=SS_rotationSet(target);if(rot.has(h))continue;
+      if(targetRot.has(h))continue;
+      /* reject if any rotation of this candidate is already banned (visual dupe) */
+      const candRot=SS_rotationSet(sh.cells);
+      let clash=false;
+      candRot.forEach((_,ch)=>{if(banSet.has(ch))clash=true;});
+      if(clash)continue;
       return{cells:sh.cells,style:'nearMatch'};
+    }
+    return null;
+  }
+  /* Generate a shape whose bbox visibly differs from target (rows or cols differ by >=2).
+     Used so distractors don't look like the same silhouette as the correct answer. */
+  function SS_distDifferentShape(target,banSet){
+    const targetBB=SS_bbox(target);
+    const targetRot=SS_rotationSet(target);
+    for(let t=0;t<12;t++){
+      const sh=SS_makeFreshShape(target.length,{branching:0.2+Math.random()*0.6});
+      const bb=SS_bbox(sh.cells);
+      /* must look visibly different in silhouette */
+      if(Math.abs(bb.rows-targetBB.rows)+Math.abs(bb.cols-targetBB.cols)<2)continue;
+      const h=SS_hash(sh.cells);
+      if(banSet.has(h))continue;
+      if(targetRot.has(h))continue;
+      return{cells:sh.cells,style:'differentShape'};
     }
     return null;
   }
@@ -401,44 +435,41 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   function SS_buildRotation(target){
     const rotSet=SS_rotationSet(target);
     const rotList=Array.from(rotSet.values());
-    /* Require at least 2 distinct rotations — otherwise the shape has full rotational symmetry
-       and we can't distinguish prompt from a rotated answer (would be the SAME shape). */
     if(rotList.length<2)return null;
     const promptCells=rotList[0];
     const nonIdentity=rotList.slice(1);
     const correctCells=nonIdentity[Math.floor(Math.random()*nonIdentity.length)];
     const banSet=new Set();
-    /* Ban all rotations of the correct answer — wrong options must be visually distinguishable */
     rotSet.forEach((_,h)=>banSet.add(h));
     const wrong=[];
     const tryAdd=(g)=>{
       if(!g)return;
       const h=SS_hash(g.cells);
       if(banSet.has(h))return;
-      /* extra safety: reject if rotation-equivalent to any existing option */
+      /* reject if rotation-equivalent to any existing option */
       for(const w of wrong){
         if(SS_rotationSet(w.cells).has(h))return;
+        /* reject visual twin: >=85% cell overlap with any existing option */
+        if(SS_cellsOverlap(w.cells,g.cells)>=0.85)return;
       }
       banSet.add(h);
       wrong.push(g);
     };
-    /* difficulty-aware distractors */
+    /* New mix: mirror + near-match + different-shape — perceptually distinct */
     const isHard=mode==='expert';
     if(isHard){
       tryAdd(SS_distMirror(target,banSet,0));
-      tryAdd(SS_distMirror(target,banSet,2));
-      tryAdd(SS_distBranchSwap(target,banSet)||SS_distNearMatch(target,banSet));
+      tryAdd(SS_distMirror(target,banSet,2)||SS_distBranchSwap(target,banSet));
+      tryAdd(SS_distNearMatch(target,banSet));
     }else{
       tryAdd(SS_distMirror(target,banSet,0));
-      tryAdd(SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet));
-      tryAdd(SS_distRandom(target,banSet));
+      tryAdd(SS_distNearMatch(target,banSet));
+      tryAdd(SS_distDifferentShape(target,banSet)||SS_distRandom(target,banSet));
     }
     let safety=0;
     while(wrong.length<3&&safety<8){
       safety++;
-      const f=SS_distRandom(target,banSet);
-      if(!f)break;
-      tryAdd(f);
+      tryAdd(SS_distRandom(target,banSet));
     }
     if(wrong.length<3)return null;
     const opts=[{cells:correctCells,correct:true,style:'rotation'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
@@ -446,18 +477,15 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     return{challengeType:'rotation',target:target,promptCells:promptCells,options:opts};
   }
 
-  /* 2. MIRROR CHALLENGE */
+  /* 2. MIRROR CHALLENGE — NEW: max 1 rotation filler; rest are real shape distractors */
   function SS_buildMirror(target){
     const mirSet=SS_mirrorSet(target);
     const mirList=Array.from(mirSet.values());
-    /* Need at least 1 mirror that is DISTINCT from any rotation (asymmetric shape) */
     if(!mirList.length)return null;
     const correctCells=mirList[Math.floor(Math.random()*mirList.length)];
     const rotSet=SS_rotationSet(target);
-    /* Ban target's entire rotation set — prompt and its rotations are not the mirror answer */
     const banSet=new Set();
     rotSet.forEach((_,h)=>banSet.add(h));
-    /* Ban all rotations of the correct mirror too — wrong options can't be rotation-equivalent */
     const correctRot=SS_rotationSet(correctCells);
     correctRot.forEach((_,h)=>banSet.add(h));
     const rotList=Array.from(rotSet.values());
@@ -467,21 +495,25 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       if(!g)return;
       const h=SS_hash(g.cells);
       if(banSet.has(h))return;
-      /* reject if this is itself a mirror of the prompt (would be 2nd correct answer) */
       if(mirSet.has(h))return;
+      /* reject visual twin */
+      for(const w of wrong){if(SS_cellsOverlap(w.cells,g.cells)>=0.85)return;}
       banSet.add(h);
       wrong.push(g);
     };
-    /* fillers: rotations of the target (NOT mirrors) */
+    /* AT MOST 1 rotation-of-target filler (was up to 3 — made the mirror answer obvious) */
     const fillers=rotList.filter(c=>SS_hash(c)!==SS_hash(promptCells));
-    for(let i=0;i<fillers.length&&wrong.length<3;i++){
-      wrong.push({cells:fillers[i],style:'rotationFiller'});
-      banSet.add(SS_hash(fillers[i]));
+    if(fillers.length){
+      wrong.push({cells:fillers[0],style:'rotationFiller'});
+      banSet.add(SS_hash(fillers[0]));
     }
+    /* Remaining slots: near-match and different-shape for genuine challenge */
+    tryAdd(SS_distNearMatch(target,banSet));
+    tryAdd(SS_distDifferentShape(target,banSet)||SS_distRandom(target,banSet));
     let safety=0;
     while(wrong.length<3&&safety<8){
       safety++;
-      tryAdd(SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet));
+      tryAdd(SS_distRandom(target,banSet));
     }
     if(wrong.length<3)return null;
     const opts=[{cells:correctCells,correct:true,style:'mirrorAnswer'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
@@ -526,24 +558,36 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     return{challengeType:'missing',target:target,partial:partialNorm,options:opts};
   }
 
-  /* 4. ROTATION MEMORY */
+  /* 4. SHAPE MEMORY — NEW: distractors are STRUCTURALLY DIFFERENT shapes,
+     not other rotations of the same shape (which was impossible to disambiguate).
+     Tests whether you remember the SHAPE, not its orientation. */
   function SS_buildMemory(target){
     const rotSet=SS_rotationSet(target);
     const rotList=Array.from(rotSet.values());
     const promptCells=rotList[0];
-    const banSet=new Set();banSet.add(SS_hash(promptCells));
+    const banSet=new Set();
+    /* Ban entire rotation set: wrong options must be structurally different shapes */
+    rotSet.forEach((_,h)=>banSet.add(h));
     const wrong=[];
-    const tryAdd=(g)=>{if(g){const h=SS_hash(g.cells);if(!banSet.has(h)){banSet.add(h);wrong.push(g);}}};
-    /* wrong options: other rotations + different shapes */
-    for(let i=1;i<rotList.length&&wrong.length<2;i++){
-      const h=SS_hash(rotList[i]);if(!banSet.has(h)){banSet.add(h);wrong.push({cells:rotList[i],style:'otherRotation'});}
-    }
-    while(wrong.length<3){
-      const f=SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet);
-      if(!f)break;banSet.add(SS_hash(f.cells));wrong.push(f);
+    const tryAdd=(g)=>{
+      if(!g)return;
+      const h=SS_hash(g.cells);
+      if(banSet.has(h))return;
+      for(const w of wrong){if(SS_cellsOverlap(w.cells,g.cells)>=0.85)return;}
+      banSet.add(h);
+      wrong.push(g);
+    };
+    /* 1 mirror (subtle distractor) + 1 near-match + 1 different-shape */
+    tryAdd(SS_distMirror(target,banSet,0));
+    tryAdd(SS_distNearMatch(target,banSet));
+    tryAdd(SS_distDifferentShape(target,banSet)||SS_distRandom(target,banSet));
+    let safety=0;
+    while(wrong.length<3&&safety<8){
+      safety++;
+      tryAdd(SS_distRandom(target,banSet));
     }
     if(wrong.length<3)return null;
-    const opts=[{cells:promptCells,correct:true,style:'sameOrientation'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
+    const opts=[{cells:promptCells,correct:true,style:'sameShape'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
     return{challengeType:'memory',target:target,promptCells:promptCells,options:opts,memoryPhase:true};
   }
@@ -568,32 +612,30 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     return{challengeType:'angle',target:target,promptCells:promptCells,afterCells:afterCells,options:opts,angle:angle};
   }
 
-  /* 6. ODD ONE OUT */
+  /* 6. ODD ONE OUT — odd shape is GUARANTEED visually distinguishable from family.
+     Removed the expert-mode near-identical path that caused ambiguity. */
   function SS_buildOddOneOut(target){
     const rotSet=SS_rotationSet(target);
     const rotList=Array.from(rotSet.values());
-    /* Need at least 3 distinct rotations to form a family of 3 */
     if(rotList.length<3)return null;
-    /* pick 3 distinct family members — already unique by Map */
     SS_shuffle(rotList);
     const familyPicks=rotList.slice(0,3);
-    /* Hard verify: all 3 family picks have distinct hashes */
     const famHashes=new Set(familyPicks.map(SS_hash));
     if(famHashes.size!==3)return null;
-    /* Generate an odd shape: canonical hash must differ AND must not be rotation-equivalent
-       to any family pick (sanity — they share canonical so this is redundant but cheap) */
+    const targetBB=SS_bbox(target);
     let oddShape=null;
-    const isExpert=mode==='expert';
-    for(let t=0;t<15;t++){
-      const sh=SS_makeFreshShape(target.length,{branching:0.4+Math.random()*0.4});
+    for(let t=0;t<20;t++){
+      const sh=SS_makeFreshShape(target.length,{branching:0.2+Math.random()*0.6});
       if(SS_canonicalHash(sh.cells)===SS_canonicalHash(target))continue;
-      if(isExpert){
-        const bb1=SS_bbox(target),bb2=SS_bbox(sh.cells);
-        if(Math.abs(bb1.rows-bb2.rows)+Math.abs(bb1.cols-bb2.cols)>2)continue;
-      }
-      /* reject if odd shape happens to match any family member's hash */
+      const bb=SS_bbox(sh.cells);
+      /* require visible silhouette difference: bbox rows OR cols differ by >=1 */
+      if(Math.abs(bb.rows-targetBB.rows)+Math.abs(bb.cols-targetBB.cols)<1)continue;
       const oh=SS_hash(sh.cells);
       if(famHashes.has(oh))continue;
+      /* reject if odd shape has too-high cell overlap with any family pick (visual twin) */
+      let twin=false;
+      for(const f of familyPicks){if(SS_cellsOverlap(f,sh.cells)>=0.75){twin=true;break;}}
+      if(twin)continue;
       oddShape=sh.cells;break;
     }
     if(!oddShape)return null;
@@ -603,36 +645,37 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     return{challengeType:'oddoneout',target:target,options:opts};
   }
 
-  /* 7. ROTATION CHAIN */
+  /* 7. ROTATION CHAIN — NEW: removed s0 from distractors (it's already shown in the
+     chain at position 0°, so duplicating it as a wrong option confused users). */
   function SS_buildChain(target){
-    /* Show: original (0°) -> step1 (90°) -> [?] (180°) -> step3 (270°) */
     const s0=SS_norm(target);
     const s1=SS_rotateCW(s0);
-    const s2=SS_rotateCW(s1); /* correct answer = 180° rotation */
+    const s2=SS_rotateCW(s1); /* correct = 180° */
     const s3=SS_rotateCW(s2);
-    /* CRITICAL: if the shape has 180° rotational symmetry (s0 === s2), the "correct"
-       answer would be visually identical to the s0 "distractor", making it ambiguous.
-       Skip this shape — caller will try another type. */
     if(SS_hash(s0)===SS_hash(s2))return null;
-    /* Also skip if 90° symmetry makes s1 === s3 (still solvable but visually 2 same options) */
     if(SS_hash(s1)===SS_hash(s3))return null;
-    const banSet=new Set();banSet.add(SS_hash(s2));
+    const banSet=new Set();
+    banSet.add(SS_hash(s2));
+    /* CRITICAL: also ban s0 since it's visible in the chain. Showing it as a wrong
+       option creates a "the prompt is in the options" trap that's just confusing. */
+    banSet.add(SS_hash(s0));
     const wrong=[];
     const tryAdd=(g)=>{
       if(!g)return;
       const h=SS_hash(g.cells);
       if(banSet.has(h))return;
+      for(const w of wrong){if(SS_cellsOverlap(w.cells,g.cells)>=0.85)return;}
       banSet.add(h);
       wrong.push(g);
     };
-    /* wrong: s0, s1, s3 (all guaranteed distinct from s2 now) */
-    tryAdd({cells:s0,style:'chainWrong0'});
+    /* Wrong options: s1 (the previous step), s3 (the next step), and a near-match. */
     tryAdd({cells:s1,style:'chainWrong1'});
     tryAdd({cells:s3,style:'chainWrong3'});
+    tryAdd(SS_distNearMatch(target,banSet)||SS_distMirror(target,banSet,0)||SS_distRandom(target,banSet));
     let safety=0;
     while(wrong.length<3&&safety<6){
       safety++;
-      tryAdd(SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet));
+      tryAdd(SS_distRandom(target,banSet));
     }
     if(wrong.length<3)return null;
     const opts=[{cells:s2,correct:true,style:'chainCorrect'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
@@ -640,12 +683,14 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     return{challengeType:'chain',target:target,chainSteps:{s0:s0,s1:s1,s2:s2,s3:s3},options:opts};
   }
 
-  /* 8. SHAPE COMPLETION */
+  /* 8. SHAPE COMPLETION — NEW: distractors are ALTERNATIVE valid completions of the
+     same visible base (placing hidden cells in different frontier spots), not random
+     shapes. Makes it feel like "which completion is right?" not "which has the right
+     block count?" — the old version was trivial because random shapes had visibly
+     different silhouettes. */
   function SS_buildCompletion(target){
     if(target.length<4)return null;
-    /* Try multiple random partitions — visible half must be connected AND the original target
-       must be the UNIQUE completion (no wrong option can also complete the visible part). */
-    let visible=null,hidden=null;
+    let visible=null,hidden=null,visibleNorm=null;
     for(let attempt=0;attempt<8;attempt++){
       const half=Math.ceil(target.length/2);
       const indices=target.map((_,i)=>i);
@@ -654,26 +699,51 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       const hiddenIdx=indices.slice(half);
       const vis=visibleIdx.map(i=>target[i]);
       if(SS_isConnected(vis)){
-        visible=vis;hidden=hiddenIdx.map(i=>target[i]);break;
+        visible=vis;hidden=hiddenIdx.map(i=>target[i]);
+        visibleNorm=SS_norm(visible);
+        break;
       }
     }
     if(!visible)return null;
-    const visibleNorm=SS_norm(visible);
     const targetCanon=SS_canonicalHash(target);
-    const banSet=new Set();banSet.add(SS_hash(SS_norm(target)));
-    /* Also ban the rotation set of target to keep distractors visually distinct from correct */
+    const targetNorm=SS_norm(target);
+    const banSet=new Set();
+    banSet.add(SS_hash(targetNorm));
     SS_rotationSet(target).forEach((_,h)=>banSet.add(h));
     const wrong=[];
-    for(let t=0;t<15&&wrong.length<3;t++){
-      const sh=SS_makeFreshShape(target.length,{branching:0.4+Math.random()*0.4});
-      const h=SS_hash(sh.cells);
-      if(banSet.has(h))continue;
-      if(SS_canonicalHash(sh.cells)===targetCanon)continue;
+    const tryAdd=(g)=>{
+      if(!g)return;
+      const h=SS_hash(g.cells);
+      if(banSet.has(h))return;
+      if(SS_canonicalHash(g.cells)===targetCanon)return;
+      for(const w of wrong){if(SS_cellsOverlap(w.cells,g.cells)>=0.9)return;}
       banSet.add(h);
-      wrong.push({cells:sh.cells,style:'completionWrong'});
+      wrong.push(g);
+    };
+    /* Try to generate up to 2 ALTERNATIVE valid completions of visibleNorm —
+       attach hidden cells in different frontier positions to form connected shapes. */
+    const hiddenCount=target.length-visible.length;
+    for(let attempt=0;attempt<24&&wrong.length<2;attempt++){
+      let cur=visibleNorm.slice();
+      let ok=true;
+      for(let h=0;h<hiddenCount;h++){
+        const front=SS_frontier(cur);
+        if(!front.length){ok=false;break;}
+        const pick=front[Math.floor(Math.random()*front.length)];
+        cur.push(pick);
+        cur=SS_norm(cur);
+      }
+      if(!ok||cur.length!==target.length)continue;
+      tryAdd({cells:cur,style:'altCompletion'});
+    }
+    /* Fill remaining slot(s) with near-match for variety */
+    while(wrong.length<3){
+      const cand=SS_distNearMatch(target,banSet)||SS_distRandom(target,banSet);
+      if(!cand)break;
+      tryAdd(cand);
     }
     if(wrong.length<3)return null;
-    const opts=[{cells:SS_norm(target),correct:true,style:'completionCorrect'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
+    const opts=[{cells:targetNorm,correct:true,style:'completionCorrect'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
     return{challengeType:'completion',target:target,visibleCells:visibleNorm,hiddenCells:hidden,options:opts};
   }
@@ -693,11 +763,11 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     }
   }
 
-  /* ---------- correctness verifier ---------- */
+  /* ---------- correctness verifier (hardened) ---------- */
   function SS_verifyRound(round){
     if(!round||!round.options||round.options.length!==4)return false;
     if(round.options.filter(o=>o.correct).length!==1)return false;
-    /* Hard guard: no two options should share the same shape hash (prevents 'two correct' feel) */
+    /* Hard guard: no two options share the same hash */
     if(round.options[0].cells){
       const seen=new Set();
       for(const o of round.options){
@@ -706,8 +776,15 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         if(seen.has(h))return false;
         seen.add(h);
       }
+      /* Visual-twin guard: no two options share >=90% cell overlap */
+      for(let i=0;i<round.options.length;i++){
+        for(let j=i+1;j<round.options.length;j++){
+          if(!round.options[i].cells||!round.options[j].cells)continue;
+          if(SS_cellsOverlap(round.options[i].cells,round.options[j].cells)>=0.90)return false;
+        }
+      }
     }
-    /* For rotation challenge: ensure no WRONG option is rotation-equivalent to the correct one */
+    /* Rotation: wrong options must NOT be rotation-equivalent to correct */
     if(round.challengeType==='rotation'){
       const correct=round.options.find(o=>o.correct);
       if(!correct||!correct.cells)return false;
@@ -717,7 +794,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         if(correctRot.has(SS_hash(o.cells)))return false;
       }
     }
-    /* For mirror: wrong options must NOT also be mirrors of the prompt */
+    /* Mirror: wrong options must NOT also be mirrors of the prompt */
     if(round.challengeType==='mirror'&&round.promptCells){
       const promptMir=SS_mirrorSet(round.promptCells);
       for(const o of round.options){
@@ -725,8 +802,16 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         if(promptMir.has(SS_hash(o.cells)))return false;
       }
     }
-    /* For oddoneout: the 3 wrong (family) options must all be in target's rotation set,
-       and the correct (odd) must NOT be */
+    /* Memory: wrong options must NOT be ANY rotation of the prompt (else user can't
+       distinguish them from the correct answer — they all look like the same shape) */
+    if(round.challengeType==='memory'&&round.promptCells){
+      const promptRot=SS_rotationSet(round.promptCells);
+      for(const o of round.options){
+        if(o.correct||!o.cells)continue;
+        if(promptRot.has(SS_hash(o.cells)))return false;
+      }
+    }
+    /* Odd-one-out: family must all be in rotation set; odd must NOT be */
     if(round.challengeType==='oddoneout'&&round.target){
       const targetRot=SS_rotationSet(round.target);
       for(const o of round.options){
@@ -734,6 +819,14 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         const inRot=targetRot.has(SS_hash(o.cells));
         if(o.correct&&inRot)return false;
         if(!o.correct&&!inRot)return false;
+      }
+    }
+    /* Chain: no option equals s0 (the original orientation already shown in chain) */
+    if(round.challengeType==='chain'&&round.chainSteps){
+      const s0h=SS_hash(round.chainSteps.s0);
+      for(const o of round.options){
+        if(!o.cells)continue;
+        if(SS_hash(o.cells)===s0h)return false;
       }
     }
     return true;
@@ -806,22 +899,15 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     return'<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">'+inner+'</svg>';
   }
   function SS_drawMissingPrompt(partial,cs,color){
-    const front=SS_frontier(partial);
-    const all=partial.concat(front);
-    let mr=Infinity,mc=Infinity,Mr=-Infinity,Mc=-Infinity;
-    for(let i=0;i<all.length;i++){
-      if(all[i][0]<mr)mr=all[i][0];if(all[i][1]<mc)mc=all[i][1];
-      if(all[i][0]>Mr)Mr=all[i][0];if(all[i][1]>Mc)Mc=all[i][1];
-    }
-    const rows=Mr-mr+1,cols=Mc-mc+1,p=3;
-    const w=cols*cs+p*2,h=rows*cs+p*2;
+    /* Cleaner prompt: shows only the partial shape — each option's ghost-cell preview
+       is the candidate marker. Previous version showed `?` on EVERY frontier position,
+       cluttering the prompt and visually leaking all candidate slots. */
+    const partialNorm=SS_norm(partial);
+    const bb=SS_bbox(partialNorm);
+    const p=3,w=bb.cols*cs+p*2,h=bb.rows*cs+p*2;
     let inner='';
-    for(let i=0;i<partial.length;i++){
-      inner+='<rect x="'+((partial[i][1]-mc)*cs+p)+'" y="'+((partial[i][0]-mr)*cs+p)+'" width="'+(cs-2)+'" height="'+(cs-2)+'" rx="4" fill="'+color+'"/>';
-    }
-    for(let i=0;i<front.length;i++){
-      inner+='<rect x="'+((front[i][1]-mc)*cs+p)+'" y="'+((front[i][0]-mr)*cs+p)+'" width="'+(cs-2)+'" height="'+(cs-2)+'" rx="4" fill="none" stroke="#94A3B8" stroke-width="2" stroke-dasharray="3 3"/>';
-      inner+='<text x="'+((front[i][1]-mc)*cs+p+cs/2)+'" y="'+((front[i][0]-mr)*cs+p+cs/2+5)+'" text-anchor="middle" font-size="'+(cs*0.55)+'" fill="#94A3B8" font-weight="700">?</text>';
+    for(let i=0;i<partialNorm.length;i++){
+      inner+='<rect x="'+(partialNorm[i][1]*cs+p)+'" y="'+(partialNorm[i][0]*cs+p)+'" width="'+(cs-2)+'" height="'+(cs-2)+'" rx="4" fill="'+color+'"/>';
     }
     return'<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">'+inner+'</svg>';
   }
@@ -883,9 +969,10 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const modesEl=screen.querySelector('#ssModes');
     const modeDescriptions={
       classic:'Balanced. Mixed challenge types. 3 lives, timer decays.',
-      speed:'3.5s flat. Rotation + angle + odd-one-out only. Combos!',
+      speed:'4.5s flat. Rotation + angle + odd-one-out only. Combos!',
       expert:'Hard challenges only. 6-8 blocks. Mirror traps.',
-      zen:'No timer, no lives. All types with explanations.'
+      zen:'No timer, no lives. All types with explanations.',
+      endless:'All 8 types. Timer decays. 3 lives. How far can you go?'
     };
     SS_MODE_KEYS.forEach(k=>{
       const m=SS_MODES[k];
