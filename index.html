@@ -4,6 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#7C3AED" />
+<!-- Prevent white flash between native splash and HTML splash by painting the
+     root background the exact same purple as the native splash + manifest. -->
+<style>html,body{background-color:#7C3AED;margin:0;padding:0;}</style>
 <meta name="description" content="NeuroZen — Train your brain with 10 science-inspired games. Build focus, memory, logic & speed. Free, offline, no account needed." />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -23,7 +26,9 @@
   #appSplash{
     position:fixed;inset:0;z-index:99999;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
-    background:linear-gradient(160deg,#6D28D9 0%,#7C3AED 45%,#4F8EF7 100%);
+    /* Start at exactly #7C3AED so the very first visible pixel matches the
+       native Android splash + manifest background_color — zero visible seam. */
+    background:linear-gradient(160deg,#7C3AED 0%,#7C3AED 25%,#6D28D9 55%,#4F8EF7 100%);
     transition:opacity .4s ease, visibility .4s ease;
   }
   #appSplash.splash-hide{opacity:0;visibility:hidden;pointer-events:none;}
@@ -80,13 +85,29 @@
 <script src="js/games/reactionlab.js"></script>
 <script src="js/games/spatialspin.js"></script>
 <script>
+  /* Wait for the app to finish first paint before fading the splash, so the
+     handoff hides the loading work instead of revealing a partially-styled page.
+     Total visible splash time ≈ max(load, 480ms) then 400ms fade-out. */
   (function(){
     var splash=document.getElementById('appSplash');
     if(!splash)return;
-    setTimeout(function(){
+    var hidden=false;
+    function hide(){
+      if(hidden)return;hidden=true;
       splash.classList.add('splash-hide');
-      setTimeout(function(){splash.remove();},420);
-    },480);
+      setTimeout(function(){if(splash.parentNode)splash.parentNode.removeChild(splash);},420);
+    }
+    var minMs=480;
+    var started=Date.now();
+    function trigger(){
+      var elapsed=Date.now()-started;
+      var wait=Math.max(0,minMs-elapsed);
+      setTimeout(hide,wait);
+    }
+    if(document.readyState==='complete')trigger();
+    else window.addEventListener('load',trigger,{once:true});
+    /* Safety net: never let the splash stick around longer than 3s if 'load' is slow */
+    setTimeout(hide,3000);
   })();
 </script>
 <script>

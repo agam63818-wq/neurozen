@@ -26,25 +26,86 @@ const SS_MODES={
 const SS_MODE_KEYS=['classic','speed','expert','zen','endless'];
 const SS_PALETTE=['#7C3AED','#4F8EF7','#34D399','#F97316','#EC4899','#06B6D4','#A855F7','#EF4444'];
 
-/* ---------- CHALLENGE TYPE WEIGHTS PER MODE ---------- */
+/* ---------- CURATED SHAPE LIBRARY ---------- */
+/* Each entry is a base polyomino (4-8 cells), hand-picked for visual clarity.
+   Organized in families so players start recognizing shape "personalities." */
+const SS_SHAPE_LIBRARY={
+  L:[
+    [[0,0],[1,0],[2,0],[2,1]],
+    [[0,0],[0,1],[1,0],[2,0]],
+    [[0,0],[1,0],[2,0],[2,1],[2,2]],
+  ],
+  T:[
+    [[0,0],[0,1],[0,2],[1,1]],
+    [[0,1],[1,0],[1,1],[1,2],[2,1]],
+  ],
+  Z:[
+    [[0,0],[0,1],[1,1],[1,2]],
+    [[0,1],[0,2],[1,0],[1,1]],
+  ],
+  Arrow:[
+    [[0,1],[1,0],[1,1],[1,2],[2,1]],
+    [[0,0],[1,0],[1,1],[2,1],[2,2]],
+  ],
+  Snake:[
+    [[0,0],[1,0],[1,1],[2,1],[2,2]],
+    [[0,0],[0,1],[1,1],[1,2],[2,2]],
+  ],
+  Hook:[
+    [[0,0],[0,1],[0,2],[1,2],[2,2],[2,1]],
+    [[0,0],[1,0],[2,0],[2,1],[2,2],[1,2]],
+  ],
+  Cross:[
+    [[0,1],[1,0],[1,1],[1,2],[2,1]],
+  ],
+  Bridge:[
+    [[0,0],[0,2],[1,0],[1,1],[1,2]],
+    [[0,0],[0,1],[0,2],[1,0],[1,2]],
+  ],
+  Fork:[
+    [[0,0],[0,2],[1,0],[1,1],[1,2],[2,1]],
+  ],
+  Stair:[
+    [[0,0],[1,0],[1,1],[2,1],[2,2]],
+    [[0,0],[0,1],[1,1],[1,2],[2,2],[2,3]],
+  ],
+};
+const SS_SHAPE_FAMILY_KEYS=Object.keys(SS_SHAPE_LIBRARY);
+
+/* V5: SINGLE shape color used for prompt and every option.
+   Shape geometry is the only signal that should matter — never color. */
+const SS_SHAPE_COLOR='#7C3AED';
+
+/* Pick a random base shape from the library, optionally filtered by min/max cell count */
+function SS_pickLibraryShape(minN,maxN){
+  const pool=[];
+  SS_SHAPE_FAMILY_KEYS.forEach(fam=>{
+    SS_SHAPE_LIBRARY[fam].forEach(shape=>{
+      if(shape.length>=minN&&shape.length<=maxN)pool.push({family:fam,cells:shape});
+    });
+  });
+  if(!pool.length)return null;
+  return pool[Math.floor(Math.random()*pool.length)];
+}
+
+/* ---------- CHALLENGE TYPE WEIGHTS PER MODE (V5: 6 categories) ---------- */
+/* angle is folded into rotation, chain is folded into memory */
 const SS_CHALLENGE_WEIGHTS={
-  classic: {rotation:35,mirror:15,missing:15,memory:10,angle:10,oddoneout:10,completion:5,chain:0},
-  speed:   {rotation:50,mirror:0,missing:0,memory:0,angle:30,oddoneout:20,completion:0,chain:0},
-  expert:  {rotation:20,mirror:20,missing:10,memory:20,oddoneout:15,chain:15,completion:0,angle:0},
-  zen:     {rotation:12.5,mirror:12.5,missing:12.5,memory:12.5,angle:12.5,oddoneout:12.5,completion:12.5,chain:12.5},
-  endless: {rotation:22,mirror:14,missing:12,memory:14,angle:10,oddoneout:12,completion:8,chain:8}
+  classic: {rotation:40,mirror:20,completion:15,missing:10,oddoneout:10,memory:5},
+  speed:   {rotation:60,mirror:0, completion:0, missing:0, oddoneout:40,memory:0},
+  expert:  {rotation:25,mirror:25,completion:10,missing:10,oddoneout:15,memory:15},
+  zen:     {rotation:25,mirror:18,completion:18,missing:13,oddoneout:13,memory:13},
+  endless: {rotation:35,mirror:18,completion:15,missing:10,oddoneout:12,memory:10}
 };
 
-/* ---------- CHALLENGE TYPE META (badge system) ---------- */
+/* ---------- CHALLENGE TYPE META (badge system, V5: unified purple theme) ---------- */
 const SS_CHALLENGE_META={
-  rotation:  {emoji:'\uD83D\uDFE3',name:'ROTATION',   color:'#7C3AED',instruction:'Tap the correct rotation'},
-  mirror:    {emoji:'\uD83D\uDD34',name:'MIRROR',      color:'#EC4899',instruction:'Find the MIRROR image'},
-  missing:   {emoji:'\uD83D\uDFE2',name:'MISSING',     color:'#34D399',instruction:'Where does the missing block go?'},
-  memory:    {emoji:'\uD83D\uDFE0',name:'MEMORY',      color:'#F97316',instruction:'Remember the shape!'},
-  angle:     {emoji:'\uD83D\uDFE1',name:'ANGLE',       color:'#EAB308',instruction:'How much did it rotate?'},
-  oddoneout: {emoji:'\uD83D\uDD35',name:'ODD ONE',     color:'#3B82F6',instruction:'Find the shape that doesn\'t belong'},
-  chain:     {emoji:'\u26AB',       name:'SEQUENCE',    color:'#6B7280',instruction:'Pick the missing step'},
-  completion:{emoji:'\uD83D\uDD3A',name:'COMPLETE',    color:'#8B5CF6',instruction:'Complete the shape'}
+  rotation:  {emoji:'\uD83D\uDD04',name:'ROTATION',     color:'#7C3AED',instruction:'Find the matching rotation'},
+  mirror:    {emoji:'\uD83E\uDE9E',name:'MIRROR',       color:'#7C3AED',instruction:'Find the mirrored version'},
+  completion:{emoji:'\uD83E\uDDE9',name:'COMPLETE',     color:'#7C3AED',instruction:'Which shape completes the pattern?'},
+  missing:   {emoji:'\uD83E\uDDF1',name:'MISSING PIECE',color:'#7C3AED',instruction:'Which chunk fits the gap?'},
+  oddoneout: {emoji:'\uD83D\uDC41\uFE0F',name:'ODD SHAPE',color:'#7C3AED',instruction:'Find the shape that doesn\'t belong'},
+  memory:    {emoji:'\uD83E\uDDE0',name:'MEMORY',       color:'#7C3AED',instruction:'Remember, then choose'},
 };
 
 /* ---------- SHAPE MATH (KEPT EXACTLY — mathematically verified) ---------- */
@@ -123,7 +184,7 @@ function SS_frontier(cells){
   }
   return Array.from(front).map(k=>{const p=k.split(',');return[parseInt(p[0],10),parseInt(p[1],10)];});
 }
-function SS_genShape(n,opts){
+function SS_genRandomShapeFallback(n,opts){
   const branching=opts&&typeof opts.branching==='number'?opts.branching:0.5;
   const cells=[[0,0]];
   while(cells.length<n){
@@ -138,6 +199,20 @@ function SS_genShape(n,opts){
     cells.push(pick);
   }
   return SS_norm(cells);
+}
+/* Backward-compat alias — kept so any other call sites continue to work. */
+function SS_genShape(n,opts){return SS_genRandomShapeFallback(n,opts);}
+
+/* V5: prefer curated library shapes 80% of the time for visual consistency.
+   Falls back to procedural generation when the library has no shape in [minN,maxN]
+   or 20% of the time for variety. The result is normalized via SS_norm. */
+function SS_genTargetShape(minN,maxN,opts){
+  if(Math.random()<0.8){
+    const lib=SS_pickLibraryShape(minN,maxN);
+    if(lib)return SS_norm(lib.cells);
+  }
+  const n=minN+Math.floor(Math.random()*(maxN-minN+1));
+  return SS_genRandomShapeFallback(n,opts);
 }
 function SS_isDegenerate(cells,opts){
   if(cells.length<3)return true;
@@ -159,6 +234,35 @@ function SS_cellsOverlap(a,b){
   return hit/Math.min(na.length,nb.length);
 }
 
+/* ---------- V5: educational feedback for wrong answers ---------- */
+function SS_explainMistake(pickedOption,round){
+  const mt=pickedOption&&pickedOption.mistakeType;
+  const MSGS={
+    wrongAngle:'Close! That\u2019s a different rotation angle \u2014 look again at how far it turned.',
+    mirrorConfusion:'That\u2019s a mirror image, not a rotation. Mirrors flip the shape; rotations spin it.',
+    differentShape:'That shape doesn\u2019t match at all \u2014 check the block count and arrangement.',
+    rotationNotMirror:'That\u2019s a rotation, not a mirror. Try flipping the shape instead of turning it.',
+    wrongLocation:'Close, but the missing piece belongs in a different spot \u2014 check the outline shape.',
+    almostComplete:'Almost! That option is missing one more block.',
+    sameFamily:'That shape belongs to the same family as the others \u2014 the odd one looks structurally different.',
+  };
+  return MSGS[mt]||'Not quite \u2014 take a closer look at the shape\u2019s orientation.';
+}
+
+/* V5: adaptive weight adjustment based on per-category accuracy.
+   Boost weak categories (<60%), reduce mastered (>85%), only after 3+ attempts. */
+function SS_getAdaptiveWeights(baseWeights,skill){
+  const adjusted=Object.assign({},baseWeights);
+  Object.keys(adjusted).forEach(ct=>{
+    const s=skill[ct];
+    if(!s||s.n<3)return;
+    const acc=s.ok/s.n;
+    if(acc<0.6)adjusted[ct]=adjusted[ct]*1.4;
+    else if(acc>0.85)adjusted[ct]=adjusted[ct]*0.7;
+  });
+  return adjusted;
+}
+
 /* ====================================================================== */
 function playSpatialSpin(body,setScore,end,wrap,startClock){
   let mode='classic';
@@ -168,8 +272,12 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     barT:null,roundStart:0,roundOffPause:0,timerMs:0,
     pending:false,
     challengeHistory:[],   /* anti-repetition: last 5 challenge types */
-    skill:{rotation:{ok:0,n:0},mirror:{ok:0,n:0},missing:{ok:0,n:0},chain:{ok:0,n:0},
-           memory:{ok:0,n:0},angle:{ok:0,n:0},oddoneout:{ok:0,n:0},completion:{ok:0,n:0},
+    recentResults:[],      /* V5: last 5 boolean results for difficulty scoring */
+    skill:{rotation:{ok:0,n:0,totalMs:0},mirror:{ok:0,n:0,totalMs:0},
+           missing:{ok:0,n:0,totalMs:0},completion:{ok:0,n:0,totalMs:0},
+           memory:{ok:0,n:0,totalMs:0},oddoneout:{ok:0,n:0,totalMs:0},
+           /* legacy buckets kept so older code paths don't crash; not surfaced in UI */
+           angle:{ok:0,n:0,totalMs:0},chain:{ok:0,n:0,totalMs:0},
            mirrorErrors:0,nearErrors:0}
   };
 
@@ -249,7 +357,9 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     while(attempts<10){
       attempts++;
       const branching=opts&&opts.branching!=null?opts.branching:(0.3+Math.random()*0.5);
-      const cells=SS_genShape(n,{branching:branching});
+      /* V5: route through SS_genTargetShape so curated library shapes are preferred.
+         Library hit rate ~80%; procedural fallback otherwise. */
+      const cells=SS_genTargetShape(n,n,{branching:branching});
       if(cells.length<n)continue;
       if(SS_isDegenerate(cells,{banFullSym:true}))continue;
       const canon=SS_canonicalHash(cells);
@@ -269,9 +379,10 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     return{cells:fb,canon:SS_canonicalHash(fb),sil:SS_silhouetteKey(fb)};
   }
 
-  /* ---------- CHALLENGE TYPE PICKER (weighted + anti-repetition) ---------- */
+  /* ---------- CHALLENGE TYPE PICKER (weighted + anti-repetition + V5 adaptive) ---------- */
   function SS_pickChallengeType(){
-    const weights=SS_CHALLENGE_WEIGHTS[mode];
+    /* V5: boost weak categories, dampen mastered ones */
+    const weights=SS_getAdaptiveWeights(SS_CHALLENGE_WEIGHTS[mode],G.skill);
     const types=Object.keys(weights).filter(k=>weights[k]>0);
     if(!types.length)return 'rotation';
 
@@ -289,8 +400,8 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       const recentCount=recent5.filter(x=>x===t).length;
       if(recentCount>=2)w*=0.3;
       else if(recentCount>=1)w*=0.6;
-      /* early rounds: reduce hard types */
-      if(G.round<5&&(t==='chain'||t==='memory'||t==='completion'))w*=0.3;
+      /* early rounds: reduce hard types (chain/angle now folded under memory/rotation) */
+      if(G.round<5&&(t==='memory'||t==='completion'))w*=0.3;
       if(w>0){pool.push({type:t,w:w});totalW+=w;}
     }
     if(!pool.length)return types[0];
@@ -431,6 +542,33 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
 
   /* ---------- ROUND BUILDERS for each challenge type ---------- */
 
+  /* V5: map an internal distractor style string to a human-readable mistakeType.
+     This lets SS_explainMistake show educational feedback instead of generic "Wrong!". */
+  function SS_styleToMistake(style,ct){
+    if(!style)return null;
+    if(style.indexOf('mirror')===0)return ct==='mirror'?'rotationNotMirror':'mirrorConfusion';
+    if(style==='nearMatch')return 'wrongAngle';
+    if(style==='differentShape'||style==='random')return 'differentShape';
+    if(style==='oneBlockMod'||style==='branchSwap')return 'wrongAngle';
+    if(style==='missingWrong')return 'wrongLocation';
+    if(style==='altCompletion')return 'almostComplete';
+    if(style==='family')return 'sameFamily';
+    if(style==='rotationFiller')return 'rotationNotMirror';
+    if(style==='chainWrong1'||style==='chainWrong3')return 'wrongAngle';
+    return null;
+  }
+  /* V5: tag every wrong option in a round with mistakeType (post-build, non-invasive). */
+  function SS_tagMistakes(round){
+    if(!round||!round.options)return round;
+    round.options.forEach(o=>{
+      if(o&&!o.correct&&!o.mistakeType){
+        const mt=SS_styleToMistake(o.style,round.challengeType);
+        if(mt)o.mistakeType=mt;
+      }
+    });
+    return round;
+  }
+
   /* 1. ROTATION MATCH */
   function SS_buildRotation(target){
     const rotSet=SS_rotationSet(target);
@@ -439,6 +577,8 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const promptCells=rotList[0];
     const nonIdentity=rotList.slice(1);
     const correctCells=nonIdentity[Math.floor(Math.random()*nonIdentity.length)];
+    const correctRotSet=SS_rotationSet(correctCells); /* FIX: full rot-equivalence ban */
+    const correctMirSet=SS_mirrorSet(correctCells);
     const banSet=new Set();
     rotSet.forEach((_,h)=>banSet.add(h));
     const wrong=[];
@@ -446,11 +586,15 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       if(!g)return;
       const h=SS_hash(g.cells);
       if(banSet.has(h))return;
-      /* reject if rotation-equivalent to any existing option */
+      /* FIX: reject if rotation-equivalent to the CORRECT option (was missing). */
+      if(correctRotSet.has(h))return;
+      /* FIX: reject if visually identical to the CORRECT option (>=80% overlap). */
+      if(SS_cellsOverlap(correctCells,g.cells)>=0.80)return;
+      /* reject if rotation-equivalent to any existing wrong option */
       for(const w of wrong){
         if(SS_rotationSet(w.cells).has(h))return;
-        /* reject visual twin: >=85% cell overlap with any existing option */
-        if(SS_cellsOverlap(w.cells,g.cells)>=0.85)return;
+        /* reject visual twin: >=80% cell overlap with any existing wrong option */
+        if(SS_cellsOverlap(w.cells,g.cells)>=0.80)return;
       }
       banSet.add(h);
       wrong.push(g);
@@ -474,7 +618,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     if(wrong.length<3)return null;
     const opts=[{cells:correctCells,correct:true,style:'rotation'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
-    return{challengeType:'rotation',target:target,promptCells:promptCells,options:opts};
+    return SS_tagMistakes({challengeType:'rotation',target:target,promptCells:promptCells,options:opts});
   }
 
   /* 2. MIRROR CHALLENGE — NEW: max 1 rotation filler; rest are real shape distractors */
@@ -496,8 +640,10 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       const h=SS_hash(g.cells);
       if(banSet.has(h))return;
       if(mirSet.has(h))return;
-      /* reject visual twin */
-      for(const w of wrong){if(SS_cellsOverlap(w.cells,g.cells)>=0.85)return;}
+      /* FIX: reject if visually identical to the CORRECT mirror answer. */
+      if(SS_cellsOverlap(correctCells,g.cells)>=0.80)return;
+      /* reject visual twin against any existing wrong option */
+      for(const w of wrong){if(SS_cellsOverlap(w.cells,g.cells)>=0.80)return;}
       banSet.add(h);
       wrong.push(g);
     };
@@ -518,7 +664,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     if(wrong.length<3)return null;
     const opts=[{cells:correctCells,correct:true,style:'mirrorAnswer'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
-    return{challengeType:'mirror',target:target,promptCells:promptCells,options:opts};
+    return SS_tagMistakes({challengeType:'mirror',target:target,promptCells:promptCells,options:opts});
   }
 
   /* 3. MISSING BLOCK */
@@ -544,18 +690,24 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const correctPos=removedShifted;
     const targetCanon=SS_canonicalHash(target);
     const distractorPositions=[];
+    /* FIX: also track each distractor's canonical hash so two distractors never
+       produce the same shape (which would make them ambiguously "correct" to the
+       player even though both are technically marked wrong). */
+    const seenCanon=new Set([targetCanon]);
     const pool=front.filter(p=>!(p[0]===correctPos[0]&&p[1]===correctPos[1]));
     SS_shuffle(pool);
     for(let i=0;i<pool.length&&distractorPositions.length<3;i++){
       const candCells=SS_norm(partialNorm.concat([pool[i]]));
-      if(SS_canonicalHash(candCells)===targetCanon)continue;
+      const cand=SS_canonicalHash(candCells);
+      if(seenCanon.has(cand))continue; /* skip duplicate-shape distractors */
+      seenCanon.add(cand);
       distractorPositions.push(pool[i]);
     }
     if(distractorPositions.length<3)return null;
     const opts=[{pos:correctPos,correct:true,style:'missingCorrect'}]
       .concat(distractorPositions.map(p=>({pos:p,correct:false,style:'missingWrong'})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
-    return{challengeType:'missing',target:target,partial:partialNorm,options:opts};
+    return SS_tagMistakes({challengeType:'missing',target:target,partial:partialNorm,options:opts});
   }
 
   /* 4. SHAPE MEMORY — NEW: distractors are STRUCTURALLY DIFFERENT shapes,
@@ -573,7 +725,9 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       if(!g)return;
       const h=SS_hash(g.cells);
       if(banSet.has(h))return;
-      for(const w of wrong){if(SS_cellsOverlap(w.cells,g.cells)>=0.85)return;}
+      /* FIX: reject if visually identical (>=80%) to the prompt shape. */
+      if(SS_cellsOverlap(promptCells,g.cells)>=0.80)return;
+      for(const w of wrong){if(SS_cellsOverlap(w.cells,g.cells)>=0.80)return;}
       banSet.add(h);
       wrong.push(g);
     };
@@ -589,7 +743,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     if(wrong.length<3)return null;
     const opts=[{cells:promptCells,correct:true,style:'sameShape'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
-    return{challengeType:'memory',target:target,promptCells:promptCells,options:opts,memoryPhase:true};
+    return SS_tagMistakes({challengeType:'memory',target:target,promptCells:promptCells,options:opts,memoryPhase:true});
   }
 
   /* 5. ANGLE GUESS — 4 sensible options: 90/180/270 + one perceptual distractor (45 or 135) */
@@ -609,7 +763,8 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const optAngles=[90,180,270,distractor];
     const opts=optAngles.map(a=>({label:a+'\u00B0',angle:a,correct:a===angle,style:'angle'+a}));
     SS_shuffle(opts);SS_avoidStalePos(opts);
-    return{challengeType:'angle',target:target,promptCells:promptCells,afterCells:afterCells,options:opts,angle:angle};
+    /* V5: angle is now a variant of rotation; report under the unified badge. */
+    return{challengeType:'rotation',angleVariant:true,target:target,promptCells:promptCells,afterCells:afterCells,options:opts,angle:angle};
   }
 
   /* 6. ODD ONE OUT — odd shape is GUARANTEED visually distinguishable from family.
@@ -642,7 +797,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const opts=familyPicks.map(c=>({cells:c,correct:false,style:'family'}));
     opts.push({cells:oddShape,correct:true,style:'oddOne'});
     SS_shuffle(opts);SS_avoidStalePos(opts);
-    return{challengeType:'oddoneout',target:target,options:opts};
+    return SS_tagMistakes({challengeType:'oddoneout',target:target,options:opts});
   }
 
   /* 7. ROTATION CHAIN — NEW: removed s0 from distractors (it's already shown in the
@@ -680,7 +835,8 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     if(wrong.length<3)return null;
     const opts=[{cells:s2,correct:true,style:'chainCorrect'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
-    return{challengeType:'chain',target:target,chainSteps:{s0:s0,s1:s1,s2:s2,s3:s3},options:opts};
+    /* V5: chain is now a variant of memory; report under the unified badge. */
+    return{challengeType:'memory',chainVariant:true,target:target,chainSteps:{s0:s0,s1:s1,s2:s2,s3:s3},options:opts};
   }
 
   /* 8. SHAPE COMPLETION — NEW: distractors are ALTERNATIVE valid completions of the
@@ -710,13 +866,21 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const banSet=new Set();
     banSet.add(SS_hash(targetNorm));
     SS_rotationSet(target).forEach((_,h)=>banSet.add(h));
+    /* FIX: track canonical hashes so two distractor completions never reduce to the
+       same shape (used to be possible; player would see two identical-shape options). */
+    const seenCanon=new Set([targetCanon]);
     const wrong=[];
     const tryAdd=(g)=>{
       if(!g)return;
       const h=SS_hash(g.cells);
       if(banSet.has(h))return;
-      if(SS_canonicalHash(g.cells)===targetCanon)return;
-      for(const w of wrong){if(SS_cellsOverlap(w.cells,g.cells)>=0.9)return;}
+      const cand=SS_canonicalHash(g.cells);
+      if(cand===targetCanon)return;
+      if(seenCanon.has(cand))return; /* reject duplicate-shape distractor */
+      /* FIX: tighter visual-twin check (was 0.9, now 0.8). */
+      if(SS_cellsOverlap(targetNorm,g.cells)>=0.80)return;
+      for(const w of wrong){if(SS_cellsOverlap(w.cells,g.cells)>=0.80)return;}
+      seenCanon.add(cand);
       banSet.add(h);
       wrong.push(g);
     };
@@ -745,19 +909,22 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     if(wrong.length<3)return null;
     const opts=[{cells:targetNorm,correct:true,style:'completionCorrect'}].concat(wrong.slice(0,3).map(w=>({cells:w.cells,correct:false,style:w.style})));
     SS_shuffle(opts);SS_avoidStalePos(opts);
-    return{challengeType:'completion',target:target,visibleCells:visibleNorm,hiddenCells:hidden,options:opts};
+    return SS_tagMistakes({challengeType:'completion',target:target,visibleCells:visibleNorm,hiddenCells:hidden,options:opts});
   }
 
-  /* ---------- master round builder ---------- */
+  /* ---------- master round builder (V5: 6 consolidated categories) ----------
+     - rotation: 70% standard rotation, 30% angle-guess variant
+     - memory:   60% standard memory, 40% rotation-chain variant
+     - others:   1:1 mapping */
   function SS_buildRound(challengeType,target){
     switch(challengeType){
-      case 'rotation':   return SS_buildRotation(target);
+      case 'rotation':
+        return Math.random()<0.7?SS_buildRotation(target):(SS_buildAngle(target)||SS_buildRotation(target));
+      case 'memory':
+        return Math.random()<0.6?SS_buildMemory(target):(SS_buildChain(target)||SS_buildMemory(target));
       case 'mirror':     return SS_buildMirror(target);
       case 'missing':    return SS_buildMissing(target);
-      case 'memory':     return SS_buildMemory(target);
-      case 'angle':      return SS_buildAngle(target);
       case 'oddoneout':  return SS_buildOddOneOut(target);
-      case 'chain':      return SS_buildChain(target);
       case 'completion': return SS_buildCompletion(target);
       default:           return SS_buildRotation(target);
     }
@@ -776,11 +943,33 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         if(seen.has(h))return false;
         seen.add(h);
       }
-      /* Visual-twin guard: no two options share >=90% cell overlap */
+      /* FIX: tighter visual-twin guard — was 0.90, now 0.85. */
       for(let i=0;i<round.options.length;i++){
         for(let j=i+1;j<round.options.length;j++){
           if(!round.options[i].cells||!round.options[j].cells)continue;
-          if(SS_cellsOverlap(round.options[i].cells,round.options[j].cells)>=0.90)return false;
+          if(SS_cellsOverlap(round.options[i].cells,round.options[j].cells)>=0.85)return false;
+        }
+      }
+      /* FIX: no two cell-based options should be canonical-equivalent (same shape
+         under rotation/reflection). This catches subtle "two options look like the
+         same puzzle piece" bugs that hash + overlap alone could miss. */
+      const canon=new Set();
+      for(const o of round.options){
+        if(!o.cells)continue;
+        const c=SS_canonicalHash(o.cells);
+        if(canon.has(c))return false;
+        canon.add(c);
+      }
+    }
+    /* FIX: for cell-based challenges, ensure no wrong option is rotation-equivalent
+       to the correct option. (Was only enforced for 'rotation' below; now universal.) */
+    if(round.options[0]&&round.options[0].cells){
+      const correct=round.options.find(o=>o.correct);
+      if(correct&&correct.cells){
+        const cRot=SS_rotationSet(correct.cells);
+        for(const o of round.options){
+          if(o.correct||!o.cells)continue;
+          if(cRot.has(SS_hash(o.cells)))return false;
         }
       }
     }
@@ -811,14 +1000,20 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         if(promptRot.has(SS_hash(o.cells)))return false;
       }
     }
-    /* Odd-one-out: family must all be in rotation set; odd must NOT be */
+    /* Odd-one-out: family must all be in rotation set; odd must NOT be.
+       FIX: also reject if the odd shape is rotation-equivalent to the family target. */
     if(round.challengeType==='oddoneout'&&round.target){
       const targetRot=SS_rotationSet(round.target);
+      const targetMir=SS_mirrorSet(round.target);
       for(const o of round.options){
         if(!o.cells)continue;
-        const inRot=targetRot.has(SS_hash(o.cells));
+        const h=SS_hash(o.cells);
+        const inRot=targetRot.has(h);
         if(o.correct&&inRot)return false;
         if(!o.correct&&!inRot)return false;
+        /* odd shape must not be a mirror of the family either — otherwise it's
+           visually almost the same as the family members for casual players. */
+        if(o.correct&&targetMir.has(h))return false;
       }
     }
     /* Chain: no option equals s0 (the original orientation already shown in chain) */
@@ -854,13 +1049,25 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   }
 
   /* ---------- complexity engine ---------- */
+  /* V5: difficulty score blends round count with recent accuracy so the game eases
+     off after a bad streak and pushes harder on a good streak. Result range: 1..30. */
+  function SS_getDifficultyScore(){
+    const recent=G.recentResults||[];
+    const recentAcc=recent.length?recent.filter(Boolean).length/recent.length:0.7;
+    let score=Math.min(30,G.round);
+    if(recentAcc>0.85)score+=4;
+    else if(recentAcc<0.5)score-=4;
+    return Math.max(1,Math.min(30,score));
+  }
   function SS_blockCountForRound(rn){
     const def=SS_MODES[mode];
+    /* V5: tier by difficulty score instead of raw round count */
+    const diff=SS_getDifficultyScore();
     let n;
-    if(rn<10)n=def.nMin;
-    else if(rn<20)n=def.nMin+1;
-    else if(rn<30)n=def.nMin+2;
-    else if(rn<50)n=def.nMin+3;
+    if(diff<5)n=def.nMin;
+    else if(diff<10)n=def.nMin+1;
+    else if(diff<20)n=def.nMin+2;
+    else if(diff<28)n=def.nMin+3;
     else n=def.nMin+4;
     n+=Adapt.bias;
     if(n<def.nMin)n=def.nMin;
@@ -998,9 +1205,13 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   function startGame(){
     G.round=0;G.lives=SS_MODES[mode].lives;G.correctCount=0;G.attempts=0;G.comboCount=0;G.comboMax=0;
     G.pending=false;G.challengeHistory=[];
-    G.skill={rotation:{ok:0,n:0},mirror:{ok:0,n:0},missing:{ok:0,n:0},chain:{ok:0,n:0},
-             memory:{ok:0,n:0},angle:{ok:0,n:0},oddoneout:{ok:0,n:0},completion:{ok:0,n:0},
+    /* V5: 6 active categories + totalMs tracking. angle/chain kept as legacy buckets. */
+    G.skill={rotation:{ok:0,n:0,totalMs:0},mirror:{ok:0,n:0,totalMs:0},
+             missing:{ok:0,n:0,totalMs:0},completion:{ok:0,n:0,totalMs:0},
+             memory:{ok:0,n:0,totalMs:0},oddoneout:{ok:0,n:0,totalMs:0},
+             angle:{ok:0,n:0,totalMs:0},chain:{ok:0,n:0,totalMs:0},
              mirrorErrors:0,nearErrors:0};
+    G.recentResults=[]; /* V5 */
     Fresh.clear();Adapt.reset();
     body.innerHTML='';
     host=$('<div class="ss-play"></div>');
@@ -1098,7 +1309,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const def=SS_MODES[mode];
     const zen=def.zen;
     const cs=26;
-    const promptColor=SS_PALETTE[G.round%SS_PALETTE.length];
+    const promptColor=SS_SHAPE_COLOR; /* V5: unified shape color */
     /* Dynamic duration: more blocks = more time to memorize. 4=1800, 5=2200, 6=2600, 7=3000, 8=3400 */
     const blockCount=round.promptCells.length;
     const memDuration=zen?4000:Math.min(3400,1400+blockCount*300);
@@ -1133,7 +1344,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const def=SS_MODES[mode];
     const zen=def.zen;
     const cs=26;
-    const promptColor=SS_PALETTE[G.round%SS_PALETTE.length];
+    const promptColor=SS_SHAPE_COLOR; /* V5: unified shape color */
     const heartsHtml=zen?'<div class="qm-zen-tag">\uD83E\uDDD8 Zen</div>':
       '<div class="wc-hearts">'+[0,1,2].map(i=>'<span class="wc-heart '+(i>=G.lives?'lost':'')+'">'+(i>=G.lives?'\uD83D\uDC94':'\u2764\uFE0F')+'</span>').join('')+'</div>';
 
@@ -1161,8 +1372,10 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const def=SS_MODES[mode];
     const zen=def.zen;
     const cs=24;
-    const promptColor=SS_PALETTE[G.round%SS_PALETTE.length];
-    const optColors=[SS_PALETTE[(G.round+1)%SS_PALETTE.length],SS_PALETTE[(G.round+2)%SS_PALETTE.length],SS_PALETTE[(G.round+3)%SS_PALETTE.length],SS_PALETTE[(G.round+4)%SS_PALETTE.length]];
+    /* V5: ONE color for the prompt AND every option — puzzle is about shape, not hue. */
+    const promptColor=SS_SHAPE_COLOR;
+    const optColors=[SS_SHAPE_COLOR,SS_SHAPE_COLOR,SS_SHAPE_COLOR,SS_SHAPE_COLOR];
+    round.startedAt=Date.now(); /* V5: per-round timestamp for solve-time tracking */
     const heartsHtml=zen?'<div class="qm-zen-tag">\uD83E\uDDD8 Zen \u2014 no timer / lives</div>':
       '<div class="wc-hearts">'+[0,1,2].map(i=>'<span class="wc-heart '+(i>=G.lives?'lost':'')+' '+(G.lives===1&&i===0?'mm-last':'')+'">'+(i>=G.lives?'\uD83D\uDC94':'\u2764\uFE0F')+'</span>').join('')+'</div>';
     const badge=SS_badgeHtml(round.challengeType);
@@ -1190,7 +1403,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         promptSvg='<div class="ss-chain-pair">'+
           '<div class="ss-chain-card"><div class="ss-chain-lbl">BEFORE</div>'+SS_drawShapeSvg(round.promptCells,cs,promptColor)+'</div>'+
           '<div class="ss-chain-arrow">\u2192</div>'+
-          '<div class="ss-chain-card"><div class="ss-chain-lbl">AFTER</div>'+SS_drawShapeSvg(round.afterCells,cs,SS_PALETTE[(G.round+2)%SS_PALETTE.length])+'</div></div>';
+          '<div class="ss-chain-card"><div class="ss-chain-lbl">AFTER</div>'+SS_drawShapeSvg(round.afterCells,cs,SS_SHAPE_COLOR)+'</div></div>';
       }else{
         promptSvg='<div class="ss-angle-q">\uD83E\uDD14 How much did it rotate?</div>';
       }
@@ -1200,14 +1413,15 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
       optsHtml=round.options.map((o,i)=>'<button class="ss-opt" data-i="'+i+'">'+SS_drawShapeSvg(o.cells,20,optColors[i])+'</button>').join('');
     }else if(ct==='chain'){
       const st=round.chainSteps;
+      /* V5: all chain steps share the same color so only orientation differs visually. */
       promptSvg='<div class="ss-chain-seq">'+
-        '<div class="ss-chain-card"><div class="ss-chain-lbl">0\u00B0</div>'+SS_drawShapeSvg(st.s0,18,promptColor)+'</div>'+
+        '<div class="ss-chain-card"><div class="ss-chain-lbl">0\u00B0</div>'+SS_drawShapeSvg(st.s0,18,SS_SHAPE_COLOR)+'</div>'+
         '<div class="ss-chain-arrow">\u2192</div>'+
-        '<div class="ss-chain-card"><div class="ss-chain-lbl">90\u00B0</div>'+SS_drawShapeSvg(st.s1,18,SS_PALETTE[(G.round+1)%SS_PALETTE.length])+'</div>'+
+        '<div class="ss-chain-card"><div class="ss-chain-lbl">90\u00B0</div>'+SS_drawShapeSvg(st.s1,18,SS_SHAPE_COLOR)+'</div>'+
         '<div class="ss-chain-arrow">\u2192</div>'+
         '<div class="ss-chain-card ss-chain-missing"><div class="ss-chain-lbl">180\u00B0</div><div class="ss-chain-q">?</div></div>'+
         '<div class="ss-chain-arrow">\u2192</div>'+
-        '<div class="ss-chain-card"><div class="ss-chain-lbl">270\u00B0</div>'+SS_drawShapeSvg(st.s3,18,SS_PALETTE[(G.round+3)%SS_PALETTE.length])+'</div>'+
+        '<div class="ss-chain-card"><div class="ss-chain-lbl">270\u00B0</div>'+SS_drawShapeSvg(st.s3,18,SS_SHAPE_COLOR)+'</div>'+
       '</div>';
       optsHtml=round.options.map((o,i)=>'<button class="ss-opt" data-i="'+i+'">'+SS_drawShapeSvg(o.cells,20,optColors[i])+'</button>').join('');
     }else if(ct==='completion'){
@@ -1250,9 +1464,18 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     const fb=host.querySelector('#ssFb');
     const def=SS_MODES[mode];
     const isCorrect=!timedOut&&pickedIdx===correctIdx;
-    const pickedStyle=pickedIdx>=0?(round.options[pickedIdx]&&round.options[pickedIdx].style):null;
+    const pickedOpt=pickedIdx>=0?round.options[pickedIdx]:null;
+    const pickedStyle=pickedOpt&&pickedOpt.style||null;
     const ct=round.challengeType;
-    if(G.skill[ct]){G.skill[ct].n++;if(isCorrect)G.skill[ct].ok++;}
+    /* V5: track solve time per category in addition to ok/n */
+    if(G.skill[ct]){
+      G.skill[ct].n++;
+      G.skill[ct].totalMs=(G.skill[ct].totalMs||0)+ms;
+      if(isCorrect)G.skill[ct].ok++;
+    }
+    /* V5: recent results window for adaptive difficulty */
+    G.recentResults.push(isCorrect);
+    if(G.recentResults.length>5)G.recentResults.shift();
     if(!isCorrect&&pickedStyle&&pickedStyle.indexOf('mirror')===0)G.skill.mirrorErrors++;
     if(!isCorrect&&pickedStyle==='nearMatch')G.skill.nearErrors++;
     Adapt.record(isCorrect,ms,G.timerMs||5000);
@@ -1269,9 +1492,21 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     }else{
       playSound('wrong');try{navigator.vibrate&&navigator.vibrate([20,40,20]);}catch(e){}
       G.comboCount=0;
-      if(pickedIdx>=0&&optEls[pickedIdx])optEls[pickedIdx].classList.add('ss-wrong');
-      if(optEls[correctIdx])optEls[correctIdx].classList.add('ss-correct');
-      if(fb){fb.style.color='#EF4444';fb.textContent=timedOut?'\u23F1 Time\u2019s up!':'\u274C Wrong!';}
+      if(pickedIdx>=0&&optEls[pickedIdx]){
+        optEls[pickedIdx].classList.add('ss-wrong');
+        optEls[pickedIdx].classList.add('wrong-flash'); /* V5: shake feedback */
+      }
+      if(optEls[correctIdx]){
+        optEls[correctIdx].classList.add('ss-correct');
+        /* V5: briefly highlight the correct answer so the player learns */
+        _st(()=>{if(optEls[correctIdx])optEls[correctIdx].classList.add('correct-flash');},300);
+      }
+      /* V5: explain WHY using mistakeType, not generic "Wrong!" */
+      if(fb){
+        fb.style.color='#EF4444';
+        const why=timedOut?'\u23F1 Time\u2019s up!':('\u274C '+SS_explainMistake(pickedOpt,round));
+        fb.textContent=why;
+      }
 
       /* animate correct answer briefly for learning */
       if(ct==='rotation'&&optEls[correctIdx]){
@@ -1319,6 +1554,54 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     return G.lives<=0;
   }
 
+  /* ---------- V5: Spatial IQ computation + card renderer ---------- */
+  function SS_computeSpatialIQ(skill){
+    const cats=['rotation','mirror','completion','missing','oddoneout','memory'];
+    let totalOk=0,totalN=0,totalMs=0;
+    cats.forEach(c=>{
+      if(!skill[c])return;
+      totalOk+=skill[c].ok||0;
+      totalN+=skill[c].n||0;
+      totalMs+=skill[c].totalMs||0;
+    });
+    const overallAcc=totalN?totalOk/totalN:0;
+    const avgMs=totalN?totalMs/totalN:0;
+    const speedBonus=avgMs&&avgMs<3000?10:avgMs&&avgMs<5000?5:0;
+    const iq=Math.round(70+overallAcc*50+speedBonus);
+    let weakest=null,weakestAcc=1;
+    cats.forEach(c=>{
+      if(skill[c]&&skill[c].n>=2){
+        const acc=skill[c].ok/skill[c].n;
+        if(acc<weakestAcc){weakestAcc=acc;weakest=c;}
+      }
+    });
+    return{iq:iq,overallAcc:overallAcc,avgMs:avgMs,weakest:weakest,perCategory:cats.map(c=>({
+      cat:c,
+      acc:skill[c]&&skill[c].n?Math.round(skill[c].ok/skill[c].n*100):null,
+      n:skill[c]?skill[c].n:0
+    }))};
+  }
+  function SS_renderIQCard(stats){
+    const catLabels={rotation:'Rotation',mirror:'Mirror',completion:'Completion',missing:'Missing Piece',oddoneout:'Odd Shape',memory:'Memory'};
+    const rows=stats.perCategory.filter(c=>c.n>0).map(c=>
+      '<div class="ss-iq-row">'+
+        '<span>'+(catLabels[c.cat]||c.cat)+'</span>'+
+        '<div class="ss-iq-bar"><div class="ss-iq-fill" style="width:'+c.acc+'%"></div></div>'+
+        '<span class="ss-iq-pct">'+c.acc+'%</span>'+
+      '</div>'
+    ).join('');
+    const weakLabel=stats.weakest?catLabels[stats.weakest]:null;
+    return '<div class="ss-iq-card">'+
+      '<div class="ss-iq-headline">'+
+        '<span class="ss-iq-emoji">\uD83E\uDDE0</span>'+
+        '<div><div class="ss-iq-num">'+stats.iq+'</div><div class="ss-iq-label">Spatial IQ</div></div>'+
+      '</div>'+
+      '<div class="ss-iq-breakdown">'+rows+'</div>'+
+      '<div class="ss-iq-meta"><span>\u23F1 Avg solve: '+(stats.avgMs/1000).toFixed(1)+'s</span></div>'+
+      (weakLabel?'<div class="ss-iq-tip">\uD83D\uDCA1 Try more <strong>'+weakLabel+'</strong> puzzles to improve fastest.</div>':'')+
+    '</div>';
+  }
+
   /* ---------- game over ---------- */
   function gameOver(){
     _cleanup();
@@ -1348,16 +1631,9 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     setScore(finalRound);
     if(newPB)confetti(50);
 
-    /* challenge type breakdown */
-    let breakdownHtml='';
-    const ctypes=['rotation','mirror','missing','memory','angle','oddoneout','chain','completion'];
-    ctypes.forEach(k=>{
-      if(G.skill[k]&&G.skill[k].n>0){
-        const acc=Math.round(G.skill[k].ok/G.skill[k].n*100);
-        const meta=SS_CHALLENGE_META[k];
-        breakdownHtml+='<div class="row"><span>'+meta.emoji+' '+meta.name+'</span><span class="val">'+acc+'% ('+G.skill[k].ok+'/'+G.skill[k].n+')</span></div>';
-      }
-    });
+    /* V5: Spatial IQ card replaces the old challenge-type breakdown rows */
+    const iqStats=SS_computeSpatialIQ(G.skill);
+    const iqCardHtml=SS_renderIQCard(iqStats);
 
     end({
       title:rank.em+' '+rank.txt,
@@ -1373,7 +1649,7 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         '<div class="row"><span>XP Earned</span><span class="val">+'+xp+'</span></div>'+
         '<div class="row"><span>Personal Best</span><span class="val">'+Math.max(finalRound,prevBest)+(newPB?' \uD83C\uDFC6':'')+'</span></div>'+
       '</div>'+
-      (breakdownHtml?'<div class="ss-breakdown"><div class="ss-breakdown-title">Challenge Breakdown</div>'+breakdownHtml+'</div>':'')+
+      iqCardHtml+
       (insight?'<div class="ss-insight">'+insight+'</div>':'')+
       (newPB?'<div class="rec">New Personal Best! \uD83C\uDF89</div>':'')
     });

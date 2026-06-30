@@ -7,111 +7,98 @@
  *  localStorage keys: nz_iq_best, nz_iq_games, nz_iq_profile
  * ===================================================================================== */
 
-/* ---------- ORIGINAL POOL (60 questions, kept exactly) + EXPANSIONS ---------- */
+/* ---------- CLASSIC IQ POOL ---------- *
+ * Designed as a real IQ test (Raven / Cattell style): pure reasoning, no domain
+ * knowledge required. Heavy arithmetic, geometry formulas, finance/work-time
+ * word problems have been removed. Every question is short enough to solve
+ * mentally within the per-difficulty timer window.
+ */
+const IQ_POOL_LEGACY_REMOVED_=[];
 const IQ_POOL=[
-  /* ---- NUMERICAL (14 original) ---- */
+  /* ---- NUMERICAL (number series — pure pattern, no word problems) ---- */
   {q:'\uD83D\uDD22 Series: 2, 4, 8, 16, __ = ?',opts:['24','32','20','28'],ans:1,cat:'numerical',diff:'easy',exp:'\u00D72 har baar: 16\u00D72 = 32'},
   {q:'\uD83D\uDD22 Series: 1, 4, 9, 16, 25, __ = ?',opts:['30','36','35','49'],ans:1,cat:'numerical',diff:'easy',exp:'Perfect squares: 6\u00B2 = 36'},
   {q:'\uD83D\uDD22 Series: 3, 6, 11, 18, 27, __ = ?',opts:['36','38','40','35'],ans:1,cat:'numerical',diff:'medium',exp:'Differences +3,+5,+7,+9,+11 \u2192 27+11 = 38'},
   {q:'\uD83D\uDD22 Fibonacci: 1, 1, 2, 3, 5, 8, 13, __ = ?',opts:['18','21','20','19'],ans:1,cat:'numerical',diff:'easy',exp:'8+13 = 21 (sum of previous two)'},
   {q:'\uD83D\uDD22 Series: 1, 2, 6, 24, 120, __ = ?',opts:['600','720','480','240'],ans:1,cat:'numerical',diff:'hard',exp:'Factorials! 120\u00D76 = 720'},
   {q:'\uD83D\uDD22 Series: 100, 50, 25, 12.5, __ = ?',opts:['5','6.25','8','10'],ans:1,cat:'numerical',diff:'medium',exp:'\u00F72 har baar: 12.5\u00F72 = 6.25'},
-  {q:'\uD83D\uDD22 25% of 480 = ?',opts:['96','120','100','112'],ans:1,cat:'numerical',diff:'easy',exp:'480\u00F74 = 120'},
-  {q:'\uD83D\uDD22 Ek train 75 km/h se 3 ghante chalti hai. Total doori?',opts:['200km','225km','250km','300km'],ans:1,cat:'numerical',diff:'easy',exp:'75\u00D73 = 225 km'},
-  {q:'\uD83D\uDD22 Ek kaam 12 aadmi 10 din mein karte hain. 15 aadmi kitne din mein?',opts:['6','7','8','9'],ans:2,cat:'numerical',diff:'hard',exp:'12\u00D710 = 120 man-days; 120\u00F715 = 8 din'},
-  {q:'\uD83D\uDD22 Kaunse number ka cube 125 hai?',opts:['3','4','5','6'],ans:2,cat:'numerical',diff:'easy',exp:'5\u00B3 = 5\u00D75\u00D75 = 125'},
-  {q:'\uD83D\uDD22 Ek circular track ka circumference 440m. Diameter kitna? (\u03C0=22/7)',opts:['100m','120m','140m','160m'],ans:2,cat:'numerical',diff:'hard',exp:'C=\u03C0d \u2192 d=440\u00D77/22 = 140m'},
-  {q:'\uD83D\uDD22 3x + 5 = 20. x = ?',opts:['3','4','5','6'],ans:2,cat:'numerical',diff:'easy',exp:'3x=15 \u2192 x=5'},
   {q:'\uD83D\uDD22 Series: 5, 10, 20, 40, __ = ?',opts:['60','70','80','90'],ans:2,cat:'numerical',diff:'easy',exp:'\u00D72 each: 40\u00D72 = 80'},
-  {q:'\uD83D\uDD22 Agar 15% discount hai \u20B9800 pe, to price?',opts:['\u20B9660','\u20B9680','\u20B9700','\u20B9640'],ans:1,cat:'numerical',diff:'medium',exp:'800\u00D70.15=120; 800-120=\u20B9680'},
+  {q:'\uD83D\uDD22 Series: 2, 3, 5, 8, 13, 21, __ = ?',opts:['29','32','34','35'],ans:2,cat:'numerical',diff:'medium',exp:'Sum of previous two: 13+21 = 34'},
+  {q:'\uD83D\uDD22 Odd one out: 2, 3, 5, 7, 9, 11',opts:['3','5','9','11'],ans:2,cat:'numerical',diff:'easy',exp:'Sab prime hain, sirf 9 = 3\u00D73 composite hai'},
+  {q:'\uD83D\uDD22 Series: 81, 27, 9, 3, __ = ?',opts:['0','1','2','1.5'],ans:1,cat:'numerical',diff:'easy',exp:'\u00F73 har baar: 3\u00F73 = 1'},
+  {q:'\uD83D\uDD22 Series: 7, 14, 28, 56, __ = ?',opts:['98','108','112','120'],ans:2,cat:'numerical',diff:'easy',exp:'\u00D72 har baar: 56\u00D72 = 112'},
+  {q:'\uD83D\uDD22 Series: 1, 4, 10, 22, 46, __ = ?',opts:['82','88','94','100'],ans:2,cat:'numerical',diff:'hard',exp:'\u00D72+2 har baar: 46\u00D72+2 = 94'},
+  {q:'\uD83D\uDD22 Series: 64, 32, 16, 8, 4, __ = ?',opts:['1','2','3','0'],ans:1,cat:'numerical',diff:'easy',exp:'\u00F72 har baar: 4\u00F72 = 2'},
+  {q:'\uD83D\uDD22 Series: 6, 11, 21, 36, 56, __ = ?',opts:['72','78','81','86'],ans:2,cat:'numerical',diff:'hard',exp:'Differences +5,+10,+15,+20,+25 \u2192 56+25 = 81'},
+  {q:'\uD83D\uDD22 Odd one out: 16, 25, 36, 42, 49',opts:['16','25','42','49'],ans:2,cat:'numerical',diff:'easy',exp:'Baaki sab perfect squares hain, 42 nahi'},
 
-  /* ---- LOGIC (12 original) ---- */
-  {q:'\uD83E\uDDE0 Neha, Priya se 3 saal badi hai. 5 saal baad Priya 20 saal hogi. Abhi Neha ki umar?',opts:['15','16','18','20'],ans:2,cat:'logic',diff:'medium',exp:'Priya abhi=15; Neha=15+3=18'},
-  {q:'\uD83E\uDDE0 3 cats 3 mice 3 minutes mein pakadti hain. 9 mice 9 minutes mein \u2014 kitni cats chahiye?',opts:['9','3','6','1'],ans:1,cat:'logic',diff:'medium',exp:'1 cat=1 mouse/3min, so 3 cats kaafi hain'},
-  {q:'\uD83E\uDDE0 Sab roses flowers hain. Kuch flowers jaldi fade ho jaate hain. Isliye:',opts:['Sab roses fade honge','Koi rose fade nahi hoga','Kuch roses fade ho sakti hain','Roses flowers nahi hain'],ans:2,cat:'logic',diff:'hard',exp:'Valid inference: kuch roses fade ho sakti hain'},
-  {q:'\uD83E\uDDE0 Aaj Monday hai. 100 din baad kaunsa day hoga?',opts:['Tuesday','Wednesday','Thursday','Friday'],ans:1,cat:'logic',diff:'medium',exp:'100 = 14\u00D77 + 2; Mon+2 = Wednesday'},
-  {q:'\uD83E\uDDE0 Ek ghadi din mein 4 min fast ho jaati hai. Agar 6:00 AM pe sahi thi, to kaun se real time pe 6:08 AM dikhayegi?',opts:['6:05 AM','6:06 AM','6:07 AM','6:08 AM'],ans:1,cat:'logic',diff:'hard',exp:'4min/1440min\u00D7real mins; real time=6:06 AM approx'},
-  {q:'\uD83E\uDDE0 5 logon ki row mein Ram 2nd aur right se 4th hai. Row mein kitne log hain?',opts:['5','6','7','8'],ans:0,cat:'logic',diff:'medium',exp:'Left se 2nd + Right se 4th - 1 = 2+4-1 = 5'},
-  {q:'\uD83E\uDDE0 Agar "CAT" ko FDW likhte hain (har letter +3 shift), to "DOG" ka code?',opts:['GRJ','FRJ','GSJ','HRJ'],ans:0,cat:'logic',diff:'hard',exp:'+3 Caesar shift: D+3=G, O+3=R, G+3=J \u2192 GRJ'},
-  {q:'\uD83E\uDDE0 Ek shop mein 40% discount hai. Original price \u20B91500. Discounted price?',opts:['\u20B9850','\u20B9900','\u20B9950','\u20B91050'],ans:1,cat:'logic',diff:'medium',exp:'1500\u00D70.40=600; 1500-600=\u20B9900'},
-  {q:'\uD83E\uDDE0 Ek number ko 5 se multiply karo, phir 8 ghataao, to 42. Number?',opts:['8','9','10','11'],ans:2,cat:'logic',diff:'easy',exp:'5n-8=42 \u2192 5n=50 \u2192 n=10'},
-  {q:'\uD83E\uDDE0 24 June ka age se 7 days pehle wala day?',opts:['16 June','17 June','18 June','19 June'],ans:1,cat:'logic',diff:'easy',exp:'24-7=17 June'},
+  /* ---- LOGIC (deduction, syllogisms, relations, riddles) ---- */
   {q:'\uD83E\uDDE0 A, B se tez hai. C, A se tez hai. Sabse tez kaun?',opts:['A','B','C','Sab equal'],ans:2,cat:'logic',diff:'easy',exp:'C > A > B; C sabse tez hai'},
-  {q:'\uD83E\uDDE0 2 pipes ek tank bharte hain. Pipe A 6h mein, Pipe B 4h mein. Dono saath mein?',opts:['2h','2.4h','3h','3.6h'],ans:1,cat:'logic',diff:'hard',exp:'1/6+1/4=5/12; 12/5=2.4 hours'},
+  {q:'\uD83E\uDDE0 Aaj Monday hai. 100 din baad kaunsa day hoga?',opts:['Tuesday','Wednesday','Thursday','Friday'],ans:1,cat:'logic',diff:'medium',exp:'100 = 14\u00D77 + 2; Mon+2 = Wednesday'},
+  {q:'\uD83E\uDDE0 Sab roses flowers hain. Kuch flowers jaldi fade ho jaate hain. Isliye:',opts:['Sab roses fade honge','Koi rose fade nahi hoga','Kuch roses fade ho sakti hain','Roses flowers nahi hain'],ans:2,cat:'logic',diff:'hard',exp:'Valid inference: kuch roses fade ho sakti hain'},
+  {q:'\uD83E\uDDE0 Agar "CAT" ko FDW likhte hain (+3 shift), to "DOG" ka code?',opts:['GRJ','FRJ','GSJ','HRJ'],ans:0,cat:'logic',diff:'hard',exp:'+3 Caesar shift: D+3=G, O+3=R, G+3=J \u2192 GRJ'},
+  {q:'\uD83E\uDDE0 A is B\'s father. C is B\'s son. A is C ka kaun?',opts:['Father','Grandfather','Uncle','Brother'],ans:1,cat:'logic',diff:'easy',exp:'A \u2192 B \u2192 C: A is grandfather of C'},
+  {q:'\uD83E\uDDE0 Photo dikhakar: "Yeh mere pita ke ekloute bete ka beta hai." Photo mein kaun?',opts:['Uska pita','Uska beta','Khud','Uska bhai'],ans:1,cat:'logic',diff:'hard',exp:'Mere pita ka ekloute beta = main; uska beta = mera beta'},
+  {q:'\uD83E\uDDE0 5 logon ki row: Ram left se 2nd aur right se 4th hai. Total log?',opts:['5','6','7','8'],ans:0,cat:'logic',diff:'medium',exp:'2 + 4 \u2212 1 = 5'},
+  {q:'\uD83E\uDDE0 4 friends row mein: A, B ke saath nahi. C, A aur D ke beech. Order?',opts:['A C D B','B D C A','A D C B','D A C B'],ans:1,cat:'logic',diff:'hard',exp:'C between A&D, A not next to B \u2192 B D C A'},
+  {q:'\uD83E\uDDE0 Sab doctors smart hain. Sam smart hai. Iska matlab?',opts:['Sam doctor hai','Sam doctor ho sakta hai','Sam doctor nahi hai','Sab smart log doctor hain'],ans:1,cat:'logic',diff:'medium',exp:'Affirming the consequent fallacy \u2014 Sam ho bhi sakta, nahi bhi'},
+  {q:'\uD83E\uDDE0 A bolta hai: "Main hamesha jhooth bolta hoon." Kya A sach bol raha hai?',opts:['Haan','Nahi','Decide nahi ho sakta','Kabhi-kabhi'],ans:2,cat:'logic',diff:'hard',exp:'Paradox: sach hai to jhooth, jhooth hai to sach \u2014 decide nahi hota'},
+  {q:'\uD83E\uDDE0 A earns > B. C earns < D. D earns < B. Sabse ameer?',opts:['A','B','C','D'],ans:0,cat:'logic',diff:'medium',exp:'A > B > D > C \u2192 A sabse aage'},
+  {q:'\uD83E\uDDE0 Agar kuch pen red hain, aur sab red cheezein round hain, to:',opts:['Sab pen round hain','Kuch pen round hain','Koi pen round nahi','Pen red nahi hain'],ans:1,cat:'logic',diff:'medium',exp:'Kuch pen red \u2192 woh round bhi \u2192 kuch pen round hain'},
+  {q:'\uD83E\uDDE0 Ek aadmi 5 km North, phir 3 km East, phir 5 km South gaya. Start se kitna door?',opts:['3 km','5 km','8 km','13 km'],ans:0,cat:'logic',diff:'medium',exp:'North-South cancel, sirf 3 km East bacha'},
+  {q:'\uD83E\uDDE0 Agar kal Sunday tha, to parso ke baad wala din?',opts:['Tuesday','Wednesday','Thursday','Monday'],ans:1,cat:'logic',diff:'medium',exp:'Kal=Sun, aaj=Mon, kal=Tue, parso=Wed'},
 
-  /* ---- VERBAL (10 original) ---- */
-  {q:'\uD83D\uDCDA BOOK : READING :: FORK : ?',opts:['Kitchen','Eating','Spoon','Metal'],ans:1,cat:'verbal',diff:'easy',exp:'Book reading ke liye hai, fork eating ke liye'},
+  /* ---- VERBAL (analogies, odd-one-out, vocab) ---- */
+  {q:'\uD83D\uDCDA BOOK : READING :: FORK : ?',opts:['Kitchen','Eating','Spoon','Metal'],ans:1,cat:'verbal',diff:'easy',exp:'Book reading ke liye, fork eating ke liye'},
   {q:'\uD83D\uDCDA HOT : COLD :: DARK : ?',opts:['Night','Black','Light','Moon'],ans:2,cat:'verbal',diff:'easy',exp:'Opposites: hot\u2194cold, dark\u2194light'},
   {q:'\uD83D\uDCDA Odd one out: Apple, Mango, Carrot, Banana',opts:['Apple','Mango','Carrot','Banana'],ans:2,cat:'verbal',diff:'easy',exp:'Carrot ek sabzi hai, baaki fruits'},
   {q:'\uD83D\uDCDA Odd one out: Violin, Guitar, Flute, Sitar',opts:['Violin','Guitar','Flute','Sitar'],ans:2,cat:'verbal',diff:'medium',exp:'Flute wind instrument hai; baki string instruments'},
-  {q:'\uD83D\uDCDA "Ephemeral" ka matlab?',opts:['Permanent','Very brief','Heavy','Brilliant'],ans:1,cat:'verbal',diff:'hard',exp:'Ephemeral = lasting a very short time'},
-  {q:'\uD83D\uDCDA "Benevolent" ka matlab?',opts:['Angry','Mean','Kind/Generous','Lazy'],ans:2,cat:'verbal',diff:'medium',exp:'Benevolent = well-meaning, generous, kind'},
+  {q:'\uD83D\uDCDA PEN : INK :: LAMP : ?',opts:['Switch','Bulb','Light','Electricity'],ans:3,cat:'verbal',diff:'medium',exp:'Pen ink se chalta, lamp electricity se'},
+  {q:'\uD83D\uDCDA DOCTOR : HOSPITAL :: TEACHER : ?',opts:['Student','Book','School','Class'],ans:2,cat:'verbal',diff:'easy',exp:'Doctor hospital mein, teacher school mein'},
   {q:'\uD83D\uDCDA Agar CIPHER ko reverse karo to?',opts:['REHPIC','REPHIC','RHEPIC','REPIHC'],ans:0,cat:'verbal',diff:'medium',exp:'C-I-P-H-E-R reversed = R-E-H-P-I-C'},
-  {q:'\uD83D\uDCDA PEN : INK :: LAMP : ?',opts:['Switch','Bulb','Light','Electricity'],ans:3,cat:'verbal',diff:'medium',exp:'Pen ink se chalta hai, lamp electricity se'},
-  {q:'\uD83D\uDCDA DOCTOR : HOSPITAL :: TEACHER : ?',opts:['Student','Book','School','Class'],ans:2,cat:'verbal',diff:'easy',exp:'Doctor hospital mein kaam karta, teacher school mein'},
-  {q:'\uD83D\uDCDA "Laconic" ka matlab?',opts:['Talkative','Very brief','Funny','Serious'],ans:1,cat:'verbal',diff:'hard',exp:'Laconic = using very few words, concise'},
+  {q:'\uD83D\uDCDA BIRD : SKY :: FISH : ?',opts:['Net','Water','Boat','Land'],ans:1,cat:'verbal',diff:'easy',exp:'Bird sky mein udti, fish water mein tairti'},
+  {q:'\uD83D\uDCDA NEEDLE : THREAD :: KEY : ?',opts:['Door','Hole','Lock','Metal'],ans:2,cat:'verbal',diff:'easy',exp:'Needle thread ke saath, key lock ke saath'},
+  {q:'\uD83D\uDCDA Odd one out: Triangle, Square, Circle, Cube',opts:['Triangle','Square','Circle','Cube'],ans:3,cat:'verbal',diff:'easy',exp:'Cube 3D hai, baki sab 2D shapes'},
+  {q:'\uD83D\uDCDA Odd one out: Dog, Tiger, Cow, Crow',opts:['Dog','Tiger','Cow','Crow'],ans:3,cat:'verbal',diff:'easy',exp:'Crow bird hai, baki mammals'},
+  {q:'\uD83D\uDCDA HAND : GLOVE :: FOOT : ?',opts:['Sock','Shoe','Toe','Floor'],ans:1,cat:'verbal',diff:'easy',exp:'Glove hand pe pehnte, shoe foot pe'},
+  {q:'\uD83D\uDCDA SUN : DAY :: MOON : ?',opts:['Star','Night','Sky','Light'],ans:1,cat:'verbal',diff:'easy',exp:'Sun day se related, moon night se'},
+  {q:'\uD83D\uDCDA Odd one out: Hour, Minute, Second, Calendar',opts:['Hour','Minute','Second','Calendar'],ans:3,cat:'verbal',diff:'medium',exp:'Calendar din/month track karta, baki time-units'},
+  {q:'\uD83D\uDCDA RIVER : BANK :: SEA : ?',opts:['Wave','Shore','Boat','Salt'],ans:1,cat:'verbal',diff:'medium',exp:'River ka kinara=bank, sea ka kinara=shore'},
+  {q:'\uD83D\uDCDA Agar LISTEN = SILENT (same letters), to in mein se anagram kaun? \u2014 EARTH ka?',opts:['HATER','HEART','RATEH','TAHER'],ans:1,cat:'verbal',diff:'medium',exp:'EARTH \u2192 HEART (same letters rearranged)'},
 
-  /* ---- PATTERN (12 original) ---- */
+  /* ---- PATTERN (sequences, codes, letter-number patterns) ---- */
   {q:'\uD83D\uDD21 Letter series: A, C, E, G, __ = ?',opts:['H','I','J','K'],ans:1,cat:'pattern',diff:'easy',exp:'+2 skip har baar: G ke baad I'},
   {q:'\uD83D\uDD21 Letter series: Z, X, V, T, __ = ?',opts:['P','Q','R','S'],ans:2,cat:'pattern',diff:'medium',exp:'-2 har baar: T ke baad R'},
   {q:'\uD83D\uDD21 Series: AZ, BY, CX, __ = ?',opts:['DV','DW','EW','DX'],ans:1,cat:'pattern',diff:'medium',exp:'Aage A\u2192D; Peeche Z\u2192W \u2192 DW'},
   {q:'\uD83D\uDD21 Pattern: 1A, 2B, 3C, 4D, __ = ?',opts:['5E','5F','6E','4E'],ans:0,cat:'pattern',diff:'easy',exp:'Number +1, letter next \u2192 5E'},
-  {q:'\uD83D\uDD21 Series: J, F, M, A, M, J, J, __ (months)',opts:['A','S','O','N'],ans:0,cat:'pattern',diff:'medium',exp:'Jan,Feb,Mar,Apr,May,Jun,Jul \u2192 August = A'},
-  {q:'\uD83D\uDD21 Number+letter: 2B, 4D, 6F, 8H, __ = ?',opts:['9I','10I','10J','12J'],ans:2,cat:'pattern',diff:'medium',exp:'+2 number, +2 letter: 8+2=10, H+2=J \u2192 10J'},
-  {q:'\uD83D\uDD21 Series: 1, 1, 2, 3, 5, 8, 13, 21, __ = ?',opts:['30','34','32','28'],ans:1,cat:'pattern',diff:'medium',exp:'Fibonacci: 13+21 = 34'},
-  {q:'\uD83D\uDD21 Letter-number: A1, C3, E5, G7, __ = ?',opts:['H8','I8','I9','J10'],ans:2,cat:'pattern',diff:'medium',exp:'+2 letter, +2 number: G+2=I, 7+2=9 \u2192 I9'},
-  {q:'\uD83D\uDD21 Series: \u25B2\u25A1\u25B2\u25B2\u25A1\u25A1\u25B2\u25B2\u25B2\u25A1\u25A1\u25A1 __ = ?',opts:['\u25B2\u25B2\u25B2\u25B2','\u25A1\u25A1\u25A1\u25A1','\u25B2\u25A1\u25A1\u25A1','\u25A1\u25B2\u25B2\u25B2'],ans:0,cat:'pattern',diff:'hard',exp:'1,2,3,4 pattern: 4 triangles come next'},
-  {q:'\uD83D\uDD21 Series: 2, 3, 5, 7, 11, 13, __ = ?',opts:['15','17','14','16'],ans:1,cat:'pattern',diff:'medium',exp:'Prime numbers series: next prime after 13 = 17'},
-  {q:'\uD83D\uDD21 Series: Monday, Wednesday, Friday, __ = ?',opts:['Saturday','Sunday','Tuesday','Thursday'],ans:1,cat:'pattern',diff:'easy',exp:'Skip 1 day: +2 each time \u2192 Sunday'},
+  {q:'\uD83D\uDD21 Series: J, F, M, A, M, J, J, __ (months)',opts:['A','S','O','N'],ans:0,cat:'pattern',diff:'medium',exp:'Jan,Feb,Mar,...,Jul \u2192 August = A'},
+  {q:'\uD83D\uDD21 Number+letter: 2B, 4D, 6F, 8H, __ = ?',opts:['9I','10I','10J','12J'],ans:2,cat:'pattern',diff:'medium',exp:'+2 number, +2 letter: 10J'},
+  {q:'\uD83D\uDD21 Letter-number: A1, C3, E5, G7, __ = ?',opts:['H8','I8','I9','J10'],ans:2,cat:'pattern',diff:'medium',exp:'+2 letter, +2 number: I9'},
+  {q:'\uD83D\uDD21 Series: \u25B2\u25A1\u25B2\u25B2\u25A1\u25A1\u25B2\u25B2\u25B2\u25A1\u25A1\u25A1 __ = ?',opts:['\u25B2\u25B2\u25B2\u25B2','\u25A1\u25A1\u25A1\u25A1','\u25B2\u25A1\u25A1\u25A1','\u25A1\u25B2\u25B2\u25B2'],ans:0,cat:'pattern',diff:'hard',exp:'1,2,3,4 pattern: 4 triangles aage'},
+  {q:'\uD83D\uDD21 Series: 2, 3, 5, 7, 11, 13, __ = ?',opts:['15','17','14','16'],ans:1,cat:'pattern',diff:'medium',exp:'Prime numbers: next prime = 17'},
+  {q:'\uD83D\uDD21 Series: Monday, Wednesday, Friday, __ = ?',opts:['Saturday','Sunday','Tuesday','Thursday'],ans:1,cat:'pattern',diff:'easy',exp:'+2 day each time \u2192 Sunday'},
   {q:'\uD83D\uDD21 Code: if 3\u21929, 4\u219216, 5\u219225, then 7\u2192?',opts:['42','47','49','56'],ans:2,cat:'pattern',diff:'easy',exp:'n\u00B2 pattern: 7\u00B2 = 49'},
+  {q:'\uD83D\uDD21 Pattern: O X O X O __ ?',opts:['O','X','OX','XO'],ans:1,cat:'pattern',diff:'easy',exp:'Alternate O,X \u2192 X aayega'},
+  {q:'\uD83D\uDD21 Series: B, D, G, K, P, __ = ?',opts:['T','U','V','W'],ans:2,cat:'pattern',diff:'hard',exp:'+2,+3,+4,+5,+6: P+6 = V'},
+  {q:'\uD83D\uDD21 Code: 12345 \u2192 ABCDE. To DCBA = ?',opts:['1234','4321','5432','2341'],ans:1,cat:'pattern',diff:'easy',exp:'D=4, C=3, B=2, A=1 \u2192 4321'},
+  {q:'\uD83D\uDD21 Pattern: 2, 6, 12, 20, 30, __ = ?',opts:['36','40','42','48'],ans:2,cat:'pattern',diff:'medium',exp:'n(n+1): 6\u00D77 = 42'},
 
-  /* ---- SPATIAL (12 original) ---- */
-  {q:'\uD83D\uDCD0 Ek square ka perimeter 48cm hai. Area kitna?',opts:['96cm\u00B2','128cm\u00B2','144cm\u00B2','196cm\u00B2'],ans:2,cat:'spatial',diff:'medium',exp:'Side=48\u00F74=12; Area=12\u00B2=144cm\u00B2'},
-  {q:'\uD83D\uDCD0 Ek triangle ke 2 angles 60\u00B0 aur 75\u00B0 hain. Teesra angle?',opts:['35\u00B0','40\u00B0','45\u00B0','50\u00B0'],ans:2,cat:'spatial',diff:'easy',exp:'180-60-75 = 45\u00B0'},
+  /* ---- SPATIAL (visualization — mirrors, folds, dice, rotations) ---- */
+  {q:'\uD83D\uDCD0 "MAPS" ka mirror image kya hoga?',opts:['SPAM','MAPS','SMAP','PSAM'],ans:0,cat:'spatial',diff:'medium',exp:'Mirror image = reverse: MAPS \u2192 SPAM'},
+  {q:'\uD83D\uDCD0 "R" ka mirror image kaisa dikhega?',opts:['R','\u042F','B','P'],ans:1,cat:'spatial',diff:'easy',exp:'Horizontally flipped R looks like \u042F'},
+  {q:'\uD83D\uDCD0 Ek kagaz ko 3 baar fold karo. Kitni layers banengi?',opts:['6','8','9','12'],ans:1,cat:'spatial',diff:'medium',exp:'2\u00B3 = 8 layers'},
+  {q:'\uD83D\uDCD0 Ek kagaz ko half fold karo 2 baar. 1 hole punch karo. Unfold \u2014 kitne holes?',opts:['2','3','4','8'],ans:2,cat:'spatial',diff:'medium',exp:'2 folds = 4 layers \u2192 4 holes'},
+  {q:'\uD83D\uDCD0 Ek standard dice mein 1 ke opposite 6, 2 ke opposite 5. 3 ke opposite?',opts:['2','4','5','6'],ans:1,cat:'spatial',diff:'medium',exp:'Standard die: opposite faces sum to 7 \u2192 3 ke opposite 4'},
+  {q:'\uD83D\uDCD0 Ghadi mein 3:00 baje hour-minute hand ka angle?',opts:['60\u00B0','75\u00B0','90\u00B0','120\u00B0'],ans:2,cat:'spatial',diff:'easy',exp:'3:00 pe = 3\u00D730\u00B0 = 90\u00B0'},
+  {q:'\uD83D\uDCD0 Ghadi mein 6:00 baje hour-minute hand ka angle?',opts:['90\u00B0','120\u00B0','150\u00B0','180\u00B0'],ans:3,cat:'spatial',diff:'easy',exp:'6:00 pe dono opposite = 180\u00B0'},
+  {q:'\uD83D\uDCD0 Clock 3:15 ka mirror image kya time dikhayega?',opts:['8:45','9:45','8:15','9:15'],ans:0,cat:'spatial',diff:'hard',exp:'Mirror clock: 11:60 \u2212 actual \u2192 8:45'},
   {q:'\uD83D\uDCD0 Ek cube ke kitne faces hote hain?',opts:['4','6','8','12'],ans:1,cat:'spatial',diff:'easy',exp:'Cube = 6 faces'},
-  {q:'\uD83D\uDCD0 Ek cube ke kitne vertices (corners)?',opts:['6','8','10','12'],ans:1,cat:'spatial',diff:'easy',exp:'Cube = 8 corners (vertices)'},
-  {q:'\uD83D\uDCD0 Ek rectangle 12\u00D75 ka diagonal kitna?',opts:['11','12','13','14'],ans:2,cat:'spatial',diff:'medium',exp:'\u221A(12\u00B2+5\u00B2) = \u221A169 = 13'},
-  {q:'\uD83D\uDCD0 Ghadi mein 6:00 baje hour aur minute hand ke beech angle?',opts:['90\u00B0','120\u00B0','150\u00B0','180\u00B0'],ans:3,cat:'spatial',diff:'easy',exp:'6:00 pe dono opposite = 180\u00B0'},
-  {q:'\uD83D\uDCD0 Ek cylinder ki height 10cm, radius 7cm. Volume? (\u03C0=22/7)',opts:['1540cm\u00B3','1520cm\u00B3','1460cm\u00B3','1610cm\u00B3'],ans:0,cat:'spatial',diff:'hard',exp:'\u03C0r\u00B2h = 22/7\u00D749\u00D710 = 1540cm\u00B3'},
-  {q:'\uD83D\uDCD0 "MAPS" ka mirror image kya hoga?',opts:['SPAM','SPAM','SMAP','MAPS'],ans:1,cat:'spatial',diff:'medium',exp:'Mirror image = reverse: MAPS \u2192 SPAM'},
-  {q:'\uD83D\uDCD0 Ek kagaz ko 3 baar fold karo. Kitni layers?',opts:['6','8','9','12'],ans:1,cat:'spatial',diff:'medium',exp:'2\u00B3 = 8 layers'},
-  {q:'\uD83D\uDCD0 Ghadi mein 3:00 baje angle?',opts:['60\u00B0','75\u00B0','90\u00B0','120\u00B0'],ans:2,cat:'spatial',diff:'easy',exp:'3:00 pe = 3\u00D730\u00B0 = 90\u00B0'},
-  {q:'\uD83D\uDCD0 Ek hexagon ke kitne sides?',opts:['5','6','7','8'],ans:1,cat:'spatial',diff:'easy',exp:'Hexagon = 6 sides'},
-  {q:'\uD83D\uDCD0 Ek regular octagon ke interior angles ka sum?',opts:['900\u00B0','1080\u00B0','1260\u00B0','720\u00B0'],ans:1,cat:'spatial',diff:'hard',exp:'(n-2)\u00D7180 = 6\u00D7180 = 1080\u00B0'},
-
-  /* ======== EXPANDED POOL: +10 pattern, +8 logic, +8 spatial ======== */
-
-  /* -- 10 new pattern questions -- */
-  {q:'\uD83D\uDD21 Grid: Row1: 2,4,8 | Row2: 3,9,27 | Row3: 5,25,?',opts:['50','75','100','125'],ans:3,cat:'pattern',diff:'hard',exp:'Each row: n, n\u00B2, n\u00B3 \u2192 5\u00B3 = 125'},
-  {q:'\uD83D\uDD21 Odd positions +3, even \u00D72: 1, 2, 4, 4, 7, 8, 10, ?',opts:['14','16','12','18'],ans:1,cat:'pattern',diff:'hard',exp:'Even positions: 2,4,8,16 (\u00D72); Odd: 1,4,7,10 (+3)'},
-  {q:'\uD83D\uDD21 Series: Jan=1, Mar=3, May=5, Jul=7, Sep=?',opts:['8','9','10','11'],ans:1,cat:'pattern',diff:'easy',exp:'Odd months: Sep = 9'},
-  {q:'\uD83D\uDD21 Symbol: \u25B2\u25CF\u25A0 | \u25CF\u25A0\u25B2 | \u25A0\u25B2\u25CF | ?',opts:['\u25B2\u25CF\u25A0','\u25CF\u25B2\u25A0','\u25A0\u25CF\u25B2','\u25B2\u25A0\u25CF'],ans:0,cat:'pattern',diff:'medium',exp:'Rotation cycle repeats: \u25B2\u25CF\u25A0'},
-  {q:'\uD83D\uDD21 Series: 1, 3, 7, 15, 31, ?',opts:['47','55','63','59'],ans:2,cat:'pattern',diff:'hard',exp:'2\u207F - 1 pattern: 2\u2076-1 = 63'},
-  {q:'\uD83D\uDD21 Pattern: AA, BB, CC, DD, ?',opts:['EE','EF','DE','FF'],ans:0,cat:'pattern',diff:'easy',exp:'Double letter sequence: EE'},
-  {q:'\uD83D\uDD21 Series: 4, 9, 25, 49, 121, ?',opts:['144','169','196','225'],ans:1,cat:'pattern',diff:'hard',exp:'Squares of primes: 2\u00B2,3\u00B2,5\u00B2,7\u00B2,11\u00B2,13\u00B2 = 169'},
-  {q:'\uD83D\uDD21 Grid: 1,2,3 | 4,5,6 | 7,8,? (diag sum = 15)',opts:['9','10','11','12'],ans:0,cat:'pattern',diff:'easy',exp:'Magic square: 7+5+3=15; last row sum=15: 7+8+?=15 \u2192 ? = 0... but grid pattern simply 9'},
-  {q:'\uD83D\uDD21 Series: 2, 6, 12, 20, 30, ?',opts:['36','40','42','48'],ans:2,cat:'pattern',diff:'medium',exp:'n(n+1): 1\u00D72=2, 2\u00D73=6 ... 6\u00D77=42'},
-  {q:'\uD83D\uDD21 Calendar: What day is 365 days after a Monday?',opts:['Monday','Tuesday','Wednesday','Sunday'],ans:1,cat:'pattern',diff:'medium',exp:'365 = 52\u00D77 + 1; Monday + 1 = Tuesday'},
-
-  /* -- 8 new logic questions -- */
-  {q:'\uD83E\uDDE0 A says "I always lie." Is A telling the truth?',opts:['Yes','No','Cannot determine','Sometimes'],ans:2,cat:'logic',diff:'hard',exp:'Paradox: if truthful, then lying \u2192 contradiction. Cannot determine.'},
-  {q:'\uD83E\uDDE0 All doctors are smart. Sam is smart. Therefore:',opts:['Sam is a doctor','Sam might be a doctor','Sam is definitely not a doctor','All smart people are doctors'],ans:1,cat:'logic',diff:'medium',exp:'Affirming the consequent fallacy \u2014 Sam might or might not be a doctor'},
-  {q:'\uD83E\uDDE0 A is B\'s father. C is B\'s son. How is A related to C?',opts:['Father','Grandfather','Uncle','Brother'],ans:1,cat:'logic',diff:'easy',exp:'A \u2192 B \u2192 C: A is grandfather of C'},
-  {q:'\uD83E\uDDE0 Pointing to a photo: "He is the son of my father\'s only son." Who is in the photo?',opts:['His father','His son','He himself','His brother'],ans:1,cat:'logic',diff:'hard',exp:'My father\'s only son = me. Son of me = my son.'},
-  {q:'\uD83E\uDDE0 If no fish are birds, and some birds can swim, then:',opts:['Some fish can fly','No fish can swim','Some swimmers are not fish','All swimmers are birds'],ans:2,cat:'logic',diff:'medium',exp:'Some birds swim \u2192 some swimmers exist that aren\'t fish'},
-  {q:'\uD83E\uDDE0 4 friends sit in a row. A is not next to B. C is between A and D. Order?',opts:['A C D B','B D C A','A D C B','D A C B'],ans:1,cat:'logic',diff:'hard',exp:'C between A and D, A not next to B \u2192 B D C A works'},
-  {q:'\uD83E\uDDE0 Agar kuch pen red hain, aur sab red cheezein round hain, to:',opts:['Sab pen round hain','Kuch pen round hain','Koi pen round nahi','Pen red nahi hain'],ans:1,cat:'logic',diff:'medium',exp:'Kuch pen red \u2192 woh round bhi \u2192 kuch pen round hain'},
-  {q:'\uD83E\uDDE0 A earns more than B. C earns less than D. D earns less than B. Richest?',opts:['A','B','C','D'],ans:0,cat:'logic',diff:'medium',exp:'A > B > D > C \u2192 A is richest'},
-
-  /* -- 8 new spatial questions -- */
-  {q:'\uD83D\uDCD0 A die: 1 opposite 6, 2 opposite 5. If 3 is on top, what is bottom?',opts:['2','4','5','6'],ans:1,cat:'spatial',diff:'medium',exp:'On standard die: 3 is opposite 4'},
-  {q:'\uD83D\uDCD0 Ghadi mein 2:30 pe hour-minute angle?',opts:['85\u00B0','95\u00B0','105\u00B0','115\u00B0'],ans:2,cat:'spatial',diff:'hard',exp:'Hour at 75\u00B0, minute at 180\u00B0 \u2192 105\u00B0'},
-  {q:'\uD83D\uDCD0 A kagaz ko half fold karo, 2 baar. Punch 1 hole. Unfold \u2014 kitne holes?',opts:['2','3','4','8'],ans:2,cat:'spatial',diff:'medium',exp:'2 folds = 4 layers \u2192 4 holes'},
-  {q:'\uD83D\uDCD0 Ghadi mein 7:15 pe approximate angle?',opts:['127.5\u00B0','142.5\u00B0','150\u00B0','165\u00B0'],ans:0,cat:'spatial',diff:'hard',exp:'Hour at 217.5\u00B0, minute at 90\u00B0 \u2192 127.5\u00B0'},
-  {q:'\uD83D\uDCD0 A circle ke andar maximum kitne non-overlapping equilateral triangles fit? (same size)',opts:['2','3','4','6'],ans:0,cat:'spatial',diff:'hard',exp:'Maximum 2 same-size equilateral triangles fit (forming Star of David outline but overlapping) \u2192 non-overlapping = 2'},
-  {q:'\uD83D\uDCD0 Ek cone ka radius 3cm, height 4cm. Slant height?',opts:['4cm','5cm','6cm','7cm'],ans:1,cat:'spatial',diff:'medium',exp:'\u221A(3\u00B2+4\u00B2) = \u221A25 = 5cm'},
-  {q:'\uD83D\uDCD0 Mirror image of clock showing 3:15 \u2014 time dikhayi dega?',opts:['8:45','9:45','8:15','9:15'],ans:0,cat:'spatial',diff:'medium',exp:'Mirror: 12-3=9 area, 15 becomes 45 \u2192 approx 8:45'},
-  {q:'\uD83D\uDCD0 Kitne faces hain ek triangular prism mein?',opts:['3','4','5','6'],ans:2,cat:'spatial',diff:'easy',exp:'Triangular prism: 2 triangles + 3 rectangles = 5 faces'}
+  {q:'\uD83D\uDCD0 Ek cube ke kitne corners (vertices)?',opts:['6','8','10','12'],ans:1,cat:'spatial',diff:'easy',exp:'Cube = 8 corners'},
+  {q:'\uD83D\uDCD0 Hexagon ke kitne sides?',opts:['5','6','7','8'],ans:1,cat:'spatial',diff:'easy',exp:'Hexagon = 6 sides'},
+  {q:'\uD83D\uDCD0 Ek aadmi North dekh raha. Right turn, phir left turn, phir back turn. Ab kis taraf?',opts:['North','South','East','West'],ans:1,cat:'spatial',diff:'medium',exp:'N\u2192E\u2192N\u2192S \u2014 last back turn se South'},
+  {q:'\uD83D\uDCD0 "E" alphabet ko 90\u00B0 clockwise ghumane par kaisa dikhega?',opts:['Top par teen lines','Bottom par teen lines','Left par teen lines','Same dikhega'],ans:0,cat:'spatial',diff:'medium',exp:'E ki teen horizontal lines vertical ban jaayengi, upar ki taraf'},
+  {q:'\uD83D\uDCD0 Triangle ke teen angles ka sum?',opts:['90\u00B0','180\u00B0','270\u00B0','360\u00B0'],ans:1,cat:'spatial',diff:'easy',exp:'Kisi bhi triangle ke 3 angles ka sum = 180\u00B0'},
+  {q:'\uD83D\uDCD0 Ek room ke 4 corners hain. Har corner mein 1 cat. Har cat ke saamne 3 cats. Total cats?',opts:['4','7','12','16'],ans:0,cat:'spatial',diff:'hard',exp:'Sirf 4 cats \u2014 har cat doosri 3 ko dekh sakti hai'}
 ];
 
 /* ---------- CATEGORIES (expanded to 8) ---------- */
@@ -126,7 +113,9 @@ const IQ_CATS={
   speed     :{label:'\u26A1 Speed',              color:'#EAB308', icon:'\u26A1'}
 };
 const IQ_DIFF_W={easy:1,medium:1.8,hard:3.0};
-const IQ_TIMER={easy:30000,medium:22000,hard:16000};
+/* Timers tuned for classic-IQ pool: questions are short & purely reasoning-based,
+   so the player gets a comfortable but firm thinking window per difficulty. */
+const IQ_TIMER={easy:25000,medium:20000,hard:15000};
 const IQ_N=20;
 
 function iqClassify(iq){
@@ -751,7 +740,7 @@ function playIQTest(body,setScore,end,wrap,startClock){
       '</div>'+
       '<div class="iq-dots">'+progressDots+'</div>'+
       (qData.isSpeed?'<div class="iq-speed-badge">\u26A1 SPEED ROUND \u2014 4 seconds!</div>':'')+
-      '<div class="timer-bar" style="margin-bottom:14px;"><div class="timer-fill timer-green" id="iqBar" style="width:100%"></div></div>'+
+      '<div class="timer-bar" style="margin-bottom:14px;position:relative;"><div class="timer-fill timer-green" id="iqBar" style="width:100%"></div><div class="iq-timer-num" id="iqTimerNum">'+Math.ceil(timeMs/1000)+'s</div></div>'+
       '<div class="iq-question">'+qData.q+'</div>'+
       '<div class="iq-opts" id="iqOpts">'+
         qData.opts.map((o,i)=>'<button class="iq-opt" data-i="'+i+'">'+
@@ -765,9 +754,15 @@ function playIQTest(body,setScore,end,wrap,startClock){
       elapsed+=100;
       const pct=Math.max(0,100-elapsed/timeMs*100);
       const bar=host.querySelector('#iqBar');
+      const tNum=host.querySelector('#iqTimerNum');
+      const remain=Math.max(0,Math.ceil((timeMs-elapsed)/1000));
       if(bar){
         bar.style.width=pct+'%';
         bar.className='timer-fill '+(pct>60?'timer-green':pct>25?'timer-yellow':'timer-red');
+      }
+      if(tNum){
+        tNum.textContent=remain+'s';
+        tNum.classList.toggle('iq-timer-critical',pct<=25);
       }
       if(elapsed>=timeMs&&!answered){
         _cti(barTimer);answered=true;
@@ -815,16 +810,32 @@ function playIQTest(body,setScore,end,wrap,startClock){
       _showExp(false,'Wrong!',qData.exp);
     }
     qi++;
-    _st(showQ,2200);
+    /* Auto-advance after 2.2s, but let the player skip with a tap so confident
+       readers don't sit through the explanation pause. */
+    const autoAdvance=_st(showQ,2200);
+    const advance=()=>{
+      if(autoAdvance)clearTimeout(autoAdvance);
+      host.removeEventListener('click',skipHandler,true);
+    };
+    const skipHandler=(e)=>{
+      /* only react to taps in the explanation area, not stray clicks on disabled options */
+      const expBox=host.querySelector('.iq-exp-box');
+      if(expBox&&expBox.contains(e.target)){
+        advance();
+        showQ();
+      }
+    };
+    host.addEventListener('click',skipHandler,true);
   }
 
   function _showExp(correct,msg,exp){
-    const el=$('<div class="iq-exp-box '+(correct?'iq-exp-correct':'iq-exp-wrong')+'">'+
+    const el=$('<div class="iq-exp-box iq-exp-skip '+(correct?'iq-exp-correct':'iq-exp-wrong')+'">'+
       '<div class="iq-exp-icon">'+(correct?'\u2705':'\u274C')+'</div>'+
-      '<div>'+
+      '<div style="flex:1;">'+
         '<div style="font-weight:700;font-size:13px;">'+msg+'</div>'+
         '<div style="font-size:12px;color:var(--text2);margin-top:3px;">\uD83D\uDCA1 '+exp+'</div>'+
       '</div>'+
+      '<div class="iq-exp-skip-hint">tap to skip \u00BB</div>'+
     '</div>');
     host.appendChild(el);
   }

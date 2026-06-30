@@ -1,3 +1,85 @@
+/* ============================================================
+   Pattern + IQ Test — premium game-feel polish
+   ============================================================ */
+/* Anchored points popup — floats up out of the option the player tapped. */
+.pat-opt{position:relative;}
+.pat-pts-popup.pat-pts-anchored{
+  position:absolute;top:-6px;right:8px;left:auto;
+  font-weight:800;font-size:15px;pointer-events:none;
+  animation:ptPtsRise .9s cubic-bezier(.22,1,.36,1) forwards;
+  text-shadow:0 2px 6px rgba(0,0,0,.18);
+  z-index:5;
+}
+@keyframes ptPtsRise{
+  0%{opacity:0;transform:translateY(4px) scale(.9);}
+  20%{opacity:1;transform:translateY(-4px) scale(1.05);}
+  100%{opacity:0;transform:translateY(-34px) scale(1);}
+}
+/* HUD score/streak badges pulse when their value changes. */
+.pat-score-badge.pat-score-pop{animation:ptHudPop .4s cubic-bezier(.22,1,.36,1);}
+.pat-streak-badge.pat-streak-pop{animation:ptStreakPop .5s cubic-bezier(.34,1.56,.64,1);}
+@keyframes ptHudPop{
+  0%{transform:scale(1);}
+  40%{transform:scale(1.18);}
+  100%{transform:scale(1);}
+}
+@keyframes ptStreakPop{
+  0%{transform:scale(1) rotate(0);}
+  40%{transform:scale(1.25) rotate(-6deg);}
+  70%{transform:scale(1.1) rotate(4deg);}
+  100%{transform:scale(1) rotate(0);}
+}
+
+/* IQ Test — live countdown number next to the bar, redder & wobbly when critical. */
+.iq-timer-num{
+  position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  font-size:11px;font-weight:700;color:var(--text2);
+  font-variant-numeric:tabular-nums;letter-spacing:.3px;pointer-events:none;
+  background:var(--card);padding:1px 8px;border-radius:8px;
+  box-shadow:0 1px 3px rgba(0,0,0,.06);
+}
+.iq-timer-num.iq-timer-critical{
+  color:#EF4444;animation:iqTickCritical .6s ease infinite;
+}
+@keyframes iqTickCritical{
+  0%,100%{transform:translateY(-50%) scale(1);}
+  50%{transform:translateY(-50%) scale(1.12);}
+}
+
+/* IQ Test — explanation box gets a subtle "tap to skip" hint. */
+.iq-exp-skip{cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;}
+.iq-exp-skip:active{transform:scale(.985);}
+.iq-exp-skip-hint{
+  font-size:10px;color:var(--text2);opacity:.65;
+  margin-left:auto;align-self:center;
+  font-weight:600;letter-spacing:.3px;text-transform:lowercase;
+  white-space:nowrap;padding-left:8px;
+}
+
+/* ============================================================
+   Spatial Spin V5 — visual overhaul + Spatial IQ end-screen card
+   (Rules placed at the top so they take precedence over
+   any earlier .ss- declarations later in this file.)
+   ============================================================ */
+.ss-opt.correct-flash{border-color:#22C55E !important;background:rgba(34,197,94,.10) !important;animation:ssCorrectGlow .55s ease;}
+.ss-opt.wrong-flash{border-color:#EF4444 !important;background:rgba(239,68,68,.10) !important;animation:ssShake .4s ease;}
+@keyframes ssCorrectGlow{0%{box-shadow:0 0 0 0 rgba(34,197,94,.45);}100%{box-shadow:0 0 0 14px rgba(34,197,94,0);}}
+@keyframes ssShake{0%,100%{transform:translateX(0);}25%{transform:translateX(-6px);}75%{transform:translateX(6px);}}
+
+.ss-iq-card{background:var(--card);border-radius:18px;padding:18px;margin:14px 0;box-shadow:var(--shadow);border:1px solid var(--border);}
+.ss-iq-headline{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+.ss-iq-emoji{font-size:32px;}
+.ss-iq-num{font-size:28px;font-weight:800;color:#7C3AED;line-height:1;}
+.ss-iq-label{font-size:12px;color:var(--text2);font-weight:600;}
+.ss-iq-breakdown{display:flex;flex-direction:column;gap:8px;}
+.ss-iq-row{display:flex;align-items:center;gap:10px;font-size:12px;}
+.ss-iq-row > span:first-child{width:96px;flex-shrink:0;font-weight:600;}
+.ss-iq-bar{flex:1;height:6px;background:var(--border);border-radius:50px;overflow:hidden;}
+.ss-iq-fill{height:100%;background:#7C3AED;border-radius:50px;}
+.ss-iq-pct{width:38px;text-align:right;font-weight:700;flex-shrink:0;}
+.ss-iq-meta{font-size:12px;color:var(--text2);margin-top:12px;text-align:center;}
+.ss-iq-tip{font-size:12px;background:rgba(124,58,237,.08);border-radius:10px;padding:10px;margin-top:10px;text-align:center;}
+
 :root{
   --bg:#F0F4FF;--card:#FFFFFF;--text:#1A1040;--text2:#6B7280;
   --primary:#7C3AED;--primary2:#4F8EF7;--mint:#34D399;--orange:#F97316;--pink:#F472B6;

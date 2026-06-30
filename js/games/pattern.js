@@ -974,9 +974,20 @@ function playPattern(body,setScore,end,wrap,startClock){
     /* boss defeated toast */
     if(G.activeBoss){toast('BOSS DEFEATED \uD83D\uDCA5');G.activeBoss=null;}
     if(G.mysteryActive){G.mysteryActive=false;}
-    /* points popup */
-    const popup=$('<div class="pat-pts-popup" style="color:#34D399;">+'+pts+(fast?' \u26A1':'')+'</div>');
-    document.body.appendChild(popup);_st(()=>popup.remove(),900);
+    /* Points popup — anchored to the option button so it visibly comes out of the
+       answer the player just tapped instead of floating randomly on the page. */
+    if(btn){
+      const popup=$('<div class="pat-pts-popup pat-pts-anchored" style="color:#34D399;">+'+pts+(fast?' \u26A1':'')+'</div>');
+      btn.style.position=btn.style.position||'relative';
+      btn.appendChild(popup);
+      _st(()=>{if(popup.parentNode)popup.parentNode.removeChild(popup);},950);
+    }
+    /* Streak badge: nudge the score badge & streak badge so the player feels the value
+       changing, instead of the number silently jumping. */
+    const scoreBadge=host.querySelector('.pat-score-badge');
+    if(scoreBadge){scoreBadge.classList.remove('pat-score-pop');void scoreBadge.offsetWidth;scoreBadge.classList.add('pat-score-pop');}
+    const streakBadge=host.querySelector('.pat-streak-badge');
+    if(streakBadge&&G.streak>=2){streakBadge.classList.remove('pat-streak-pop');void streakBadge.offsetWidth;streakBadge.classList.add('pat-streak-pop');}
     G.round++;
     G._choiceMult=1;
     _st(next,440);
