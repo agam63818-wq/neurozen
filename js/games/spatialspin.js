@@ -1515,14 +1515,19 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
   /* Freshness tracker: avoid repeating the same canonical shape / family too often */
   const Fresh={
     canon:[],families:[],correctPos:[],
+    /* sessionSigs: full round signature = canonHash+':'+challengeType
+       tracks EVERY round shown this session so EXACT repeats are impossible */
+    sessionSigs:new Set(),
     maxCanon:40,maxFam:6,maxPos:8,
     addCanon(h){this.canon.push(h);if(this.canon.length>this.maxCanon)this.canon.shift();},
     hasCanon(h){return this.canon.indexOf(h)>=0;},
+    addSig(sig){this.sessionSigs.add(sig);},
+    hasSig(sig){return this.sessionSigs.has(sig);},
     addFam(f){this.families.push(f);if(this.families.length>this.maxFam)this.families.shift();},
     countFam(f,n){let c=0;const s=Math.max(0,this.families.length-n);for(let i=s;i<this.families.length;i++)if(this.families[i]===f)c++;return c;},
     addPos(p){this.correctPos.push(p);if(this.correctPos.length>this.maxPos)this.correctPos.shift();},
     countPos(p,n){let c=0;const s=Math.max(0,this.correctPos.length-n);for(let i=s;i<this.correctPos.length;i++)if(this.correctPos[i]===p)c++;return c;},
-    clear(){this.canon=[];this.families=[];this.correctPos=[];}
+    clear(){this.canon=[];this.families=[];this.correctPos=[];this.sessionSigs=new Set();}
   };
 
   /* Adaptive bias: nudges block count + timer based on recent performance */
@@ -1601,11 +1606,16 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
         if(!built)continue;
         /* freshness: avoid recently-seen canonical shapes + over-used families */
         const canon=SS_canonicalHash(built.target);
+        const sig=canon+':'+challengeType; /* full round signature */
+        /* Block if EXACT same round (same shape + same challenge type) shown this session */
+        if(Fresh.hasSig(sig))continue;
+        /* Also block if same TARGET shape was used recently (within last maxCanon rounds) */
         if(Fresh.hasCanon(canon))continue;
         if(built.family&&Fresh.countFam(built.family,4)>=3)continue;
         if(!SS_verifyRound(built))continue;
         round=built;
         round.canon=canon;
+        round.sig=sig;
         break;
       }
     }
@@ -1678,20 +1688,13 @@ function playSpatialSpin(body,setScore,end,wrap,startClock){
     G.challengeHistory.push(round.challengeType);
     if(G.challengeHistory.length>10)G.challengeHistory.shift();
     if(round.canon)Fresh.addCanon(round.canon);
+    if(round.sig)Fresh.addSig(round.sig);  /* register full signature — prevents any repeat this session */
     if(round.family)Fresh.addFam(round.family);
     const correctIdx=round.options.findIndex(o=>o.correct);
     if(correctIdx>=0)Fresh.addPos(correctIdx);
-    /* avoid stale correct-answer position */
-    if(Fresh.countPos(correctIdx,5)>=2){
-      let bestSlot=correctIdx,bestC=99;
-      for(let i=0;i<round.options.length;i++){
-        const c=Fresh.countPos(i,5);
-        if(c<bestC){bestC=c;bestSlot=i;}
-      }
-      if(bestSlot!==correctIdx){
-        const t=round.options[correctIdx];round.options[correctIdx]=round.options[bestSlot];round.options[bestSlot]=t;
-      }
-    }
+    /* NOTE: position-swap removed — it caused same question to reappear with different answer position
+       which felt like repetition to the player. Correct position variety is handled by SS_avoidStalePos
+       inside each builder function which shuffles options before returning. */
     _curRound=round;
     G.timerMs=SS_timerForRound();
     G.roundStart=Date.now();G.roundOffPause=0;
