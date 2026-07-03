@@ -35,7 +35,7 @@ sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 /* Top-level `const`/`let` in a vm script do NOT become global properties,
    so append explicit exports onto globalThis for the identifiers we need. */
-SRC += '\n;globalThis.__SS_EXPORT=function(){return{SS_norm,SS_hash,SS_rotateCW,SS_mirrorH,SS_rotateN,SS_rotationSet,SS_mirrorSet,SS_canonicalHash,SS_bbox,SS_isConnected,SS_frontier,SS_cellsOverlap,SS_rotSymmetryOrder,SS_hasMirror,SS_parseGrid,SS_SHAPE_CATALOG,SS_SHAPE_LIB,SS_pickCatalog,SS_buildRotation,SS_buildMirror,SS_buildMemory,SS_buildOdd,SS_buildSequence,SS_buildRoundForCategory,SS_verifyRound,SS_makePuzzleRecipe,SS_difficultyScore,SS_tierForDifficulty,SS_catByN,SS_catCount,SS_byTier,SS_TIERS,SS_CAT_WEIGHTS,SS_MODES};};';
+SRC += '\n;globalThis.__SS_EXPORT=function(){return{SS_norm,SS_hash,SS_rotateCW,SS_mirrorH,SS_rotateN,SS_rotationSet,SS_mirrorSet,SS_canonicalHash,SS_bbox,SS_isConnected,SS_frontier,SS_cellsOverlap,SS_rotSymmetryOrder,SS_hasMirror,SS_parseGrid,SS_SHAPE_CATALOG,SS_SHAPE_LIB,SS_pickCatalog,SS_buildRotation,SS_buildMirror,SS_buildMemory,SS_buildOdd,SS_buildSequence,SS_buildRoundForCategory,SS_verifyRound,SS_makePuzzleRecipe,SS_difficultyScore,SS_tierForDifficulty,SS_catByN,SS_catCount,SS_byTier,SS_TIERS,SS_CAT_WEIGHTS,SS_MODES,SS_CHALLENGE_REGISTRY,SS_CAT_KEYS,SS_CHALLENGE_META};};';
 vm.runInContext(SRC, sandbox);
 
 /* pull the functions/values we need out of the sandbox */
