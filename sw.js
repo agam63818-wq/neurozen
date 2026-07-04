@@ -14,7 +14,6 @@ const CORE_ASSETS = [
   '/js/games/stroopx.js',
   '/js/games/iqtest.js',
   '/js/games/reactionlab.js',
-  '/js/games/spatialspin.js',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png'
