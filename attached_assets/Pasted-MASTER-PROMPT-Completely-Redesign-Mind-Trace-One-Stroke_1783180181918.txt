@@ -1,0 +1,514 @@
+MASTER PROMPT — Completely Redesign Mind Trace (One Stroke)
+
+You are redesigning the Mind Trace game inside NeuroZen.
+
+DO NOT create a new game.
+Keep the existing game framework and improve it into a premium Play Store quality brain puzzle.
+
+The current implementation already has:
+
+one stroke drawing
+puzzle library
+score
+lives
+rounds
+timer
+start screen
+
+Preserve the existing architecture unless necessary.
+
+The goal is to make this feel like a professional brain-training game similar to Peak, Lumosity and Brain Test—not a simple line drawing demo.
+
+CORE PHILOSOPHY
+
+This is NOT a drawing game.
+
+This is a planning game.
+
+Every puzzle should force the player to stop, analyze, plan a route mentally, and only then begin drawing.
+
+The player should think before touching the screen.
+
+The gameplay must become more strategic as rounds increase.
+
+GAME FLOW
+
+Each round should follow this rhythm:
+
+Observe puzzle
+
+↓
+
+Mentally calculate best route
+
+↓
+
+Start from correct node
+
+↓
+
+Trace every edge exactly once
+
+↓
+
+Satisfying completion animation
+
+↓
+
+Instant next puzzle
+
+No unnecessary menus between rounds.
+
+Fast pacing.
+
+REMOVE REPETITION
+
+Current puzzles become predictable.
+
+Never allow repetitive gameplay.
+
+Implement procedural variation.
+
+Every base puzzle should automatically generate many different versions by randomizing:
+
+rotation
+mirror
+scaling
+node spacing
+edge ordering
+graph orientation
+visual style
+
+The player should almost never recognize the same puzzle twice.
+
+DIFFICULTY SYSTEM
+
+Difficulty should increase gradually.
+
+Rounds 1–5
+
+Very simple
+
+4–5 edges
+
+Obvious route
+
+Rounds 6–15
+
+6–8 edges
+
+Branching paths
+
+Rounds 16–30
+
+8–12 edges
+
+Multiple odd-degree nodes
+
+False visual symmetry
+
+Rounds 31+
+
+Large graphs
+
+Loops
+
+Bridges
+
+Nested structures
+
+High planning requirement
+
+No sudden difficulty spikes.
+
+PUZZLE TYPES
+
+Instead of only classic puzzles, create multiple puzzle engines.
+
+Randomly rotate between them.
+
+1. Classic One Stroke
+
+Current gameplay.
+
+2. Missing Edge
+
+Some edges are hidden.
+
+Player draws only missing connections.
+
+3. Locked Node
+
+Certain nodes remain locked.
+
+Cannot pass through them until other paths are completed.
+
+Forces route planning.
+
+4. Portal Node
+
+Two portal nodes instantly teleport the path.
+
+Player must account for teleportation.
+
+5. Fragile Edge
+
+Some edges disappear forever after crossing.
+
+Wrong order makes puzzle impossible.
+
+6. Color Gate
+
+Must pass Red before Blue.
+
+Simple sequence planning.
+
+7. One Way Edge
+
+Certain edges can only be crossed in one direction.
+
+Adds strategy.
+
+8. Giant Puzzle
+
+Every 10 rounds.
+
+Larger graph.
+
+Bonus XP.
+
+Reward animation.
+
+9. Speed Puzzle
+
+Every few rounds.
+
+Smaller puzzle.
+
+Strict timer.
+
+Fast bonus.
+
+10. Genius Puzzle
+
+Rare.
+
+Only one mathematically valid route.
+
+Large reward.
+
+GRAPH GENERATION
+
+Do NOT rely only on static puzzle library.
+
+Implement a procedural graph generator.
+
+Generate valid Euler path puzzles.
+
+Rules:
+
+Always ensure puzzle is solvable.
+
+Guarantee exactly 0 or 2 odd-degree nodes.
+
+Avoid impossible graphs.
+
+Randomize layout every game.
+
+Support hundreds of unique puzzles.
+
+VISUAL IMPROVEMENTS
+
+Current visuals feel flat.
+
+Upgrade everything.
+
+Dark premium puzzle board.
+
+Glass card.
+
+Soft shadows.
+
+Neon edge glow.
+
+Animated node highlights.
+
+Smooth edge tracing.
+
+Gradient completion.
+
+Tiny particle effects.
+
+Modern mobile game quality.
+
+START NODE EXPERIENCE
+
+Current version gives no guidance.
+
+Improve.
+
+When puzzle appears:
+
+Pulse animation
+
+↓
+
+Possible start nodes softly glow
+
+↓
+
+After player begins,
+
+all hints disappear.
+
+Practice Mode may keep hints enabled.
+
+DRAWING EXPERIENCE
+
+Drawing should feel premium.
+
+Finger movement should be buttery smooth.
+
+Edge snapping should be forgiving.
+
+Do not require pixel-perfect input.
+
+Allow small tolerance.
+
+Never frustrate the player.
+
+COMPLETION FEEDBACK
+
+Puzzle completion should feel rewarding.
+
+Animate:
+
+Edge glow
+
+↓
+
+Entire graph lights up
+
+↓
+
+Particles
+
+↓
+
+Pulse
+
+↓
+
+Score flies upward
+
+↓
+
+"Perfect"
+
+↓
+
+Next puzzle slides in
+
+Completion should take under one second.
+
+FAILURE FEEDBACK
+
+Wrong move should never feel unfair.
+
+Invalid edge:
+
+Small shake
+
+Red flash
+
+Short vibration
+
+Wrong route:
+
+Lose one life
+
+Current trace clears
+
+Puzzle restarts
+
+No long delays.
+
+SCORING SYSTEM
+
+Current score feels meaningless.
+
+Use:
+
+Base score
+
+Speed bonus
+
+Perfect route bonus
+
+No reset bonus
+
+Combo multiplier
+
+Difficulty multiplier
+
+Special puzzle multiplier
+
+Display earned points every round.
+
+COMBO SYSTEM
+
+3 perfect puzzles
+
+Focus Combo
+
+5 perfect
+
+Brain Flow
+
+10 perfect
+
+Genius Mode
+
+Combo increases score.
+
+Visual effects increase.
+
+STREAK SYSTEM
+
+Display current streak.
+
+Display best streak.
+
+Reward long streaks.
+
+DAILY CHALLENGES
+
+Generate date-seeded challenges.
+
+Examples:
+
+Finish 5 puzzles without reset.
+
+Complete Hard puzzle.
+
+Solve Giant Puzzle.
+
+No mistakes today.
+
+Reward:
+
+XP
+
+Coins
+
+Achievements
+
+STATS
+
+Track permanently.
+
+Best Score
+
+Highest Round
+
+Fastest Puzzle
+
+Longest Combo
+
+Longest Streak
+
+Average Planning Time
+
+Average Solve Time
+
+Accuracy
+
+Games Played
+
+Total Puzzles Solved
+
+END GAME SCREEN
+
+Do not simply show score.
+
+Show:
+
+Score
+
+Rounds
+
+Accuracy
+
+Average Planning Time
+
+Average Solve Time
+
+Combo
+
+Best Streak
+
+Highest Difficulty Reached
+
+XP Earned
+
+New Record animation
+
+Progress bar
+
+Brain Rating
+
+BRAIN RATING
+
+Instead of fake IQ.
+
+Calculate:
+
+Planning
+
+Accuracy
+
+Consistency
+
+Speed
+
+Decision Making
+
+Output:
+
+Beginner
+
+Focused
+
+Analytical
+
+Strategic
+
+Expert
+
+Master Planner
+
+Avoid claiming a medically valid IQ.
+
+PERFORMANCE
+
+Maintain 60 FPS.
+
+No memory leaks.
+
+No unnecessary DOM recreation.
+
+Efficient SVG rendering.
+
+Support low-end Android devices.
+
+Keep mobile-first.
+
+IMPORTANT
+
+Do NOT redesign the whole project.
+
+Do NOT remove existing architecture.
+
+Improve the existing Mind Trace implementation while keeping compatibility with the NeuroZen framework.
+
+The final game should feel like a premium Play Store brain-training game that players can enjoy for months without feeling repetitive.
