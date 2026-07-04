@@ -246,6 +246,7 @@ const DAILY_DEFS=[
   {game:'stroopx',label:'Score 30+ in Color Stroop',check:v=>v>=30},
   {game:'schulte',label:'Score 40+ in Schulte Table',check:v=>v>=40},
   {game:'reactionlab',label:'Score 25+ in Reaction Lab',check:v=>v>=25},
+  {game:'mindtrace',label:'Score 25+ in Mind Trace',check:v=>v>=25},
 ];
 function todayChallenge(){
   const dayN=Math.floor(Date.now()/86400000);
@@ -359,6 +360,7 @@ function awardScore(rawPts,skillKey,gameId,gameScore,starThresh){
     stroopx:   [10,20,35,50],
     iqtest:    [12,25,42,60],
     reactionlab:[10,20,35,50],
+    mindtrace:  [10,20,35,50],
   };
   const tiers=_xpTiers[gameId]||[10,20,35,50];
   /* tiers[0]=base, [1]=1-star, [2]=2-star, [3]=3-star */
@@ -583,6 +585,7 @@ const GAMES=[
   {id:'stroopx',name:'Color Stroop Xtreme',cat:'Focus',skill:'focus',bg:'#FFF0F3',iconBg:'linear-gradient(135deg,#F472B6,#EC4899)',icon:'🎨',desc:'Name the ink color, not the word — as fast as you can'},
   {id:'iqtest',name:'IQ Test',cat:'Reasoning',skill:'logic',bg:'#F0FDF4',iconBg:'linear-gradient(135deg,#34D399,#059669)',icon:'🧩',desc:'25 Hinglish reasoning questions — find your IQ score'},
   {id:'reactionlab',name:'Reaction Lab',cat:'Speed',skill:'speed',bg:'#FFFBEB',iconBg:'linear-gradient(135deg,#F59E0B,#EF4444)',icon:'⚡',desc:'Tap the circle the instant it appears — test your raw reaction speed'},
+  {id:'mindtrace',name:'Mind Trace',cat:'Logic',skill:'logic',bg:'#EEF2FF',iconBg:'linear-gradient(135deg,#6D28D9,#7C3AED)',icon:'✏️',desc:'Trace every edge in ONE stroke — plan your path before drawing'},
 ];
 const CATS=['All','Memory','Focus','Logic','Speed','Reasoning'];
 let gamesFilter='All';
@@ -758,6 +761,7 @@ function openGame(id,wkCtx){
   else if(id==='stroopx')playStroopX(body,setScore,endGame,wrap,startClock);
   else if(id==='iqtest')playIQTest(body,setScore,endGame,wrap,startClock);
   else if(id==='reactionlab')playReactionLab(body,setScore,endGame,wrap,startClock);
+  else if(id==='mindtrace')playMindTrace(body,setScore,endGame,wrap,startClock);
 }
 
 /* ===================== PROGRESS ===================== */
