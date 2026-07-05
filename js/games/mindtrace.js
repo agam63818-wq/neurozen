@@ -64,6 +64,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     combo: 0, bestCombo: 0, streak: 0, bestStreak: 0,
     correctAnswers: 0, totalPlanMs: 0,
     drawTimes: [], poolIdx: 0,
+    puzzleTimer: null, timeLeft: 15, totalTime: 15,
     puzzle: null, type: 'onestroke',
     missingData: null, startData: null,
     drawing: false, currentNode: -1, startNode: -1,
@@ -148,6 +149,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
 
   function stopLoop() {
     if (animId) { cancelAnimationFrame(animId); animId = null; }
+    stopPuzzleTimer();
   }
 
   function drawFrame() {
@@ -166,6 +168,28 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       }
 
     if (!G.puzzle) return;
+
+    /* === TIMER BAR (top of canvas) === */
+    if ((G.phase === 'play' || G.phase === 'plan') && G.totalTime > 0) {
+      const pct  = Math.max(0, G.timeLeft / G.totalTime);
+      const barW = CW - 24, barH = 5, barX = 12, barY = 10;
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 3); ctx.fill();
+      const barColor = pct > 0.6 ? '#7C3AED' : pct > 0.3 ? '#F59E0B' : '#EF4444';
+      ctx.shadowColor = barColor;
+      ctx.shadowBlur  = pct < 0.3 ? 8 : 4;
+      ctx.fillStyle   = barColor;
+      ctx.beginPath(); ctx.roundRect(barX, barY, barW * pct, barH, 3); ctx.fill();
+      if (G.phase === 'play' && G.timeLeft < 5) {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle  = '#EF4444';
+        ctx.font       = 'bold 13px system-ui';
+        ctx.textAlign  = 'center';
+        ctx.fillText(Math.ceil(G.timeLeft) + 's', CW / 2, barY + barH + 14);
+      }
+      ctx.restore();
+    }
 
     const now = Date.now();
     const p   = G.puzzle;
@@ -195,10 +219,12 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
         ctx.strokeStyle = '#4ADE80';
         ctx.lineWidth   = 4.5;
       } else if (isMissing) {
-        ctx.strokeStyle = '#4B2A80';
+        ctx.strokeStyle = '#A78BFA';
         ctx.lineWidth   = 3;
-        ctx.globalAlpha = 0.55;
-        ctx.setLineDash([6, 5]);
+        ctx.globalAlpha = 0.65;
+        ctx.setLineDash([8, 6]);
+        ctx.shadowColor = '#7C3AED';
+        ctx.shadowBlur  = 6;
       } else {
         const glow = 0.3 + 0.15 * Math.sin(now * 0.0015 + a + b);
         ctx.shadowColor = '#7C3AED';
@@ -359,9 +385,16 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
 
   function onUp(e) {
     e.preventDefault();
-    if (!G.drawing) return;
+    if (!G.drawing || G.phase !== 'play') return;
     G.drawing = false;
     G.drawTimes.push(Date.now() - G.drawStart);
+
+    /* Lifted finger mid-draw (drew ≥1 edge but puzzle incomplete) → lose a life */
+    if (G.tracedEdges.size > 0) {
+      const targets = G.type === 'missing' ? G.missingData.hidden : G.puzzle.edges;
+      const done = targets.every(([a, b]) => G.tracedEdges.has(ek(a, b)));
+      if (!done) handleWrong('Lifted too early!');
+    }
   }
 
   function bindPointer() {
@@ -379,9 +412,44 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     if (targets.every(([a, b]) => G.tracedEdges.has(ek(a, b)))) handleCorrect();
   }
 
+  /* ---- PUZZLE TIMER ---- */
+  function getPuzzleTime(diff) {
+    return diff === 1 ? 15 : diff === 2 ? 20 : 25;
+  }
+
+  function stopPuzzleTimer() {
+    if (G.puzzleTimer) { clearInterval(G.puzzleTimer); G.puzzleTimer = null; }
+  }
+
+  function startPuzzleTimer() {
+    stopPuzzleTimer();
+    const diff = G.puzzle ? G.puzzle.diff : 1;
+    G.totalTime = getPuzzleTime(diff);
+    G.timeLeft  = G.totalTime;
+    G.phase     = 'plan'; /* 2-second planning phase — can't draw yet */
+
+    showPop('👁 Plan your route...', '#F59E0B');
+    setTimeout(() => {
+      if (G.phase !== 'plan') return;
+      G.phase     = 'play';
+      G.planStart = Date.now();
+      G.puzzleTimer = setInterval(() => {
+        if (G.phase !== 'play') return;
+        G.timeLeft -= 0.1;
+        if (G.timeLeft <= 0) {
+          G.timeLeft = 0;
+          clearInterval(G.puzzleTimer);
+          G.puzzleTimer = null;
+          handleWrong('Time up! ⏱');
+        }
+      }, 100);
+    }, 2000);
+  }
+
   /* ---- CORRECT ---- */
   function handleCorrect() {
     G.phase = 'success';
+    stopPuzzleTimer();
     G.totalPlanMs += (G.drawStart || Date.now()) - G.planStart;
     G.correctAnswers++;
     G.streak++;
@@ -406,20 +474,23 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
   }
 
   /* ---- WRONG ---- */
-  function handleWrong() {
+  function handleWrong(reason) {
+    if (G.phase !== 'play') return;
+    G.phase  = 'fail';
     G.lives--;
     G.streak = 0;
     G.combo  = 0;
     G.failAlpha = 1.2;
+    stopPuzzleTimer();
     if (typeof haptic === 'function') haptic([45, 20, 45]);
     if (typeof playSound === 'function') playSound('wrong');
-    showPop('✗', '#EF4444');
+    showPop('✗ ' + (reason || 'Wrong!'), '#EF4444');
     updateHUD();
 
     if (G.lives <= 0) {
-      setTimeout(() => { stopLoop(); gameOver(); }, 900);
+      setTimeout(() => { stopLoop(); gameOver(); }, 1000);
     } else {
-      setTimeout(() => resetDraw(), 700);
+      setTimeout(() => { G.phase = 'play'; resetDraw(); startPuzzleTimer(); }, 900);
     }
   }
 
@@ -489,6 +560,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       renderMCQ();
       updateTypeBadge();
       updateHUD();
+      startPuzzleTimer();
       return;
     }
 
@@ -499,6 +571,8 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     /* show / hide MCQ panel */
     const mcqEl = document.getElementById('mtMCQ');
     if (mcqEl) mcqEl.style.display = 'none';
+
+    startPuzzleTimer();
   }
 
   /* ---- MCQ RENDER ---- */
@@ -665,7 +739,11 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     makeCanvas();
     document.getElementById('mtBoard').appendChild(canvas);
     bindPointer();
-    document.getElementById('mtReset').onclick = () => resetDraw();
+    document.getElementById('mtReset').onclick = () => {
+      if (G.phase !== 'play') return;
+      resetDraw();
+      showPop('↺ Restarted — timer running!', '#F59E0B');
+    };
 
     startLoop();
     nextPuzzle();
