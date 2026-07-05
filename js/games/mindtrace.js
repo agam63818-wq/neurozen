@@ -50,6 +50,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
   function mergeStats(g) {
     const s = loadStats();
     s.highRound       = Math.max(s.highRound       || 0, g.round);
+    s.bestScore       = Math.max(s.bestScore        || 0, g.score);
     s.perfectPuzzles  = (s.perfectPuzzles  || 0) + g.perfectPuzzles;
     s.puzzlesSolved   = (s.puzzlesSolved   || 0) + g.correctAnswers;
     s.gamesPlayed     = (s.gamesPlayed     || 0) + 1;
@@ -1418,7 +1419,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       </div>
 
       <div class="mt3-statgrid">
-        <div class="mt3-sg"><div class="v">${best['mindtrace']||0}</div><div class="l">Best Score</div></div>
+        <div class="mt3-sg"><div class="v">${stats.bestScore||0}</div><div class="l">Best Score</div></div>
         <div class="mt3-sg"><div class="v">${stats.highRound||0}</div><div class="l">Best Round</div></div>
         <div class="mt3-sg"><div class="v">${stats.longestCombo||0}×</div><div class="l">Longest Combo</div></div>
         <div class="mt3-sg"><div class="v">${stats.perfectPuzzles||0}</div><div class="l">Perfect Puzzles</div></div>
