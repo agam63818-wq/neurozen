@@ -1,780 +1,1455 @@
 /* =====================================================================
-   Mind Trace — Premium Canvas Redesign for NeuroZen
-   60fps canvas, neon glow, particles, speed bonus, brain rating
+   Mind Trace — Premium Canvas Redesign v3
+   ---------------------------------------------------------------------
+   Contract with NeuroZen (DO NOT CHANGE):
+     playMindTrace(body, setScore, end, wrap, startClock)
+        body        : container element for the game body
+        setScore(n) : updates gs-score in the header
+        end(opts)   : ends the game via app.js endGame()
+                      opts = { value, points, starThresh, summary (used
+                              as statsHtml), timeOverride? }
+        wrap        : outer game-screen element
+        startClock(): starts the header stopwatch
+     Save keys used:  nz_best_scores.mindtrace  (already tracked)
+                      nz_game_plays.mindtrace   (already tracked)
+                      nz_mt_stats (new — Mind Trace only long-term stats)
    ===================================================================== */
 
 function playMindTrace(body, setScore, end, wrap, startClock) {
 
-  /* ---- CONSTANTS ---- */
-  const PAD  = 26;
-  const NR   = 12;   /* node radius */
-  const SNAP = 38;   /* touch snap radius */
-
-  /* ---- PUZZLE LIBRARY ---- */
-  /* n = node coords [x,y] as 0-100%, e = edges [a,b] */
-  const PUZZLES = [
-    /* EASY diff:1 */
-    {name:'Triangle',    diff:1, n:[[50,15],[12,85],[88,85]],                                           e:[[0,1],[1,2],[2,0]]},
-    {name:'Square',      diff:1, n:[[15,15],[85,15],[85,85],[15,85]],                                   e:[[0,1],[1,2],[2,3],[3,0]]},
-    {name:'Arrow',       diff:1, n:[[12,50],[55,50],[55,22],[88,50],[55,78]],                           e:[[0,1],[1,2],[2,3],[3,4],[4,1]]},
-    {name:'House',       diff:1, n:[[15,88],[85,88],[85,52],[50,15],[15,52]],                           e:[[0,1],[1,2],[2,3],[3,4],[4,0],[2,4]]},
-    {name:'Z-shape',     diff:1, n:[[12,15],[88,15],[12,85],[88,85]],                                   e:[[0,1],[1,2],[2,3]]},
-    {name:'Kite',        diff:1, n:[[50,10],[20,52],[50,75],[80,52]],                                   e:[[0,1],[1,2],[2,3],[3,0],[0,2]]},
-    {name:'Fan',         diff:1, n:[[50,82],[15,82],[30,48],[50,25],[70,48],[85,82]],                   e:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,0],[0,2],[0,4]]},
-    {name:'Bridge',      diff:1, n:[[10,50],[35,20],[35,80],[65,20],[65,80],[90,50]],                   e:[[0,1],[0,2],[1,2],[1,3],[2,4],[3,4],[3,5],[4,5]]},
-    {name:'Letter L',    diff:1, n:[[20,15],[20,85],[75,85]],                                           e:[[0,1],[1,2]]},
-    {name:'Diamond',     diff:1, n:[[50,10],[88,50],[50,90],[12,50]],                                   e:[[0,1],[1,2],[2,3],[3,0],[0,2]]},
-    /* MEDIUM diff:2 */
-    {name:'Bowtie',      diff:2, n:[[10,22],[90,22],[50,50],[10,78],[90,78]],                           e:[[0,1],[0,2],[1,2],[2,3],[2,4],[3,4]]},
-    {name:'Envelope',    diff:2, n:[[10,22],[90,22],[90,78],[10,78],[50,50]],                           e:[[0,1],[1,2],[2,3],[3,0],[0,4],[1,4],[2,4],[3,4]]},
-    {name:'Star',        diff:2, n:[[50,10],[80,35],[68,78],[32,78],[20,35],[50,50]],                   e:[[0,1],[1,2],[2,3],[3,4],[4,0],[0,5],[1,5],[2,5],[3,5],[4,5]]},
-    {name:'DoubleTri',   diff:2, n:[[50,10],[12,80],[88,80],[32,48],[68,48]],                           e:[[0,1],[1,2],[2,0],[0,3],[0,4],[3,4],[1,3],[2,4]]},
-    {name:'Fish',        diff:2, n:[[10,50],[40,22],[40,78],[70,50],[40,50]],                           e:[[0,1],[0,2],[1,3],[2,3],[3,4],[4,1],[4,2]]},
-    {name:'Grid2x2',     diff:2, n:[[15,15],[50,15],[85,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]], e:[[0,1],[1,2],[3,4],[4,5],[6,7],[7,8],[0,3],[3,6],[1,4],[4,7],[2,5],[5,8]]},
-    {name:'Octagon+',    diff:2, n:[[35,10],[65,10],[88,35],[88,65],[65,90],[35,90],[12,65],[12,35],[50,50]], e:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,0],[0,8],[2,8],[4,8],[6,8]]},
-    {name:'Flag',        diff:2, n:[[15,15],[15,85],[65,15],[65,55],[15,55]],                           e:[[0,1],[0,2],[2,3],[3,4],[4,0]]},
-    /* HARD diff:3 */
-    {name:'Celtic',      diff:3, n:[[50,10],[80,30],[90,60],[70,85],[50,75],[30,85],[10,60],[20,30],[50,50]], e:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,0],[0,8],[2,8],[4,8],[6,8],[1,8],[3,8],[5,8],[7,8]]},
-    {name:'Molecule',    diff:3, n:[[50,18],[80,38],[80,68],[50,85],[20,68],[20,38],[50,52]],           e:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,0],[0,6],[1,6],[2,6],[3,6],[4,6],[5,6]]},
-    {name:'Web',         diff:3, n:[[50,10],[82,32],[82,68],[50,88],[18,68],[18,32],[50,35],[72,47],[50,65],[28,47]], e:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,0],[6,7],[7,8],[8,9],[9,6],[0,6],[1,7],[2,7],[2,8],[3,8],[4,9],[5,9],[5,6]]},
-    {name:'Cube2D',      diff:3, n:[[20,20],[60,20],[80,40],[80,80],[60,80],[20,80],[0,60],[0,20],[40,40],[60,60]], e:[[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,0],[7,8],[8,1],[1,9],[9,3],[8,9]]},
-  ];
-
-  /* ---- PROCEDURAL TRANSFORM ---- */
-  function applyTransform(base, seed) {
-    const rot   = (seed % 8) * 45;
-    const mirror = Math.floor(seed / 8) % 2 === 1;
-    const rad   = rot * Math.PI / 180;
-    const cos   = Math.cos(rad), sin = Math.sin(rad);
-
-    const nodes = base.n.map(([x, y]) => {
-      let nx = (x - 50) / 50, ny = (y - 50) / 50;
-      const rx = nx * cos - ny * sin;
-      const ry = nx * sin + ny * cos;
-      const mx = mirror ? -rx : rx;
-      return [Math.round(Math.max(8, Math.min(92, mx * 44 + 50))),
-              Math.round(Math.max(8, Math.min(92, ry * 44 + 50)))];
-    });
-    return { name: base.name, diff: base.diff, nodes, edges: base.e };
-  }
-
-  /* ---- STATE ---- */
-  const G = {
-    round: 0, score: 0, lives: 3,
-    combo: 0, bestCombo: 0, streak: 0, bestStreak: 0,
-    correctAnswers: 0, totalPlanMs: 0,
-    drawTimes: [], poolIdx: 0,
-    puzzleTimer: null, timeLeft: 15, totalTime: 15,
-    puzzle: null, type: 'onestroke',
-    missingData: null, startData: null,
-    drawing: false, currentNode: -1, startNode: -1,
-    tracedEdges: new Set(), path: [],
-    planStart: 0, drawStart: 0,
-    phase: 'play', /* play | success | done */
-    particles: [], failAlpha: 0,
-    hintNodes: [],
+  /* =================================================================
+     GLOBAL CONFIG
+     ================================================================= */
+  const CFG = {
+    boardMinPx      : 300,
+    boardMaxPx      : 520,
+    nodeR           : 13,          // base node radius
+    snap            : 42,          // touch snap radius
+    padPct          : 10,          // % of board reserved as padding
+    // Difficulty scaling by round
+    diffCap         : (r) => r <= 5  ? 1
+                            : r <= 10 ? 2
+                            : r <= 20 ? 3
+                            : r <= 35 ? 4
+                            :           5,
+    // Base puzzle time (seconds) per difficulty tier
+    puzzleTime      : (d) => [0, 20, 22, 25, 28, 32][d] || 25,
+    planTime        : (d) => [0, 2.0, 2.4, 2.8, 3.2, 3.6][d] || 2.4,
   };
 
-  /* ---- CANVAS GLOBALS ---- */
-  let canvas, ctx, animId = null, CW = 300, CH = 300;
-
-  /* ---- HELPERS ---- */
-  function ek(a, b) { return a < b ? `${a}-${b}` : `${b}-${a}`; }
-
-  function nodePos(n) {
-    return [PAD + n[0] / 100 * (CW - PAD * 2),
-            PAD + n[1] / 100 * (CH - PAD * 2)];
+  /* =================================================================
+     STATS PERSISTENCE (Mind Trace only)
+     ================================================================= */
+  function loadStats() {
+    try { return JSON.parse(localStorage.getItem('nz_mt_stats') || '{}'); }
+    catch(e) { return {}; }
+  }
+  function saveStats(s) {
+    try { localStorage.setItem('nz_mt_stats', JSON.stringify(s)); } catch(e){}
+  }
+  function mergeStats(g) {
+    const s = loadStats();
+    s.highRound       = Math.max(s.highRound       || 0, g.round);
+    s.perfectPuzzles  = (s.perfectPuzzles  || 0) + g.perfectPuzzles;
+    s.puzzlesSolved   = (s.puzzlesSolved   || 0) + g.correctAnswers;
+    s.gamesPlayed     = (s.gamesPlayed     || 0) + 1;
+    s.longestCombo    = Math.max(s.longestCombo    || 0, g.bestCombo);
+    s.longestStreak   = Math.max(s.longestStreak   || 0, g.bestStreak);
+    if (g.drawTimes.length) {
+      const fastest = Math.min(...g.drawTimes);
+      s.fastestPuzzleMs = s.fastestPuzzleMs
+        ? Math.min(s.fastestPuzzleMs, fastest) : fastest;
+    }
+    s.totalDrawMs = (s.totalDrawMs || 0) + g.drawTimes.reduce((a,b)=>a+b,0);
+    s.totalPlanMs = (s.totalPlanMs || 0) + g.totalPlanMs;
+    s.totalPuzzlesTimed = (s.totalPuzzlesTimed || 0) + g.drawTimes.length;
+    saveStats(s);
+    return s;
   }
 
-  function nearest(px, py) {
-    let best = -1, bd = SNAP;
-    if (!G.puzzle) return -1;
-    G.puzzle.nodes.forEach((n, i) => {
-      const [x, y] = nodePos(n);
-      const d = Math.hypot(px - x, py - y);
-      if (d < bd) { bd = d; best = i; }
+  /* =================================================================
+     DAILY CHALLENGE (date-seeded)
+     ================================================================= */
+  function todayISO() {
+    const d = new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+
+           '-'+String(d.getDate()).padStart(2,'0');
+  }
+  function hashStr(s) {
+    let h = 2166136261 >>> 0;
+    for (let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function dailyChallenge() {
+    const seed = hashStr('mt_'+todayISO());
+    const pool = [
+      { id:'solve10',  icon:'🔥', title:'Solve 10 puzzles',       target:10, kind:'solve' },
+      { id:'solve15',  icon:'🎯', title:'Solve 15 puzzles',       target:15, kind:'solve' },
+      { id:'round20',  icon:'📈', title:'Reach round 20',         target:20, kind:'round' },
+      { id:'combo5',   icon:'⚡', title:'Reach a x5 combo',       target:5,  kind:'combo' },
+      { id:'perfect5', icon:'✨', title:'5 perfect puzzles',      target:5,  kind:'perfect' },
+      { id:'noreset',  icon:'🧠', title:'Finish without resetting',target:1, kind:'noreset' },
+      { id:'master',   icon:'💎', title:'Complete a Master puzzle',target:1, kind:'master' },
+    ];
+    return pool[seed % pool.length];
+  }
+
+  /* =================================================================
+     PROCEDURAL PUZZLE ENGINE
+     ---------------------------------------------------------------
+     Generates graphs on a soft grid.  Every graph has exactly 0 or 2
+     nodes of odd degree, guaranteeing a valid Euler path/circuit.
+     Difficulty controls node count, extra edges, loops.
+     ================================================================= */
+
+  // Seeded RNG for reproducibility (mulberry32)
+  function rng(seed) {
+    let t = seed >>> 0;
+    return function() {
+      t = (t + 0x6D2B79F5) >>> 0;
+      let x = t;
+      x = Math.imul(x ^ (x >>> 15), x | 1);
+      x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function nodeDegrees(edges, nCount) {
+    const d = new Array(nCount).fill(0);
+    edges.forEach(([a,b]) => { d[a]++; d[b]++; });
+    return d;
+  }
+  function oddNodes(edges, nCount) {
+    return nodeDegrees(edges, nCount)
+      .map((v,i)=>({v,i})).filter(o=>o.v%2!==0).map(o=>o.i);
+  }
+  // Ensure graph is connected (all nodes are reachable through edges)
+  function isConnected(edges, nCount) {
+    if (nCount === 0) return true;
+    const adj = Array.from({length:nCount}, ()=>[]);
+    edges.forEach(([a,b])=>{ adj[a].push(b); adj[b].push(a); });
+    const seen = new Set([0]);
+    const q = [0];
+    while (q.length) {
+      const u = q.shift();
+      for (const v of adj[u]) if (!seen.has(v)) { seen.add(v); q.push(v); }
+    }
+    return seen.size === nCount;
+  }
+  // Euler path/circuit existence test
+  function hasEulerPath(edges, nCount) {
+    if (!isConnected(edges, nCount)) return false;
+    const odd = oddNodes(edges, nCount).length;
+    return odd === 0 || odd === 2;
+  }
+
+  // Generate a random unique graph.  We build it by:
+  //   1) sampling node positions on a jittered grid
+  //   2) building a random spanning tree (guarantees connectivity)
+  //   3) adding extra edges based on difficulty
+  //   4) if odd-node count is > 2, pair remaining odd nodes together
+  //      by adding one more edge until we have 0 or 2 odd nodes.
+  function generateGraph(diff, roundSeed) {
+    const rand = rng(roundSeed);
+    // Node counts and edge budget scaled by diff
+    const nodeRange = [
+      [0,0],           // diff 0 (unused)
+      [5, 6],          // diff 1  — very simple, 4–5 edges
+      [6, 8],          // diff 2  — branches, small loops
+      [8, 10],         // diff 3  — loops + intersections
+      [9, 12],         // diff 4  — complex
+      [11, 14],        // diff 5  — large planning puzzles
+    ][diff];
+    const nCount = Math.floor(nodeRange[0] + rand() * (nodeRange[1] - nodeRange[0] + 1));
+
+    // Extra edges above spanning tree (n-1)
+    const extraRange = [
+      [0,0],
+      [0, 1],
+      [1, 2],
+      [2, 4],
+      [3, 5],
+      [4, 7],
+    ][diff];
+
+    // Sample node positions on a soft grid — jittered for organic feel
+    // We use a 5x5 or 6x6 grid depending on diff
+    const grid = diff <= 2 ? 4 : diff <= 4 ? 5 : 6;
+    const cells = [];
+    for (let x=0;x<grid;x++) for (let y=0;y<grid;y++) cells.push([x,y]);
+    // shuffle
+    for (let i=cells.length-1;i>0;i--) {
+      const j = Math.floor(rand()*(i+1));
+      [cells[i],cells[j]] = [cells[j],cells[i]];
+    }
+    const chosen = cells.slice(0, nCount);
+    const nodes = chosen.map(([gx,gy]) => {
+      const cell = 100 / (grid + 1);
+      const jitterX = (rand()-0.5) * cell * 0.35;
+      const jitterY = (rand()-0.5) * cell * 0.35;
+      const px = 12 + gx * (76 / (grid-1)) + jitterX;
+      const py = 12 + gy * (76 / (grid-1)) + jitterY;
+      return [Math.max(8, Math.min(92, +px.toFixed(1))),
+              Math.max(8, Math.min(92, +py.toFixed(1)))];
     });
+
+    // Build spanning tree via nearest-neighbor-ish random walk
+    const edges = [];
+    const inTree = new Set([0]);
+    const outTree = new Set(nodes.map((_,i)=>i).filter(i=>i!==0));
+    while (outTree.size) {
+      const inArr = [...inTree];
+      const outArr = [...outTree];
+      // Bias: pick a random inTree node, then find its closest 3 out-tree
+      // nodes and choose one at random.  Keeps the graph pretty.
+      const u = inArr[Math.floor(rand()*inArr.length)];
+      const [ux,uy] = nodes[u];
+      outArr.sort((a,b)=>{
+        const [ax,ay]=nodes[a],[bx,by]=nodes[b];
+        return Math.hypot(ax-ux,ay-uy) - Math.hypot(bx-ux,by-uy);
+      });
+      const cand = outArr.slice(0, Math.min(3, outArr.length));
+      const v = cand[Math.floor(rand()*cand.length)];
+      edges.push([Math.min(u,v), Math.max(u,v)]);
+      inTree.add(v); outTree.delete(v);
+    }
+
+    // Helper: is edge already in list?
+    const has = (a,b) => edges.some(([ea,eb]) =>
+      (ea===a&&eb===b) || (ea===b&&eb===a));
+
+    // Helper: do edges (a,b) and (c,d) cross?
+    function segCross(a,b,c,d) {
+      if (a===c||a===d||b===c||b===d) return false;
+      const [x1,y1]=nodes[a],[x2,y2]=nodes[b];
+      const [x3,y3]=nodes[c],[x4,y4]=nodes[d];
+      const det = (x2-x1)*(y4-y3) - (y2-y1)*(x4-x3);
+      if (Math.abs(det) < 1e-6) return false;
+      const t = ((x3-x1)*(y4-y3) - (y3-y1)*(x4-x3)) / det;
+      const s = ((x3-x1)*(y2-y1) - (y3-y1)*(x2-x1)) / det;
+      return t>0.02 && t<0.98 && s>0.02 && s<0.98;
+    }
+
+    // Add extra edges — prefer short edges, avoid crossings on low diff
+    const extra = Math.floor(extraRange[0] + rand()*(extraRange[1]-extraRange[0]+1));
+    let attempts = 0;
+    let added = 0;
+    while (added < extra && attempts < 200) {
+      attempts++;
+      const a = Math.floor(rand()*nCount);
+      let b = Math.floor(rand()*nCount);
+      if (a === b) continue;
+      const A=Math.min(a,b), B=Math.max(a,b);
+      if (has(A,B)) continue;
+      const [ax,ay]=nodes[A],[bx,by]=nodes[B];
+      const dist = Math.hypot(ax-bx, ay-by);
+      // Reject very-long edges (spans whole board) on lower diff to keep clean
+      if (diff <= 3 && dist > 55) continue;
+      // On low difficulty avoid crossings
+      if (diff <= 2) {
+        let crosses = false;
+        for (const [c,d] of edges) if (segCross(A,B,c,d)) { crosses = true; break; }
+        if (crosses) continue;
+      }
+      edges.push([A,B]);
+      added++;
+    }
+
+    // Now guarantee Euler path: ensure 0 or 2 nodes of odd degree.
+    // Strategy: while more than 2 odd nodes, pair two closest odd nodes
+    // and add an edge between them (creating an extra edge but valid path).
+    let safety = 40;
+    while (safety-- > 0) {
+      const odd = oddNodes(edges, nCount);
+      if (odd.length === 0 || odd.length === 2) break;
+      // Pair odd nodes: sort by pairwise distance, pick a valid pair
+      let paired = false;
+      const pairs = [];
+      for (let i=0;i<odd.length;i++) for (let j=i+1;j<odd.length;j++) {
+        const a=odd[i], b=odd[j];
+        if (has(a,b)) continue;
+        const [ax,ay]=nodes[a],[bx,by]=nodes[b];
+        pairs.push({a,b, d:Math.hypot(ax-bx,ay-by)});
+      }
+      pairs.sort((p,q)=>p.d-q.d);
+      for (const {a,b} of pairs) {
+        edges.push([Math.min(a,b), Math.max(a,b)]);
+        paired = true;
+        break;
+      }
+      if (!paired) {
+        // Fallback: add an edge to first two odd nodes even if already exists?
+        // Instead — nudge by adding a triangle to an existing edge.
+        const oddN = odd[0];
+        // Find a neighbor of oddN and add another edge to it via another node
+        const neighbors = edges
+          .filter(([a,b])=>a===oddN||b===oddN)
+          .map(([a,b])=>a===oddN?b:a);
+        if (!neighbors.length) break;
+        // Just append a redundant edge to force parity — try picking
+        // odd[1] and connecting via a new midpoint node is overkill.
+        // Instead break — should be rare.
+        break;
+      }
+    }
+
+    if (!hasEulerPath(edges, nCount)) {
+      // Fallback: just return null and caller retries with new seed
+      return null;
+    }
+
+    return { nodes, edges, nCount };
+  }
+
+  // Try up to N seeds until a valid graph pops out
+  function makePuzzle(diff, roundSeed) {
+    for (let i=0;i<20;i++) {
+      const g = generateGraph(diff, roundSeed + i*7919);
+      if (g) return { ...g, diff };
+    }
+    // Absolute fallback — a triangle
+    return {
+      nodes: [[50,15],[15,85],[85,85]],
+      edges: [[0,1],[1,2],[0,2]],
+      nCount: 3,
+      diff: 1,
+    };
+  }
+
+  /* =================================================================
+     SPECIAL PUZZLE TYPES
+     - normal      : regular one-stroke
+     - speed       : 8s hard cap, big score bonus
+     - fade        : untraced edges slowly fade — plan quickly
+     - precision   : narrower snap radius (stricter tracing)
+     - genius      : only one optimal route — small graph, big bonus
+     - master      : oversized graph (higher diff), huge XP
+     ================================================================= */
+  function pickType(round, rand) {
+    if (round < 4) return 'normal';
+    // Roughly every 6-10 rounds a special appears
+    // ~28% chance of a special after round 4
+    if (rand() < 0.28) {
+      const specials = ['speed','fade','precision','genius','master'];
+      // Master gets rarer; only from round 10+
+      const filtered = round >= 10 ? specials : specials.filter(s=>s!=='master');
+      return filtered[Math.floor(rand() * filtered.length)];
+    }
+    return 'normal';
+  }
+
+  const TYPE_META = {
+    normal:    { icon:'✏️',  name:'One Stroke',      desc:'Trace every edge without lifting.' },
+    speed:     { icon:'⚡', name:'Speed Puzzle',     desc:'Solve in 8 seconds — huge bonus.' },
+    fade:      { icon:'🌫',  name:'Fade Puzzle',      desc:'Edges slowly disappear as you plan.' },
+    precision: { icon:'🎯', name:'Precision Trace',  desc:'Tighter snap — trace carefully.' },
+    genius:    { icon:'🧠', name:'Genius Puzzle',    desc:'Only one clean route exists.' },
+    master:    { icon:'💎', name:'Master Puzzle',    desc:'Big graph. Big planning. Big XP.' },
+  };
+
+  /* =================================================================
+     GAME STATE
+     ================================================================= */
+  const G = {
+    round:0, score:0, lives:3,
+    combo:0, bestCombo:0, streak:0, bestStreak:0,
+    correctAnswers:0, perfectPuzzles:0,
+    totalPlanMs:0, drawTimes:[],
+    resetsUsed:0, masterSolved:false,
+    puzzleTimer:null, timeLeft:0, totalTime:0,
+    puzzle:null, type:'normal', typeMeta:null,
+    drawing:false, currentNode:-1, startNode:-1,
+    tracedEdges:new Set(), path:[], visitedNodes:new Set(),
+    planStart:0, drawStart:0, puzzleStart:0,
+    phase:'idle',     // idle | intro | plan | play | success | fail | done
+    particles:[], failAlpha:0, successAnim:0,
+    hintNodes:[], hasErrorThisPuzzle:false,
+    fadeAlpha:1,      // for fade puzzles
+    daily:dailyChallenge(), dailyProgress:0,
+    // last-puzzle score breakdown (for dopamine popup)
+    lastBreakdown:null,
+  };
+
+  /* =================================================================
+     CANVAS
+     ================================================================= */
+  let canvas, ctx, animId=null, CW=320, CH=320, DPR=1;
+
+  function ek(a,b){return a<b?`${a}-${b}`:`${b}-${a}`;}
+
+  function pctToPx(pctX,pctY) {
+    const pad = CW * (CFG.padPct/100);
+    return [pad + pctX/100 * (CW - pad*2),
+            pad + pctY/100 * (CH - pad*2)];
+  }
+  function nodePos(idx){ const n=G.puzzle.nodes[idx]; return pctToPx(n[0],n[1]); }
+
+  function nearestNode(px, py, snap) {
+    if (!G.puzzle) return -1;
+    let best=-1, bd=snap;
+    for (let i=0;i<G.puzzle.nodes.length;i++) {
+      const [x,y] = nodePos(i);
+      const d = Math.hypot(px-x, py-y);
+      if (d < bd) { bd = d; best = i; }
+    }
     return best;
   }
-
-  function edgeExists(a, b) {
-    return G.puzzle.edges.some(([ea, eb]) => (ea===a&&eb===b)||(ea===b&&eb===a));
+  function edgeExists(a,b){
+    return G.puzzle.edges.some(([ea,eb]) =>
+      (ea===a&&eb===b)||(ea===b&&eb===a));
   }
-
-  function getOddNodes(puzzle) {
-    const deg = {};
-    puzzle.nodes.forEach((_, i) => { deg[i] = 0; });
-    puzzle.edges.forEach(([a, b]) => { deg[a]++; deg[b]++; });
-    return Object.keys(deg).filter(k => deg[k] % 2 !== 0).map(Number);
-  }
-
   function setHintNodes() {
-    const odd = getOddNodes(G.puzzle);
-    G.hintNodes = odd.length >= 2 ? odd : G.puzzle.nodes.map((_, i) => i);
+    const odd = oddNodes(G.puzzle.edges, G.puzzle.nCount);
+    G.hintNodes = odd.length === 2 ? odd
+      : G.puzzle.nodes.map((_,i)=>i);
   }
 
-  /* ---- CANVAS SETUP ---- */
+  /* =================================================================
+     BOARD SIZING (responsive & large)
+     ================================================================= */
+  function computeBoardSize() {
+    // Use available body width minus board padding.  Cap by height too.
+    const wAvail = Math.max(280, (body.clientWidth || 340) - 24);
+    const hAvail = Math.max(280, (window.innerHeight || 700) * 0.55);
+    let s = Math.min(wAvail, hAvail, CFG.boardMaxPx);
+    if (s < CFG.boardMinPx) s = CFG.boardMinPx;
+    return Math.floor(s);
+  }
+
   function makeCanvas() {
-    const avail = Math.min((body.clientWidth || 340) - 24, 330);
-    CW = CH = Math.max(260, avail);
-    const dpr = window.devicePixelRatio || 1;
+    const s = computeBoardSize();
+    CW = CH = s;
+    DPR = window.devicePixelRatio || 1;
     canvas = document.createElement('canvas');
-    canvas.width  = Math.round(CW * dpr);
-    canvas.height = Math.round(CH * dpr);
-    canvas.style.cssText = `width:${CW}px;height:${CH}px;border-radius:18px;` +
+    canvas.width  = Math.round(CW * DPR);
+    canvas.height = Math.round(CH * DPR);
+    canvas.style.cssText =
+      `width:${CW}px;height:${CH}px;border-radius:22px;`+
       `touch-action:none;display:block;cursor:crosshair;user-select:none;`;
     ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
+    ctx.scale(DPR, DPR);
   }
 
-  function roundRect(x, y, w, h, r) {
+  function roundRect(x,y,w,h,r) {
     ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.arcTo(x + w, y, x + w, y + r, r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-    ctx.lineTo(x + r, y + h);
-    ctx.arcTo(x, y + h, x, y + h - r, r);
-    ctx.lineTo(x, y + r);
-    ctx.arcTo(x, y, x + r, y, r);
+    ctx.moveTo(x+r,y);
+    ctx.lineTo(x+w-r,y);
+    ctx.arcTo(x+w,y,x+w,y+r,r);
+    ctx.lineTo(x+w,y+h-r);
+    ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+    ctx.lineTo(x+r,y+h);
+    ctx.arcTo(x,y+h,x,y+h-r,r);
+    ctx.lineTo(x,y+r);
+    ctx.arcTo(x,y,x+r,y,r);
     ctx.closePath();
   }
 
-  /* ---- RENDER LOOP ---- */
+  /* =================================================================
+     RENDER LOOP
+     ================================================================= */
   function startLoop() {
     if (animId) cancelAnimationFrame(animId);
-    (function loop() { animId = requestAnimationFrame(loop); drawFrame(); })();
+    (function loop(){ animId = requestAnimationFrame(loop); drawFrame(); })();
   }
-
   function stopLoop() {
     if (animId) { cancelAnimationFrame(animId); animId = null; }
     stopPuzzleTimer();
   }
 
   function drawFrame() {
-    ctx.clearRect(0, 0, CW, CH);
+    if (!ctx) return;
+    ctx.clearRect(0,0,CW,CH);
 
-    /* background */
-    ctx.fillStyle = '#0D0119';
-    roundRect(0, 0, CW, CH, 18);
-    ctx.fill();
+    // === BACKGROUND ===
+    // Deep gradient behind everything
+    const bgGrad = ctx.createLinearGradient(0,0,CW,CH);
+    bgGrad.addColorStop(0, '#100425');
+    bgGrad.addColorStop(1, '#160B33');
+    ctx.fillStyle = bgGrad;
+    roundRect(0,0,CW,CH,22); ctx.fill();
 
-    /* subtle grid dots */
-    ctx.fillStyle = 'rgba(124,58,237,0.08)';
-    for (let gx = 20; gx < CW; gx += 22)
-      for (let gy = 20; gy < CH; gy += 22) {
-        ctx.beginPath(); ctx.arc(gx, gy, 1.2, 0, Math.PI*2); ctx.fill();
+    // Gradient border glow
+    ctx.save();
+    ctx.strokeStyle = 'rgba(139,92,246,0.35)';
+    ctx.lineWidth = 1.5;
+    roundRect(1,1,CW-2,CH-2,21); ctx.stroke();
+    ctx.restore();
+
+    // Grid dots
+    ctx.fillStyle = 'rgba(139,92,246,0.09)';
+    const gs = 24;
+    for (let gx=gs*0.7; gx<CW-4; gx+=gs)
+      for (let gy=gs*0.7; gy<CH-4; gy+=gs) {
+        ctx.beginPath(); ctx.arc(gx,gy,1.1,0,Math.PI*2); ctx.fill();
       }
 
     if (!G.puzzle) return;
 
-    /* === TIMER BAR (top of canvas) === */
-    if ((G.phase === 'play' || G.phase === 'plan') && G.totalTime > 0) {
-      const pct  = Math.max(0, G.timeLeft / G.totalTime);
-      const barW = CW - 24, barH = 5, barX = 12, barY = 10;
+    // === TIMER BAR ===
+    if ((G.phase==='play'||G.phase==='plan') && G.totalTime>0) {
+      const pct = Math.max(0, G.timeLeft/G.totalTime);
+      const barW = CW-28, barH = 6, barX = 14, barY = 12;
       ctx.save();
       ctx.fillStyle = 'rgba(255,255,255,0.08)';
-      ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 3); ctx.fill();
-      const barColor = pct > 0.6 ? '#7C3AED' : pct > 0.3 ? '#F59E0B' : '#EF4444';
-      ctx.shadowColor = barColor;
-      ctx.shadowBlur  = pct < 0.3 ? 8 : 4;
-      ctx.fillStyle   = barColor;
-      ctx.beginPath(); ctx.roundRect(barX, barY, barW * pct, barH, 3); ctx.fill();
-      if (G.phase === 'play' && G.timeLeft < 5) {
+      ctx.beginPath(); ctx.roundRect(barX,barY,barW,barH,3); ctx.fill();
+      const c = pct>0.6 ? '#7C3AED' : pct>0.3 ? '#F59E0B' : '#EF4444';
+      ctx.shadowColor = c;
+      ctx.shadowBlur = pct<0.3 ? 10 : 5;
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.roundRect(barX,barY,barW*pct,barH,3); ctx.fill();
+      if (G.phase==='play' && G.timeLeft<5) {
         ctx.shadowBlur = 0;
-        ctx.fillStyle  = '#EF4444';
-        ctx.font       = 'bold 13px system-ui';
-        ctx.textAlign  = 'center';
-        ctx.fillText(Math.ceil(G.timeLeft) + 's', CW / 2, barY + barH + 14);
+        ctx.fillStyle = '#F87171';
+        ctx.font = 'bold 12px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.ceil(G.timeLeft)+'s', CW/2, barY+barH+14);
       }
       ctx.restore();
     }
 
     const now = Date.now();
-    const p   = G.puzzle;
-    const isSuccess = G.phase === 'success';
+    const p = G.puzzle;
+    const isSuccess = G.phase==='success';
+    const isPlan    = G.phase==='plan' || G.phase==='intro';
 
-    /* === EDGES === */
-    p.edges.forEach(([a, b]) => {
-      const [x1,y1] = nodePos(p.nodes[a]);
-      const [x2,y2] = nodePos(p.nodes[b]);
-      const key = ek(a, b);
-      const isTraced  = G.tracedEdges.has(key);
-      const isMissing = G.type === 'missing' &&
-        G.missingData.hidden.some(([ma,mb]) => ek(ma,mb) === key);
+    // Fade alpha for fade puzzles (only affects untraced edges)
+    let fadeMul = 1;
+    if (G.type==='fade' && G.phase==='play') {
+      // linearly fade over the puzzle time
+      fadeMul = Math.max(0.15, G.timeLeft / G.totalTime);
+    }
+
+    // === EDGES ===
+    p.edges.forEach(([a,b], eIdx) => {
+      const [x1,y1] = nodePos(a);
+      const [x2,y2] = nodePos(b);
+      const key = ek(a,b);
+      const isTraced = G.tracedEdges.has(key);
 
       ctx.save();
       ctx.lineCap = 'round';
 
       if (isSuccess) {
-        const pulse = 0.7 + 0.3 * Math.sin(now * 0.008 + a);
+        const pulse = 0.7 + 0.3*Math.sin(now*0.008 + eIdx);
         ctx.shadowColor = '#22C55E';
-        ctx.shadowBlur  = 14 * pulse;
+        ctx.shadowBlur = 16*pulse;
         ctx.strokeStyle = '#4ADE80';
-        ctx.lineWidth   = 5;
+        ctx.lineWidth = 5.2;
       } else if (isTraced) {
-        ctx.shadowColor = '#22C55E';
-        ctx.shadowBlur  = 12;
+        ctx.shadowColor = '#34D399';
+        ctx.shadowBlur = 12;
         ctx.strokeStyle = '#4ADE80';
-        ctx.lineWidth   = 4.5;
-      } else if (isMissing) {
-        ctx.strokeStyle = '#A78BFA';
-        ctx.lineWidth   = 3;
-        ctx.globalAlpha = 0.65;
-        ctx.setLineDash([8, 6]);
-        ctx.shadowColor = '#7C3AED';
-        ctx.shadowBlur  = 6;
+        ctx.lineWidth = 4.8;
       } else {
-        const glow = 0.3 + 0.15 * Math.sin(now * 0.0015 + a + b);
+        const glow = 0.35 + 0.15*Math.sin(now*0.0018 + eIdx*1.7);
         ctx.shadowColor = '#7C3AED';
-        ctx.shadowBlur  = 8 * glow;
+        ctx.shadowBlur = 10*glow*fadeMul;
         ctx.strokeStyle = '#8B5CF6';
-        ctx.lineWidth   = 3.5;
+        ctx.globalAlpha = fadeMul * (isPlan ? 0.95 : 1);
+        ctx.lineWidth = 3.6;
       }
 
       ctx.beginPath();
-      ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+      ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
       ctx.stroke();
       ctx.restore();
     });
 
-    /* === NODES === */
-    p.nodes.forEach((n, i) => {
-      const [x, y] = nodePos(n);
-      const isCur  = i === G.currentNode;
-      const isSt   = i === G.startNode && G.startNode >= 0;
-      const isHint = G.hintNodes.includes(i) && !G.drawing && G.startNode < 0;
+    // === NODES ===
+    p.nodes.forEach((n,i) => {
+      const [x,y] = nodePos(i);
+      const isCur = i===G.currentNode;
+      const isSt  = i===G.startNode && G.startNode>=0;
+      const isHint = G.hintNodes.includes(i) && !G.drawing && G.startNode<0 && G.phase==='play';
+      const isPlanGlow = isPlan && G.hintNodes.includes(i);
 
       ctx.save();
-      let fill, shadow, r = NR;
+      let fill, shadow, r=CFG.nodeR;
 
       if (isSuccess) {
-        const p2 = 0.7 + 0.3 * Math.sin(now * 0.007 + i * 1.2);
-        fill   = '#4ADE80'; shadow = '#22C55E';
-        ctx.shadowBlur = 20 * p2; r = NR + 2;
+        const p2 = 0.7+0.3*Math.sin(now*0.007 + i*1.2);
+        fill='#4ADE80'; shadow='#22C55E';
+        ctx.shadowBlur = 22*p2; r = CFG.nodeR+2;
       } else if (isCur) {
-        fill   = '#34D399'; shadow = '#22C55E';
-        ctx.shadowBlur = 22; r = NR + 3;
+        fill='#34D399'; shadow='#22C55E';
+        ctx.shadowBlur = 26; r = CFG.nodeR+3;
       } else if (isSt) {
-        fill   = '#FCD34D'; shadow = '#F59E0B';
-        ctx.shadowBlur = 16;
-      } else if (isHint) {
-        const p2 = 0.5 + 0.5 * Math.sin(now * 0.004 + i * 1.8);
-        fill   = `rgba(245,158,11,${0.65 + 0.35*p2})`;
+        fill='#FCD34D'; shadow='#F59E0B';
+        ctx.shadowBlur = 18;
+      } else if (isHint || isPlanGlow) {
+        const p2 = 0.5 + 0.5*Math.sin(now*0.004 + i*1.8);
+        fill = `rgba(245,158,11,${0.7 + 0.3*p2})`;
         shadow = '#F59E0B';
-        ctx.shadowBlur = 14 * p2; r = NR - 1 + 3 * p2;
+        ctx.shadowBlur = 16*p2; r = CFG.nodeR-1 + 3*p2;
       } else {
-        fill   = '#A78BFA'; shadow = '#7C3AED';
-        ctx.shadowBlur = 8;
+        fill='#A78BFA'; shadow='#7C3AED';
+        ctx.shadowBlur = 9;
       }
 
       ctx.shadowColor = shadow;
-      ctx.fillStyle   = fill;
+      ctx.fillStyle = fill;
       ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.arc(x,y,r,0,Math.PI*2);
       ctx.fill();
 
-      /* inner dot for current node */
       if (isCur) {
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle='#fff';
         ctx.beginPath();
-        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.arc(x,y,4.2,0,Math.PI*2);
         ctx.fill();
       }
       ctx.restore();
     });
 
-    /* === PARTICLES === */
-    G.particles = G.particles.filter(pt => pt.life > 0.02);
+    // === TRAILING PARTICLES (drawing) ===
+    G.particles = G.particles.filter(pt => pt.life>0.02);
     G.particles.forEach(pt => {
       pt.x += pt.vx; pt.y += pt.vy;
-      pt.vy += 0.18; pt.vx *= 0.97;
-      pt.life -= 0.022;
+      pt.vy += pt.gravity!==undefined ? pt.gravity : 0.18;
+      pt.vx *= 0.97;
+      pt.life -= pt.decay || 0.022;
       ctx.save();
-      ctx.globalAlpha  = Math.max(0, pt.life);
-      ctx.fillStyle    = pt.color;
-      ctx.shadowColor  = pt.color;
-      ctx.shadowBlur   = 8;
+      ctx.globalAlpha = Math.max(0,pt.life);
+      ctx.fillStyle = pt.color;
+      ctx.shadowColor = pt.color;
+      ctx.shadowBlur = 8;
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, pt.r * Math.max(0, pt.life), 0, Math.PI * 2);
+      ctx.arc(pt.x,pt.y, pt.r*Math.max(0,pt.life),0,Math.PI*2);
       ctx.fill();
       ctx.restore();
     });
 
-    /* === FAIL FLASH === */
-    if (G.failAlpha > 0) {
+    // === SUCCESS RING SWEEP ===
+    if (isSuccess) {
+      G.successAnim = Math.min(1, G.successAnim + 0.06);
+      const [cx,cy] = [CW/2, CH/2];
       ctx.save();
-      ctx.globalAlpha = G.failAlpha * 0.35;
-      ctx.fillStyle   = '#EF4444';
-      roundRect(0, 0, CW, CH, 18);
-      ctx.fill();
+      ctx.globalAlpha = (1-G.successAnim) * 0.55;
+      ctx.strokeStyle = '#4ADE80';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#22C55E';
+      ctx.shadowBlur = 20;
+      ctx.beginPath();
+      ctx.arc(cx,cy, CW*0.6*G.successAnim, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // === FAIL FLASH ===
+    if (G.failAlpha>0) {
+      ctx.save();
+      ctx.globalAlpha = G.failAlpha*0.35;
+      ctx.fillStyle = '#EF4444';
+      roundRect(0,0,CW,CH,22); ctx.fill();
       ctx.restore();
       G.failAlpha -= 0.055;
     }
   }
 
-  /* ---- PARTICLES ---- */
-  function spawnParticles(cx, cy, color, count) {
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 1.5 + Math.random() * 4;
+  /* =================================================================
+     PARTICLES
+     ================================================================= */
+  function spawnParticles(cx,cy,color,count,opts) {
+    opts = opts||{};
+    for (let i=0;i<count;i++) {
+      const angle = Math.random()*Math.PI*2;
+      const speed = (opts.speed||[1.5,5.5])[0] +
+                    Math.random()*((opts.speed||[1.5,5.5])[1]-(opts.speed||[1.5,5.5])[0]);
       G.particles.push({
-        x: cx, y: cy,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 1.5,
-        r: 2 + Math.random() * 3,
-        life: 0.75 + Math.random() * 0.25,
-        color
+        x:cx, y:cy,
+        vx: Math.cos(angle)*speed,
+        vy: Math.sin(angle)*speed - (opts.lift===undefined?1.5:opts.lift),
+        r:  (opts.r||2) + Math.random()*(opts.rjit||3),
+        life: (opts.life||0.75) + Math.random()*0.25,
+        color,
+        gravity: opts.gravity,
+        decay:   opts.decay,
       });
     }
   }
-
-  function burstAll() {
+  function burstAllNodes() {
     const clrs = ['#22C55E','#4ADE80','#A7F3D0','#FCD34D','#C4B5FD'];
-    G.puzzle.nodes.forEach((n, i) => {
-      const [x, y] = nodePos(n);
-      spawnParticles(x, y, clrs[i % clrs.length], 9);
+    G.puzzle.nodes.forEach((_,i) => {
+      const [x,y] = nodePos(i);
+      spawnParticles(x,y,clrs[i%clrs.length], 10);
+    });
+  }
+  function trailParticle(x,y) {
+    G.particles.push({
+      x, y,
+      vx: (Math.random()-0.5)*0.5,
+      vy: (Math.random()-0.5)*0.5,
+      r: 1.5+Math.random()*1.5,
+      life: 0.5+Math.random()*0.3,
+      color:'#C4B5FD',
+      gravity: 0.02,
+      decay: 0.05,
     });
   }
 
-  /* ---- POINTER EVENTS ---- */
+  /* =================================================================
+     POINTER EVENTS
+     ================================================================= */
   function getXY(e) {
     const rect = canvas.getBoundingClientRect();
-    const src  = e.touches ? e.touches[0] : e;
+    const src = e.touches ? e.touches[0] : e;
     return [src.clientX - rect.left, src.clientY - rect.top];
   }
-
   function onDown(e) {
     e.preventDefault();
-    if (G.phase !== 'play') return;
-    const [px, py] = getXY(e);
-    const ni = nearest(px, py);
+    if (G.phase!=='play') return;
+    const snap = G.type==='precision' ? CFG.snap*0.55 : CFG.snap;
+    const [px,py] = getXY(e);
+    const ni = nearestNode(px,py, snap);
     if (ni === -1) return;
-    G.drawing     = true;
-    G.drawStart   = Date.now();
-    G.path        = [ni];
-    G.startNode   = ni;
+    G.drawing = true;
+    G.drawStart = Date.now();
+    G.path = [ni];
+    G.startNode = ni;
     G.currentNode = ni;
-    G.hintNodes   = [];
+    G.visitedNodes = new Set([ni]);
+    G.hintNodes = [];
   }
-
   function onMove(e) {
     e.preventDefault();
-    if (!G.drawing || G.phase !== 'play') return;
-    const [px, py] = getXY(e);
-    const ni = nearest(px, py);
-    if (ni === -1 || ni === G.currentNode) return;
+    if (!G.drawing || G.phase!=='play') return;
+    const snap = G.type==='precision' ? CFG.snap*0.55 : CFG.snap;
+    const [px,py] = getXY(e);
+
+    // trail particles
+    if (Math.random() < 0.35) trailParticle(px,py);
+
+    const ni = nearestNode(px,py, snap);
+    if (ni===-1 || ni===G.currentNode) return;
 
     const prev = G.currentNode;
-    if (!edgeExists(prev, ni)) { G.failAlpha = 0.7; return; }
-
-    const key = ek(prev, ni);
-    if (G.type === 'missing') {
-      const isMissing = G.missingData.hidden.some(([a,b]) => ek(a,b) === key);
-      if (!isMissing) { G.failAlpha = 0.7; return; }
+    if (!edgeExists(prev,ni)) { G.failAlpha = 0.7; return; }
+    const key = ek(prev,ni);
+    if (G.tracedEdges.has(key)) {
+      G.failAlpha = 0.7;
+      return;
     }
-    if (G.tracedEdges.has(key)) { G.failAlpha = 0.7; return; }
 
     G.tracedEdges.add(key);
     G.path.push(ni);
     G.currentNode = ni;
+    G.visitedNodes.add(ni);
+
+    // small node-hit sparkle
+    const [nx,ny] = nodePos(ni);
+    spawnParticles(nx,ny,'#A7F3D0', 4, {speed:[1,2.5], life:0.4, r:1.5, rjit:1.5, lift:0.6});
+
     if (typeof haptic === 'function') haptic(10);
     checkCompletion();
   }
-
   function onUp(e) {
     e.preventDefault();
-    if (!G.drawing || G.phase !== 'play') return;
+    if (!G.drawing || G.phase!=='play') return;
     G.drawing = false;
     G.drawTimes.push(Date.now() - G.drawStart);
 
-    /* Lifted finger mid-draw (drew ≥1 edge but puzzle incomplete) → lose a life */
     if (G.tracedEdges.size > 0) {
-      const targets = G.type === 'missing' ? G.missingData.hidden : G.puzzle.edges;
-      const done = targets.every(([a, b]) => G.tracedEdges.has(ek(a, b)));
+      const done = G.puzzle.edges.every(([a,b]) => G.tracedEdges.has(ek(a,b)));
       if (!done) handleWrong('Lifted too early!');
     }
   }
-
   function bindPointer() {
-    canvas.addEventListener('touchstart', onDown,  { passive: false });
-    canvas.addEventListener('touchmove',  onMove,  { passive: false });
-    canvas.addEventListener('touchend',   onUp,    { passive: false });
+    canvas.addEventListener('touchstart', onDown, {passive:false});
+    canvas.addEventListener('touchmove',  onMove, {passive:false});
+    canvas.addEventListener('touchend',   onUp,   {passive:false});
+    canvas.addEventListener('touchcancel',onUp,   {passive:false});
     canvas.addEventListener('mousedown',  onDown);
-    canvas.addEventListener('mousemove',  e => { if (G.drawing) onMove(e); });
+    canvas.addEventListener('mousemove',  e=>{ if (G.drawing) onMove(e); });
     canvas.addEventListener('mouseup',    onUp);
+    canvas.addEventListener('mouseleave', e=>{ if (G.drawing) onUp(e); });
   }
 
-  /* ---- COMPLETION ---- */
-  function checkCompletion() {
-    const targets = G.type === 'missing' ? G.missingData.hidden : G.puzzle.edges;
-    if (targets.every(([a, b]) => G.tracedEdges.has(ek(a, b)))) handleCorrect();
-  }
-
-  /* ---- PUZZLE TIMER ---- */
-  function getPuzzleTime(diff) {
-    return diff === 1 ? 15 : diff === 2 ? 20 : 25;
-  }
-
+  /* =================================================================
+     TIMERS
+     ================================================================= */
   function stopPuzzleTimer() {
-    if (G.puzzleTimer) { clearInterval(G.puzzleTimer); G.puzzleTimer = null; }
+    if (G.puzzleTimer) { clearInterval(G.puzzleTimer); G.puzzleTimer=null; }
   }
-
   function startPuzzleTimer() {
     stopPuzzleTimer();
-    const diff = G.puzzle ? G.puzzle.diff : 1;
-    G.totalTime = getPuzzleTime(diff);
-    G.timeLeft  = G.totalTime;
-    G.phase     = 'plan'; /* 2-second planning phase — can't draw yet */
+    const diff = G.puzzle.diff;
+    // Speed puzzles cap at 8s; master puzzles get +50% time
+    if (G.type==='speed') G.totalTime = 8;
+    else if (G.type==='master') G.totalTime = CFG.puzzleTime(diff) * 1.5;
+    else if (G.type==='precision') G.totalTime = CFG.puzzleTime(diff) * 1.1;
+    else G.totalTime = CFG.puzzleTime(diff);
 
-    showPop('👁 Plan your route...', '#F59E0B');
+    // Planning phase — draws disabled until timer starts
+    const planMs = CFG.planTime(diff) * 1000;
+    G.timeLeft = G.totalTime;
+    G.phase = 'plan';
+    showPop('👁 Plan your route', '#F59E0B', 900);
+
     setTimeout(() => {
       if (G.phase !== 'plan') return;
-      G.phase     = 'play';
+      G.phase = 'play';
       G.planStart = Date.now();
+      G.puzzleStart = Date.now();
       G.puzzleTimer = setInterval(() => {
         if (G.phase !== 'play') return;
         G.timeLeft -= 0.1;
         if (G.timeLeft <= 0) {
           G.timeLeft = 0;
-          clearInterval(G.puzzleTimer);
-          G.puzzleTimer = null;
+          stopPuzzleTimer();
           handleWrong('Time up! ⏱');
         }
       }, 100);
-    }, 2000);
+    }, planMs);
   }
 
-  /* ---- CORRECT ---- */
+  /* =================================================================
+     COMPLETION
+     ================================================================= */
+  function checkCompletion() {
+    if (G.puzzle.edges.every(([a,b]) => G.tracedEdges.has(ek(a,b))))
+      handleCorrect();
+  }
+
+  function comboTier(c) {
+    if (c >= 20) return { name:'Neuro Genius',   color:'#8B5CF6', mult:2.0 };
+    if (c >= 10) return { name:'Master Planner', color:'#F472B6', mult:1.6 };
+    if (c >= 5)  return { name:'Brain Flow',     color:'#F59E0B', mult:1.35};
+    if (c >= 3)  return { name:'Focus Combo',    color:'#22C55E', mult:1.15};
+    return { name:'', color:'#94A3B8', mult:1.0 };
+  }
+
+  function scoreBreakdown(diff, drawMs, planMs) {
+    const base = 10;
+    const diffBonus = (diff-1) * 4;                         // 0,4,8,12,16
+    // Planning bonus: reward players who paused before drawing
+    // Full bonus at ≥ 1.5s planning, none at 0s
+    const planSec = planMs/1000;
+    const planBonus = Math.round(Math.max(0, Math.min(6, planSec*4)));
+    // Fast solve — but capped so speed doesn't dominate over planning
+    const drawSec = drawMs/1000;
+    const speedBonus = Math.round(Math.max(0, Math.min(5, 5 - drawSec*0.6)));
+    // Perfect route (no reset, no wrong edge this puzzle)
+    const perfect = !G.hasErrorThisPuzzle;
+    const perfectBonus = perfect ? 5 : 0;
+    // Special puzzle bonus
+    const specialBonus = ({
+      speed:8, fade:6, precision:6, genius:10, master:12, normal:0,
+    })[G.type] || 0;
+
+    // Combo multiplier applies to the sum
+    const tier = comboTier(G.combo + 1); // combo after this correct
+    const sub = base + diffBonus + planBonus + speedBonus + perfectBonus + specialBonus;
+    const total = Math.round(sub * tier.mult);
+
+    return { base, diffBonus, planBonus, speedBonus, perfect, perfectBonus,
+             specialBonus, mult:tier.mult, tierName:tier.name, sub, total };
+  }
+
   function handleCorrect() {
     G.phase = 'success';
+    G.successAnim = 0;
     stopPuzzleTimer();
-    G.totalPlanMs += (G.drawStart || Date.now()) - G.planStart;
+    const drawMs = Date.now() - (G.drawStart || Date.now());
+    const planMs = G.drawStart - G.planStart;
+    G.totalPlanMs += Math.max(0, planMs);
     G.correctAnswers++;
-    G.streak++;
     G.combo++;
+    G.streak++;
+    G.bestCombo  = Math.max(G.bestCombo,  G.combo);
     G.bestStreak = Math.max(G.bestStreak, G.streak);
-    G.bestCombo  = Math.max(G.bestCombo, G.combo);
 
-    const drawMs   = G.drawTimes.length ? G.drawTimes[G.drawTimes.length-1] : 5000;
-    const speedPts = Math.max(0, Math.round(10 - drawMs / 600));
-    const comboPts = G.combo >= 10 ? 10 : G.combo >= 5 ? 5 : G.combo >= 3 ? 3 : 0;
-    const pts      = 10 + speedPts + comboPts;
-
-    G.score += pts;
+    const bd = scoreBreakdown(G.puzzle.diff, drawMs, planMs);
+    G.score += bd.total;
     setScore(G.score);
-    burstAll();
-    if (typeof haptic === 'function') haptic([20, 15, 30]);
+    G.lastBreakdown = bd;
+
+    if (!G.hasErrorThisPuzzle) G.perfectPuzzles++;
+    if (G.type === 'master') G.masterSolved = true;
+
+    // Daily challenge progress
+    updateDaily();
+
+    burstAllNodes();
+    if (typeof haptic === 'function') haptic([20,15,30]);
     if (typeof playSound === 'function') playSound('correct');
-    showPop('+' + pts, '#22C55E');
+    showComboPop(bd);
     updateHUD();
 
-    setTimeout(() => { G.phase = 'play'; nextPuzzle(); }, 900);
+    setTimeout(() => { G.phase = 'play'; nextPuzzle(); }, 950);
   }
 
-  /* ---- WRONG ---- */
+  function updateDaily() {
+    const d = G.daily;
+    if (!d) return;
+    switch (d.kind) {
+      case 'solve':   G.dailyProgress = G.correctAnswers; break;
+      case 'round':   G.dailyProgress = G.round; break;
+      case 'combo':   G.dailyProgress = Math.max(G.dailyProgress||0, G.combo); break;
+      case 'perfect': G.dailyProgress = G.perfectPuzzles; break;
+      case 'noreset': G.dailyProgress = G.resetsUsed === 0 ? 1 : 0; break;
+      case 'master':  G.dailyProgress = G.masterSolved ? 1 : 0; break;
+    }
+  }
+
   function handleWrong(reason) {
     if (G.phase !== 'play') return;
-    G.phase  = 'fail';
+    G.phase = 'fail';
     G.lives--;
     G.streak = 0;
-    G.combo  = 0;
+    G.combo = 0;
     G.failAlpha = 1.2;
+    G.hasErrorThisPuzzle = true;
     stopPuzzleTimer();
-    if (typeof haptic === 'function') haptic([45, 20, 45]);
+    if (typeof haptic === 'function') haptic([45,20,45]);
     if (typeof playSound === 'function') playSound('wrong');
-    showPop('✗ ' + (reason || 'Wrong!'), '#EF4444');
+    showPop('✗ ' + (reason || 'Wrong!'), '#EF4444', 950);
     updateHUD();
 
     if (G.lives <= 0) {
-      setTimeout(() => { stopLoop(); gameOver(); }, 1000);
+      setTimeout(() => { stopLoop(); gameOver(); }, 950);
     } else {
-      setTimeout(() => { G.phase = 'play'; resetDraw(); startPuzzleTimer(); }, 900);
+      setTimeout(() => { G.phase = 'play'; resetDraw(false); startPuzzleTimer(); }, 900);
     }
   }
 
-  /* ---- RESET DRAW ---- */
-  function resetDraw() {
+  function resetDraw(fromReset) {
     G.tracedEdges = new Set();
-    G.path        = [];
-    G.startNode   = -1;
+    G.path = [];
+    G.startNode = -1;
     G.currentNode = -1;
-    G.drawing     = false;
-    G.failAlpha   = 0;
+    G.drawing = false;
+    G.failAlpha = 0;
+    if (fromReset) G.hasErrorThisPuzzle = true;
     if (G.puzzle) setHintNodes();
   }
 
-  /* ---- PUZZLE TYPE ---- */
-  function pickType(round) {
-    if (round < 4) return 'onestroke';
-    const r = Math.random();
-    return r < 0.55 ? 'onestroke' : r < 0.80 ? 'missing' : 'start';
-  }
-
-  /* ---- MISSING EDGES ---- */
-  function makeMissingPuzzle(puzzle) {
-    const total  = puzzle.edges.length;
-    const hide   = Math.max(1, Math.min(3, Math.floor(total * 0.3)));
-    const sh     = [...puzzle.edges].sort(() => Math.random() - 0.5);
-    return { hidden: sh.slice(0, hide), visible: sh.slice(hide) };
-  }
-
-  /* ---- START OPTIONS ---- */
-  function makeStartOptions(puzzle) {
-    const odd     = getOddNodes(puzzle);
-    const correct = odd.length >= 2 ? odd[0] : 0;
-    const wrong   = puzzle.nodes.map((_, i) => i)
-      .filter(i => i !== correct)
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 3);
-    return { correct, options: [correct, ...wrong].sort(() => Math.random() - 0.5) };
-  }
-
-  /* ---- NEXT PUZZLE ---- */
+  /* =================================================================
+     NEXT PUZZLE
+     ================================================================= */
   function nextPuzzle() {
     if (G.lives <= 0) { stopLoop(); gameOver(); return; }
     G.round++;
-    G.drawing     = false;
     G.tracedEdges = new Set();
-    G.path        = [];
-    G.startNode   = -1;
+    G.path = [];
+    G.startNode = -1;
     G.currentNode = -1;
-    G.particles   = [];
-    G.failAlpha   = 0;
-    G.planStart   = Date.now();
+    G.particles = [];
+    G.failAlpha = 0;
+    G.successAnim = 0;
+    G.hasErrorThisPuzzle = false;
+    G.drawing = false;
 
-    const diffCap = G.round <= 5 ? 1 : G.round <= 15 ? 2 : 3;
-    const pool    = PUZZLES.filter(p => p.diff <= diffCap);
-    const base    = pool[G.poolIdx % pool.length];
-    G.poolIdx++;
+    // Difficulty & type
+    const diff = CFG.diffCap(G.round);
+    const rand = rng(hashStr('mt_'+todayISO())+G.round*104729);
+    const chosenType = pickType(G.round, rand);
+    G.type = chosenType;
+    // Master puzzle: bump one level
+    const useDiff = chosenType==='master'
+      ? Math.min(5, diff+1)
+      : chosenType==='genius'
+        ? Math.max(1, diff-1)
+        : diff;
 
-    const seed = Math.floor(Math.random() * 16);
-    G.puzzle   = applyTransform(base, seed);
-    G.type     = pickType(G.round);
-
-    if (G.type === 'missing') {
-      G.missingData = makeMissingPuzzle(G.puzzle);
-    } else if (G.type === 'start') {
-      G.startData = makeStartOptions(G.puzzle);
-      renderMCQ();
-      updateTypeBadge();
-      updateHUD();
-      startPuzzleTimer();
-      return;
-    }
-
+    // Procedural puzzle from a fresh seed
+    const puzzleSeed = (Date.now() ^ (G.round*2654435761)) >>> 0;
+    G.puzzle = makePuzzle(useDiff, puzzleSeed);
+    G.typeMeta = TYPE_META[chosenType];
     setHintNodes();
+
     updateTypeBadge();
     updateHUD();
-
-    /* show / hide MCQ panel */
-    const mcqEl = document.getElementById('mtMCQ');
-    if (mcqEl) mcqEl.style.display = 'none';
 
     startPuzzleTimer();
   }
 
-  /* ---- MCQ RENDER ---- */
-  function renderMCQ() {
-    const mcqEl = document.getElementById('mtMCQ');
-    if (!mcqEl) return;
-    const { correct, options } = G.startData;
-
-    mcqEl.style.display = 'block';
-    mcqEl.innerHTML = `
-      <p class="mt2-mcq-title">🎯 Which node can start a one-stroke path?</p>
-      <div class="mt2-mcq-grid">
-        ${options.map((ni, idx) => `
-          <div class="mt2-mcq-opt" data-ni="${ni}">
-            <span class="mt2-mcq-letter">${String.fromCharCode(65+idx)}</span>
-            ${buildMiniSVG(G.puzzle, ni)}
-          </div>`).join('')}
-      </div>`;
-
-    mcqEl.querySelectorAll('.mt2-mcq-opt').forEach(opt => {
-      opt.onclick = () => {
-        const chosen = +opt.dataset.ni;
-        if (chosen === correct) {
-          opt.classList.add('mt2-mcq-ok');
-          G.correctAnswers++;
-          G.streak++;
-          G.combo++;
-          G.bestCombo  = Math.max(G.bestCombo, G.combo);
-          G.bestStreak = Math.max(G.bestStreak, G.streak);
-          const pts = 10 + (G.combo >= 5 ? 5 : 0);
-          G.score += pts;
-          setScore(G.score);
-          showPop('+' + pts, '#22C55E');
-          if (typeof haptic === 'function') haptic([20,15,30]);
-          updateHUD();
-          setTimeout(() => { mcqEl.style.display='none'; nextPuzzle(); }, 500);
-        } else {
-          opt.classList.add('mt2-mcq-no');
-          mcqEl.querySelector(`[data-ni="${correct}"]`).classList.add('mt2-mcq-ok');
-          G.lives--;
-          G.streak = 0;
-          G.combo  = 0;
-          if (typeof haptic === 'function') haptic([45,20,45]);
-          showPop('✗', '#EF4444');
-          updateHUD();
-          if (G.lives <= 0) {
-            setTimeout(() => { stopLoop(); gameOver(); }, 900);
-          } else {
-            setTimeout(() => { mcqEl.style.display='none'; nextPuzzle(); }, 1200);
-          }
-        }
-      };
-    });
-  }
-
-  function buildMiniSVG(puzzle, hl) {
-    const S=130, pad=20, r=9;
-    const pos = n => [pad+n[0]/100*(S-pad*2), pad+n[1]/100*(S-pad*2)];
-    let s = `<svg viewBox="0 0 ${S} ${S}" width="${S}" height="${S}" style="display:block;">`;
-    s += `<rect width="${S}" height="${S}" rx="10" fill="#0D0119"/>`;
-    puzzle.edges.forEach(([a,b]) => {
-      const [x1,y1]=pos(puzzle.nodes[a]), [x2,y2]=pos(puzzle.nodes[b]);
-      s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#8B5CF6" stroke-width="2.5" stroke-linecap="round"/>`;
-    });
-    puzzle.nodes.forEach((n,i) => {
-      const [x,y]=pos(n), isHL=i===hl;
-      s += `<circle cx="${x}" cy="${y}" r="${isHL?r+3:r}" fill="${isHL?'#F59E0B':'#A78BFA'}"/>`;
-    });
-    return s + '</svg>';
-  }
-
-  /* ---- HUD ---- */
+  /* =================================================================
+     UI COMPONENTS
+     ================================================================= */
   function updateHUD() {
-    const el = document.getElementById('mtHUD');
+    const el = document.getElementById('mt3HUD');
     if (!el) return;
     const hearts = '❤️'.repeat(Math.max(0,G.lives)) + '🩶'.repeat(Math.max(0,3-G.lives));
-    const comboBadge = G.combo >= 10
-      ? `<span class="mt2-cbadge genius">⚡ GENIUS ×${G.combo}</span>`
-      : G.combo >= 5
-        ? `<span class="mt2-cbadge flow">🔥 FLOW ×${G.combo}</span>`
-        : G.combo >= 3
-          ? `<span class="mt2-cbadge">🎯 ×${G.combo}</span>`
-          : '';
+    const tier = comboTier(G.combo);
+    const comboBadge = G.combo >= 3
+      ? `<span class="mt3-cbadge" style="color:${tier.color};border-color:${tier.color};background:${tier.color}18">
+           ${G.combo>=20?'✨':G.combo>=10?'🔥':G.combo>=5?'⚡':'🎯'} ${tier.name} ×${G.combo}
+         </span>`
+      : '';
     el.innerHTML = `
-      <div class="mt2-hud-l">
-        <span class="mt2-hearts">${hearts}</span>
-        <span class="mt2-rnd">R${G.round}</span>
+      <div class="mt3-hud-l">
+        <span class="mt3-hearts">${hearts}</span>
+        <span class="mt3-rnd">R${G.round}</span>
       </div>
-      <div class="mt2-hud-r">
+      <div class="mt3-hud-r">
         ${comboBadge}
-        <span class="mt2-pts">${G.score}</span>
       </div>`;
   }
 
   function updateTypeBadge() {
-    const el = document.getElementById('mtTypeBadge');
-    if (!el) return;
-    const info = {
-      onestroke: { icon:'✏️', name:'One Stroke',     desc:'Trace every line without lifting' },
-      missing:   { icon:'🔲', name:'Complete Shape',  desc:'Draw only the faded missing edges' },
-      start:     { icon:'🎯', name:'Find The Start',  desc:'Which node starts a valid trace?' },
-    }[G.type];
-    el.innerHTML = `<span class="mt2-badge-icon">${info.icon}</span>
-      <div><strong>${info.name}</strong><br><small>${info.desc}</small></div>`;
+    const el = document.getElementById('mt3TypeBadge');
+    if (!el || !G.typeMeta) return;
+    const isSpecial = G.type !== 'normal';
+    el.className = 'mt3-type-badge' + (isSpecial ? ' mt3-special' : '');
+    el.innerHTML = `
+      <span class="mt3-badge-icon">${G.typeMeta.icon}</span>
+      <div>
+        <strong>${G.typeMeta.name}${isSpecial?' <span class="mt3-tag-special">SPECIAL</span>':''}</strong>
+        <small>${G.typeMeta.desc}</small>
+      </div>`;
   }
 
-  /* ---- SCORE POPUP ---- */
-  function showPop(text, color) {
-    const ga = document.getElementById('mtGameArea');
+  function showPop(text, color, dur) {
+    const ga = document.getElementById('mt3GameArea');
     if (!ga) return;
     const el = document.createElement('div');
-    el.className = 'mt2-pop';
+    el.className = 'mt3-pop';
     el.textContent = text;
-    el.style.cssText = `color:${color};border-color:${color};background:${color}1A;`;
+    el.style.cssText = `color:${color};border-color:${color};background:${color}1F;`;
     ga.appendChild(el);
-    setTimeout(() => el.remove(), 900);
+    setTimeout(() => el.remove(), dur || 900);
   }
 
-  /* ---- GAME OVER ---- */
-  function gameOver() {
-    const accuracy = G.round > 0 ? Math.round(G.correctAnswers / G.round * 100) : 0;
-    const avgPlan  = G.correctAnswers > 0
-      ? (Math.round(G.totalPlanMs / G.correctAnswers / 100) / 10) : 0;
-    const avgDraw  = G.drawTimes.length > 0
-      ? Math.round(G.drawTimes.reduce((a,b)=>a+b,0) / G.drawTimes.length / 100) / 10 : 0;
+  function showComboPop(bd) {
+    const ga = document.getElementById('mt3GameArea');
+    if (!ga) return;
+    const el = document.createElement('div');
+    el.className = 'mt3-combo-pop';
+    const detail = [];
+    if (bd.perfectBonus)  detail.push('Perfect +'+bd.perfectBonus);
+    if (bd.speedBonus)    detail.push('Fast +'+bd.speedBonus);
+    if (bd.planBonus)     detail.push('Plan +'+bd.planBonus);
+    if (bd.specialBonus)  detail.push('Special +'+bd.specialBonus);
+    if (bd.mult>1)        detail.push('×'+bd.mult.toFixed(2));
+    el.innerHTML = `
+      <div class="mt3-cp-total">+${bd.total}</div>
+      <div class="mt3-cp-sub">${detail.join(' · ') || 'Solved!'}</div>`;
+    ga.appendChild(el);
+    setTimeout(() => el.remove(), 1100);
+  }
 
-    /* Brain Rating */
-    const planScore  = avgPlan < 2 ? 4 : avgPlan < 5 ? 3 : avgPlan < 9 ? 2 : 1;
-    const accScore   = accuracy >= 90 ? 4 : accuracy >= 70 ? 3 : accuracy >= 50 ? 2 : 1;
-    const comboScore = G.bestCombo >= 10 ? 4 : G.bestCombo >= 5 ? 3 : G.bestCombo >= 3 ? 2 : 1;
-    const tot        = planScore + accScore + comboScore;
-    const ratings    = ['Beginner','Focused','Analytical','Strategic','Expert','Master Planner'];
-    const brainRating = ratings[Math.min(5, Math.floor((tot - 3) / 9 * 6))];
+  /* =================================================================
+     GAME OVER — Premium Analysis
+     ================================================================= */
+  function ratingFromScore(s) {
+    // s is a 0–100 style composite score
+    if (s >= 85) return 'Master Planner';
+    if (s >= 70) return 'Expert';
+    if (s >= 55) return 'Strategic';
+    if (s >= 40) return 'Focused';
+    return 'Beginner';
+  }
+
+  function computeAnalysis() {
+    const rounds = Math.max(1, G.round);
+    const accuracy = Math.round(G.correctAnswers / rounds * 100);
+    const avgPlan  = G.correctAnswers > 0 ? G.totalPlanMs / G.correctAnswers / 1000 : 0;
+    const avgDraw  = G.drawTimes.length > 0
+      ? G.drawTimes.reduce((a,b)=>a+b,0)/G.drawTimes.length/1000 : 0;
+    const fastest  = G.drawTimes.length ? Math.min(...G.drawTimes)/1000 : 0;
+
+    // Consistency = 1 - stddev/mean of draw times, clipped to [0,1]
+    let consistency = 0.5;
+    if (G.drawTimes.length >= 3) {
+      const mean = G.drawTimes.reduce((a,b)=>a+b,0)/G.drawTimes.length;
+      const variance = G.drawTimes.reduce((a,b)=>a+(b-mean)**2,0)/G.drawTimes.length;
+      const std = Math.sqrt(variance);
+      consistency = Math.max(0, Math.min(1, 1 - std/(mean||1)));
+    }
+
+    // Composite metrics, all 0–100
+    const planning = Math.round(Math.max(0, Math.min(100,
+      avgPlan >= 2 ? 50 + Math.min(50, (avgPlan-2)*15)
+                   : avgPlan*25)));
+    const acc      = accuracy;
+    const cons     = Math.round(consistency*100);
+    const speed    = Math.round(Math.max(0, Math.min(100,
+      100 - avgDraw*10)));
+    const decision = Math.round(Math.max(0, Math.min(100,
+      G.bestCombo*8 + (G.perfectPuzzles / rounds)*40)));
+    const visual   = Math.round(Math.max(0, Math.min(100,
+      accuracy*0.6 + G.round*1.2)));
+
+    const composite = Math.round(
+      (planning*0.28 + acc*0.20 + cons*0.15 + decision*0.20 + visual*0.10 + speed*0.07)
+    );
+    const rating = ratingFromScore(composite);
+
+    return { accuracy, avgPlan, avgDraw, fastest, consistency,
+             planning, acc, cons, speed, decision, visual,
+             composite, rating };
+  }
+
+  function buildStatBar(label, val, colorTuple) {
+    // colorTuple: [barColor]
+    const c = colorTuple || '#7C3AED';
+    return `
+      <div class="mt3-stat-row">
+        <div class="mt3-stat-lbl">${label}</div>
+        <div class="mt3-stat-bar">
+          <div class="mt3-stat-fill" style="width:${val}%;background:${c};"></div>
+        </div>
+        <div class="mt3-stat-val">${val}</div>
+      </div>`;
+  }
+
+  function gameOver() {
+    const A = computeAnalysis();
+    const saved = mergeStats(G);
+    const isNewHighRound = G.round >= (saved.highRound||0);
+    const dailyDone = G.daily && G.dailyProgress >= G.daily.target;
+
+    const statsHtml = `
+      <div class="mt3-eo">
+        <div class="mt3-eo-composite">
+          <div class="mt3-eo-cscore">${A.composite}</div>
+          <div class="mt3-eo-clabel">Mind Score</div>
+          <div class="mt3-eo-rating">${A.rating}</div>
+        </div>
+
+        <div class="mt3-eo-section">
+          <div class="mt3-eo-title">🧠 Mind Performance</div>
+          ${buildStatBar('Planning',      A.planning, '#7C3AED')}
+          ${buildStatBar('Accuracy',      A.acc,      '#22C55E')}
+          ${buildStatBar('Consistency',   A.cons,     '#F59E0B')}
+          ${buildStatBar('Decision',      A.decision, '#F472B6')}
+          ${buildStatBar('Visual Reason', A.visual,   '#4F8EF7')}
+          ${buildStatBar('Speed',         A.speed,    '#EF4444')}
+        </div>
+
+        <div class="mt3-eo-section">
+          <div class="mt3-eo-title">📊 This Session</div>
+          <div class="mt3-eo-grid">
+            <div><span>${G.round}</span><small>Rounds</small></div>
+            <div><span>${A.accuracy}%</span><small>Accuracy</small></div>
+            <div><span>${G.perfectPuzzles}</span><small>Perfect</small></div>
+            <div><span>${G.bestCombo}×</span><small>Best Combo</small></div>
+            <div><span>${A.avgPlan.toFixed(1)}s</span><small>Avg Plan</small></div>
+            <div><span>${A.avgDraw.toFixed(1)}s</span><small>Avg Draw</small></div>
+          </div>
+        </div>
+
+        <div class="mt3-eo-section">
+          <div class="mt3-eo-title">🏆 Lifetime</div>
+          <div class="mt3-eo-grid">
+            <div><span>${saved.highRound||G.round}</span><small>Best Round${isNewHighRound?' ✨':''}</small></div>
+            <div><span>${saved.puzzlesSolved||0}</span><small>Solved</small></div>
+            <div><span>${saved.perfectPuzzles||0}</span><small>Perfect</small></div>
+            <div><span>${saved.longestCombo||0}×</span><small>Longest Combo</small></div>
+          </div>
+        </div>
+
+        ${G.daily ? `
+          <div class="mt3-eo-daily ${dailyDone?'done':''}">
+            <div>${G.daily.icon} <strong>${G.daily.title}</strong></div>
+            <div class="mt3-eo-daily-p">
+              ${dailyDone
+                ? '✅ Completed!'
+                : `${Math.min(G.dailyProgress||0, G.daily.target)}/${G.daily.target}`}
+            </div>
+          </div>` : ''}
+      </div>`;
 
     end({
       value: G.score,
-      points: G.score >= 80 ? 50 : G.score >= 40 ? 35 : G.score >= 15 ? 20 : 8,
-      starThresh: [15, 40, 80],
-      summary: `
-        <div class="row"><span>Rounds</span><span class="val">${G.round}</span></div>
-        <div class="row"><span>Accuracy</span><span class="val">${accuracy}%</span></div>
-        <div class="row"><span>Best Combo</span><span class="val">${G.bestCombo}×</span></div>
-        <div class="row"><span>Best Streak</span><span class="val">${G.bestStreak}</span></div>
-        <div class="row"><span>Avg Plan Time</span><span class="val">${avgPlan}s</span></div>
-        <div class="row"><span>Avg Draw Time</span><span class="val">${avgDraw}s</span></div>
-        <div class="row"><span>🧠 Brain Rating</span><span class="val">${brainRating}</span></div>
-      `
+      points: G.score >= 120 ? 55 : G.score >= 70 ? 40 : G.score >= 30 ? 22 : 8,
+      starThresh: [30, 70, 120],
+      summary: statsHtml
     });
   }
 
-  /* ---- BUILD GAME LAYOUT ---- */
+  /* =================================================================
+     BUILD GAME LAYOUT
+     ================================================================= */
   function buildLayout() {
     body.innerHTML = `
-      <div class="mt2-wrap" id="mtGameArea">
-        <div class="mt2-hud" id="mtHUD"></div>
-        <div class="mt2-type-badge" id="mtTypeBadge"></div>
-        <div class="mt2-board" id="mtBoard"></div>
-        <div class="mt2-mcq" id="mtMCQ" style="display:none;"></div>
-        <div class="mt2-foot">
-          <button class="mt2-reset-btn" id="mtReset">↺ Reset</button>
+      <div class="mt3-wrap" id="mt3GameArea">
+        <div class="mt3-hud" id="mt3HUD"></div>
+        <div class="mt3-type-badge" id="mt3TypeBadge"></div>
+        <div class="mt3-board" id="mt3Board"></div>
+        <div class="mt3-foot">
+          <button class="mt3-reset-btn" id="mt3Reset">↺ Restart Puzzle</button>
         </div>
       </div>`;
 
     makeCanvas();
-    document.getElementById('mtBoard').appendChild(canvas);
+    document.getElementById('mt3Board').appendChild(canvas);
     bindPointer();
-    document.getElementById('mtReset').onclick = () => {
-      if (G.phase !== 'play') return;
-      resetDraw();
-      showPop('↺ Restarted — timer running!', '#F59E0B');
+
+    document.getElementById('mt3Reset').onclick = () => {
+      if (G.phase !== 'play' && G.phase !== 'plan') return;
+      G.resetsUsed++;
+      resetDraw(true);
+      showPop('↺ Restarted', '#F59E0B');
     };
+
+    // Handle resize (rotation)
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        const boardEl = document.getElementById('mt3Board');
+        if (!boardEl) return;
+        const newSize = computeBoardSize();
+        if (Math.abs(newSize - CW) < 5) return;
+        // Rebuild canvas
+        canvas.remove();
+        makeCanvas();
+        boardEl.appendChild(canvas);
+        bindPointer();
+      }, 220);
+    });
 
     startLoop();
     nextPuzzle();
   }
 
-  /* ---- START SCREEN ---- */
+  /* =================================================================
+     ANIMATED START-SCREEN DEMO
+     ---------------------------------------------------------------
+     A tiny canvas that continuously solves random small graphs.
+     ================================================================= */
+  function startAnimatedDemo(demoCanvas) {
+    const size = demoCanvas.width;
+    const dctx = demoCanvas.getContext('2d');
+    let demo = null;
+    let solveOrder = [];
+    let progress = 0;
+    let phase = 'plan';       // plan | draw | done
+    let phaseStart = performance.now();
+    let running = true;
+
+    // Simple triangle/square/kite loop
+    const shapes = [
+      { n:[[50,15],[15,80],[85,80]], e:[[0,1],[1,2],[2,0]] },
+      { n:[[15,20],[85,20],[85,80],[15,80]], e:[[0,1],[1,2],[2,3],[3,0]] },
+      { n:[[50,12],[85,52],[50,88],[15,52]], e:[[0,1],[1,2],[2,3],[3,0],[0,2]] },
+      { n:[[50,14],[80,40],[68,80],[32,80],[20,40]], e:[[0,1],[1,2],[2,3],[3,4],[4,0]] },
+      { n:[[15,20],[85,20],[50,55],[15,80],[85,80]], e:[[0,1],[0,2],[1,2],[2,3],[2,4],[3,4]] },
+    ];
+    let cur;
+
+    function pickShape() {
+      cur = shapes[Math.floor(Math.random()*shapes.length)];
+      // Build a valid Euler path via Hierholzer-ish walk
+      solveOrder = eulerPath(cur.n.length, cur.e) || [];
+      progress = 0;
+      phase = 'plan';
+      phaseStart = performance.now();
+    }
+
+    // Simple Hierholzer for the demo
+    function eulerPath(nCount, edges) {
+      const adj = Array.from({length:nCount}, ()=>[]);
+      edges.forEach(([a,b],i)=>{
+        adj[a].push({to:b, i});
+        adj[b].push({to:a, i});
+      });
+      const deg = adj.map(a=>a.length);
+      const start = deg.findIndex(d=>d%2!==0);
+      const startNode = start === -1 ? 0 : start;
+      const used = new Set();
+      const stack = [startNode];
+      const path = [];
+      while (stack.length) {
+        const u = stack[stack.length-1];
+        let found = false;
+        for (const e of adj[u]) {
+          if (!used.has(e.i)) {
+            used.add(e.i);
+            stack.push(e.to);
+            found = true;
+            break;
+          }
+        }
+        if (!found) path.push(stack.pop());
+      }
+      // path is node order in reverse; but for our purpose, either dir is fine
+      if (path.length !== edges.length + 1) return null;
+      return path.reverse();
+    }
+
+    function pos(n) {
+      const pad = size*0.14;
+      return [pad + n[0]/100*(size-pad*2),
+              pad + n[1]/100*(size-pad*2)];
+    }
+
+    function loop(t) {
+      if (!running) return;
+      requestAnimationFrame(loop);
+      const now = t || performance.now();
+      dctx.clearRect(0,0,size,size);
+
+      // background
+      const g = dctx.createLinearGradient(0,0,size,size);
+      g.addColorStop(0,'#180935'); g.addColorStop(1,'#22114A');
+      dctx.fillStyle = g;
+      dctx.beginPath();
+      const r = 14;
+      // rounded rect
+      dctx.moveTo(r,0); dctx.lineTo(size-r,0);
+      dctx.arcTo(size,0,size,r,r);
+      dctx.lineTo(size,size-r);
+      dctx.arcTo(size,size,size-r,size,r);
+      dctx.lineTo(r,size);
+      dctx.arcTo(0,size,0,size-r,r);
+      dctx.lineTo(0,r);
+      dctx.arcTo(0,0,r,0,r);
+      dctx.closePath();
+      dctx.fill();
+
+      if (!cur) pickShape();
+
+      const elapsed = now - phaseStart;
+      if (phase === 'plan') {
+        // 700ms plan phase — nodes pulse gently
+        if (elapsed > 700) { phase = 'draw'; phaseStart = now; progress = 0; }
+      } else if (phase === 'draw') {
+        // Advance one edge every 350ms
+        const advanceMs = 320;
+        progress = Math.min(solveOrder.length-1, elapsed / advanceMs);
+        if (progress >= solveOrder.length - 1) {
+          phase = 'done'; phaseStart = now;
+        }
+      } else if (phase === 'done') {
+        if (elapsed > 700) pickShape();
+      }
+
+      // === Draw untraced edges ===
+      const doneEdges = new Set();
+      const currentIntEdge = Math.floor(progress);
+      const frac = progress - currentIntEdge;
+      for (let i=0;i<currentIntEdge && i<solveOrder.length-1;i++) {
+        const a = solveOrder[i], b = solveOrder[i+1];
+        const key = a<b?`${a}-${b}`:`${b}-${a}`;
+        doneEdges.add(key);
+      }
+
+      cur.e.forEach(([a,b]) => {
+        const [x1,y1] = pos(cur.n[a]);
+        const [x2,y2] = pos(cur.n[b]);
+        const key = a<b?`${a}-${b}`:`${b}-${a}`;
+        const traced = doneEdges.has(key) || phase==='done';
+        dctx.save();
+        dctx.lineCap='round';
+        if (traced) {
+          dctx.strokeStyle = '#4ADE80';
+          dctx.lineWidth = 3.5;
+          dctx.shadowColor = '#22C55E'; dctx.shadowBlur = 8;
+        } else {
+          dctx.strokeStyle = '#8B5CF6';
+          dctx.lineWidth = 2.5;
+          dctx.shadowColor = '#7C3AED'; dctx.shadowBlur = 4;
+        }
+        dctx.beginPath();
+        dctx.moveTo(x1,y1); dctx.lineTo(x2,y2);
+        dctx.stroke();
+        dctx.restore();
+      });
+
+      // Draw the currently-in-progress edge as a partial line
+      if (phase==='draw' && currentIntEdge < solveOrder.length-1) {
+        const a = solveOrder[currentIntEdge], b = solveOrder[currentIntEdge+1];
+        const [x1,y1] = pos(cur.n[a]);
+        const [x2,y2] = pos(cur.n[b]);
+        dctx.save();
+        dctx.lineCap='round';
+        dctx.strokeStyle = '#4ADE80';
+        dctx.lineWidth = 3.8;
+        dctx.shadowColor = '#22C55E'; dctx.shadowBlur = 10;
+        dctx.beginPath();
+        dctx.moveTo(x1,y1);
+        dctx.lineTo(x1 + (x2-x1)*frac, y1 + (y2-y1)*frac);
+        dctx.stroke();
+        dctx.restore();
+      }
+
+      // === Nodes ===
+      cur.n.forEach((n,i) => {
+        const [x,y] = pos(n);
+        const isStart = (solveOrder[0]===i);
+        const nodePulse = phase==='plan'
+          ? 0.6 + 0.4*Math.sin(now*0.006 + i)
+          : 1;
+        dctx.save();
+        dctx.shadowColor = '#7C3AED';
+        dctx.shadowBlur = 8*nodePulse;
+        dctx.fillStyle = isStart && phase==='plan' ? '#FCD34D' : '#A78BFA';
+        dctx.beginPath();
+        dctx.arc(x,y,5.5,0,Math.PI*2);
+        dctx.fill();
+        dctx.restore();
+      });
+    }
+    requestAnimationFrame(loop);
+
+    // Stop function
+    return () => { running = false; };
+  }
+
+  /* =================================================================
+     START SCREEN (Premium landing)
+     ================================================================= */
   const best  = (()=>{ try{ return JSON.parse(localStorage.getItem('nz_best_scores')||'{}'); }catch(e){ return {}; }})();
   const plays = (()=>{ try{ return JSON.parse(localStorage.getItem('nz_game_plays')||'{}'); }catch(e){ return {}; }})();
+  const stats = loadStats();
+  const daily = dailyChallenge();
 
   body.innerHTML = `
-    <div class="ss-start">
-      <div class="ss-stats">
-        <div class="ss-stat"><div class="v">${best['mindtrace']||0}</div><div class="l">Best Score</div></div>
-        <div class="ss-stat"><div class="v">${plays['mindtrace']||0}</div><div class="l">Games</div></div>
+    <div class="mt3-start">
+      <div class="mt3-hero">
+        <canvas id="mt3DemoCanvas" width="200" height="200"
+          style="width:200px;height:200px;border-radius:18px;
+                 box-shadow:0 10px 34px rgba(124,58,237,.35);"></canvas>
+        <h1 class="mt3-hero-title">Mind Trace</h1>
+        <div class="mt3-hero-tag">Logic · Planning</div>
+        <p class="mt3-hero-quote">A single stroke.<br><span>Infinite possibilities.</span></p>
+        <p class="mt3-hero-sub">Plan your route before touching the screen.</p>
       </div>
-      <div class="mt2-intro">
-        <div class="mt2-intro-icon">✏️</div>
-        <h2 class="mt2-intro-title">Mind Trace</h2>
-        <p class="mt2-intro-sub">Trace every line in <strong>ONE stroke</strong> without lifting.<br>Plan your route — then draw.</p>
-        <div class="mt2-rules">
-          <div class="mt2-rule"><span>✏️</span><span>Don't lift your finger</span></div>
-          <div class="mt2-rule"><span>🔄</span><span>No retracing the same edge</span></div>
-          <div class="mt2-rule"><span>❤️</span><span>3 lives — plan before you draw</span></div>
-          <div class="mt2-rule"><span>⚡</span><span>Speed bonus for fast solves</span></div>
+
+      <div class="mt3-daily">
+        <div class="mt3-daily-ico">${daily.icon}</div>
+        <div class="mt3-daily-body">
+          <div class="mt3-daily-title">Today's Challenge</div>
+          <div class="mt3-daily-goal">${daily.title}</div>
         </div>
+        <div class="mt3-daily-badge">+2× XP</div>
       </div>
-      <button class="btn-primary" id="mt2Start">Start Tracing →</button>
+
+      <div class="mt3-statgrid">
+        <div class="mt3-sg"><div class="v">${best['mindtrace']||0}</div><div class="l">Best Score</div></div>
+        <div class="mt3-sg"><div class="v">${stats.highRound||0}</div><div class="l">Best Round</div></div>
+        <div class="mt3-sg"><div class="v">${stats.longestCombo||0}×</div><div class="l">Longest Combo</div></div>
+        <div class="mt3-sg"><div class="v">${stats.perfectPuzzles||0}</div><div class="l">Perfect Puzzles</div></div>
+        <div class="mt3-sg"><div class="v">${plays['mindtrace']||0}</div><div class="l">Games Played</div></div>
+        <div class="mt3-sg"><div class="v">${stats.puzzlesSolved||0}</div><div class="l">Total Solved</div></div>
+      </div>
+
+      <div class="mt3-rules">
+        <div class="mt3-rule"><span>✓</span><span>One continuous stroke</span></div>
+        <div class="mt3-rule"><span>✓</span><span>Every edge exactly once</span></div>
+        <div class="mt3-rule"><span>✓</span><span>Don't lift your finger</span></div>
+      </div>
+
+      <button class="btn-primary mt3-start-btn" id="mt3Start">
+        <span>Start Tracing</span>
+        <span class="mt3-arrow">→</span>
+      </button>
     </div>`;
 
-  body.querySelector('#mt2Start').onclick = () => {
+  const demoCanvas = body.querySelector('#mt3DemoCanvas');
+  const stopDemo = startAnimatedDemo(demoCanvas);
+
+  body.querySelector('#mt3Start').onclick = () => {
+    stopDemo();
     startClock();
     buildLayout();
   };
+
+  // Clean up demo if user backs out
+  wrap.addEventListener('remove_game', () => {
+    try { stopDemo(); } catch(e){}
+    try { stopLoop(); } catch(e){}
+  });
 }
