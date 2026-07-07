@@ -183,25 +183,104 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
   const used = { 1: 0, 2: 0, 3: 0 };
   function takeGroup(tier) { const p = pools[tier]; const g = p[used[tier] % p.length]; used[tier]++; if (used[tier] % p.length === 0) p.sort(() => Math.random() - .5); return g; }
 
-  const instrEl = $(`<div class="instr" style="margin-bottom: 14px;">
-    <strong style="font-size: 20px;">Word Flash ♾️</strong><br>
-    <div style="font-size: 13px; color: var(--text2); line-height: 1.6; margin-top: 8px;">
-      Word ek flash mein dikhega — distractors bilkul similar honge!<br>
-      <span style="color: var(--primary); font-weight: 600;">Endless:</span> jab tak 3 lives hain khelte raho.
+  /* ---------- PREMIUM START SCREEN ---------- */
+  const wfGames    = S('nz_wf_games') || 0;
+  const wfBestStr  = S('nz_wf_best_streak') || 0;
+  const wfBestSpd  = S('nz_wf_best_speed_label') || '—';
+  const wfTotalPts = S('nz_wf_total_points') || 0;
+
+  const instrEl = $(`<div class="ss-start wf3-start">
+    <div class="wf3-hero">
+      <div class="wf3-demo" id="wf3Demo">
+        <div class="wf3-demo-flash" id="wf3DemoFlash">FORM</div>
+        <div class="wf3-demo-opts" id="wf3DemoOpts">
+          <div class="wf3-demo-opt" data-i="0">FROM</div>
+          <div class="wf3-demo-opt" data-i="1">FORT</div>
+          <div class="wf3-demo-opt correct" data-i="2">FORM</div>
+          <div class="wf3-demo-opt" data-i="3">FOAM</div>
+        </div>
+      </div>
+      <h1 class="wf3-hero-title">Word Flash</h1>
+      <div class="wf3-hero-tag">Memory · Attention</div>
+      <p class="wf3-hero-quote">Blink and you'll <span>miss it.</span></p>
+      <p class="wf3-hero-sub">One flash. Four look-alikes. Pick the exact word.</p>
     </div>
-    <div style="margin-top: 10px; padding: 10px 14px; background: rgba(167,139,250,0.1); border-radius: 10px; font-size: 12px; color: var(--text2);">
-      <span style="color: var(--primary); font-weight: 700;">🎯 IMPROVED:</span> Smooth speed curve, streak badges, mode announcements & more!
+
+    <div class="wf3-statgrid">
+      <div class="wf3-sg"><div class="v">${record}</div><div class="l">Best Score</div></div>
+      <div class="wf3-sg"><div class="v">${wfBestStr}</div><div class="l">Best Streak</div></div>
+      <div class="wf3-sg"><div class="v">${wfGames}</div><div class="l">Games</div></div>
+      <div class="wf3-sg"><div class="v">${wfBestSpd}</div><div class="l">Top Speed</div></div>
+      <div class="wf3-sg"><div class="v">${wfTotalPts}</div><div class="l">Lifetime Pts</div></div>
+      <div class="wf3-sg"><div class="v">3<span class="wf3-heart">❤️</span></div><div class="l">Lives</div></div>
     </div>
-    <div style="margin-top: 8px; font-size: 11px; color: var(--primary);">
-      ⚡ Fast = bonus · ❌ Galat = -1 life · 🔥 Streak = x1.5
+
+    <div class="wf3-rules">
+      <div class="wf3-rule"><span class="wf3-rk">⚡</span><div><strong>Watch the flash</strong><small>Word appears for a split second</small></div></div>
+      <div class="wf3-rule"><span class="wf3-rk">🎯</span><div><strong>Pick the exact match</strong><small>Distractors are almost identical</small></div></div>
+      <div class="wf3-rule"><span class="wf3-rk">🔥</span><div><strong>Chain streaks for ×1.5</strong><small>Speed bonus stacks on top</small></div></div>
     </div>
-    ${record ? `<div style="margin-top: 10px; font-size: 14px; font-weight: 700; color: var(--mint); padding: 6px 12px; background: rgba(52,211,153,0.1); border-radius: 8px; display: inline-block;">🏆 Best: ${record} pts</div>` : ''}
-    <br>
-    <button style="margin-top: 14px; padding: 14px 32px; background: var(--grad); color: #fff; border-radius: 14px; font-weight: 700; font-size: 16px; box-shadow: var(--shadow); transition: transform 0.2s;" id="wfStart" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">▶ Start Game</button>
+
+    <button class="btn-primary wf3-start-btn" id="wfStart">
+      <span>Start Game</span>
+      <span class="wf3-arrow">→</span>
+    </button>
   </div>`);
   body.appendChild(instrEl);
   const host = $(`<div></div>`);
   body.appendChild(host);
+
+  /* ---------- START-SCREEN ANIMATED DEMO ---------- */
+  (function startDemoLoop(){
+    const demoSets = [
+      { flash:'FORM', opts:['FROM','FORT','FORM','FOAM'], correct:2 },
+      { flash:'TIDE', opts:['TIED','TIDE','DIET','EDIT'], correct:1 },
+      { flash:'BEAR', opts:['BARE','BEAD','BEAR','BEAN'], correct:2 },
+      { flash:'PALE', opts:['PLEA','PEAL','PALM','PALE'], correct:3 },
+      { flash:'BLADE',opts:['BLAME','BLADE','BLARE','BLAZE'], correct:1 },
+    ];
+    let idx = 0;
+    const flashEl = instrEl.querySelector('#wf3DemoFlash');
+    const optsEl  = instrEl.querySelector('#wf3DemoOpts');
+    let alive = true;
+    function loop(){
+      if (!alive || !document.body.contains(instrEl)) return;
+      const s = demoSets[idx % demoSets.length];
+      idx++;
+      // Phase 1: FLASH
+      flashEl.textContent = s.flash;
+      flashEl.className = 'wf3-demo-flash show';
+      const opts = [...optsEl.querySelectorAll('.wf3-demo-opt')];
+      opts.forEach((el,i)=>{
+        el.textContent = s.opts[i];
+        el.className = 'wf3-demo-opt';
+      });
+      const t1 = setTimeout(()=>{
+        if (!alive) return;
+        flashEl.className = 'wf3-demo-flash';
+      }, 650);
+      // Phase 2: Options appear
+      const t2 = setTimeout(()=>{
+        if (!alive) return;
+        opts.forEach(el => el.classList.add('appear'));
+      }, 850);
+      // Phase 3: Highlight correct
+      const t3 = setTimeout(()=>{
+        if (!alive) return;
+        opts[s.correct].classList.add('correct');
+      }, 1650);
+      // Phase 4: Reset for next
+      const t4 = setTimeout(()=>{
+        if (!alive) return;
+        opts.forEach(el => el.classList.remove('appear','correct'));
+        loop();
+      }, 2600);
+      activeTimers.push(t1,t2,t3,t4);
+    }
+    loop();
+    // Stop demo when we transition to the game
+    instrEl._stopDemo = () => { alive = false; };
+  })();
 
   function showAnnouncement(title, subtitle, icon, onDone) {
     host.innerHTML = `
@@ -224,6 +303,10 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     const speedRow = highestSpeedLabel ? `<div class="row"><span>Speed Reached</span><span class="val">${highestSpeedLabel}</span></div>` : '';
     if (newPB) setS('nz_wf_best', score);
     setS('nz_wf_games', (S('nz_wf_games') || 0) + 1);
+    /* Lifetime stats for the new premium start screen */
+    if (bestStreak > (S('nz_wf_best_streak') || 0)) setS('nz_wf_best_streak', bestStreak);
+    if (highestSpeedLabel) setS('nz_wf_best_speed_label', highestSpeedLabel);
+    setS('nz_wf_total_points', (S('nz_wf_total_points') || 0) + score);
     if (newPB) confetti(80);
     end({
       title: newPB ? '🏆 New Best!' : '📝 Word Flash',
@@ -747,6 +830,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
   }
 
   instrEl.querySelector('#wfStart').onclick = () => {
+    if (instrEl._stopDemo) instrEl._stopDemo();
     instrEl.remove();
     startClock && startClock();
     showCountdown(() => next());
