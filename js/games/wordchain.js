@@ -4,14 +4,98 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
   const FLASH_COLORS=['#7C3AED','#4F8EF7','#34D399'];
   const record=LS.get('nz_wordchain_record',0);
   let round=0,lives=3,totalScore=0,longest=0,mistakes=0;
-  const instrEl=$(`<div class="instr" style="margin-bottom:14px;">
-    <strong>Word Chain ♾️</strong><br>
-    Words ek-ek karke flash honge — order yaad rakho, phir sahi order mein tap karo!<br>
-    <span style="font-size:11px;color:var(--primary);">3 lives ❤️ · Endless — chain badhta jaayega · 5+ = 👻 distractor · 6+ = ⚡ SPEED</span>
-    ${record>0?`<div style="margin-top:6px;font-size:12px;font-weight:700;color:var(--mint);">🏆 Personal Record: ${record}-word chain</div>`:''}
-    <button style="margin-top:12px;padding:12px 28px;background:var(--grad);color:#fff;border-radius:12px;font-weight:700;" id="wcStart">▶ Start</button>
+  let activeTimersWC=[];
+  wrap.addEventListener('remove_game', ()=>{activeTimersWC.forEach(t=>clearTimeout(t));activeTimersWC=[];});
+  const instrEl=$(`<div class="ss-start wc3-start">
+    <div class="wc3-hero">
+      <div class="wc3-demo" id="wc3Demo"></div>
+      <h1 class="wc3-hero-title">Word Chain</h1>
+      <div class="wc3-hero-tag">Memory · Sequencing</div>
+      <p class="wc3-hero-quote">Remember the <span>order.</span></p>
+      <p class="wc3-hero-sub">Words flash one by one. Recall them in the exact sequence.</p>
+    </div>
+
+    <div class="wc3-statgrid">
+      <div class="wc3-sg"><div class="v">${record}</div><div class="l">Best Chain</div></div>
+      <div class="wc3-sg"><div class="v">${LS.get('nz_wc_games',0)}</div><div class="l">Games</div></div>
+      <div class="wc3-sg"><div class="v">${LS.get('nz_wc_total',0)}</div><div class="l">Total Words</div></div>
+    </div>
+
+    <div class="wc3-rules">
+      <div class="wc3-rule"><span class="wc3-rk">👀</span><div><strong>Watch each flash</strong><small>Words appear one after another</small></div></div>
+      <div class="wc3-rule"><span class="wc3-rk">🔗</span><div><strong>Recall in order</strong><small>Chain grows every round</small></div></div>
+      <div class="wc3-rule"><span class="wc3-rk">👻</span><div><strong>Beware the distractor</strong><small>From chain 5+ · Speed mode from 6+</small></div></div>
+    </div>
+
+    <button class="btn-primary wc3-start-btn" id="wcStart">
+      <span>Start Chain</span>
+      <span class="wc3-arrow">→</span>
+    </button>
   </div>`);
   body.appendChild(instrEl);
+
+  /* ---------- START-SCREEN ANIMATED DEMO ---------- */
+  (function wc3Demo(){
+    const demo = instrEl.querySelector('#wc3Demo');
+    if (!demo) return;
+    const demoWords = [
+      ['MAPLE','RIVER','CLOUD'],
+      ['TIGER','FLAME','OCEAN'],
+      ['STORM','QUARTZ','EMBER'],
+      ['PIANO','WILLOW','NECTAR'],
+      ['CRANE','ORBIT','LUNAR'],
+    ];
+    const COLORS = ['#7C3AED','#4F8EF7','#34D399'];
+    let alive = true;
+    let round = 0;
+    demo.innerHTML = `
+      <div class="wc3-demo-flash" id="wc3DemoFlash"></div>
+      <div class="wc3-demo-slots" id="wc3DemoSlots"></div>`;
+    const flashEl = demo.querySelector('#wc3DemoFlash');
+    const slotsEl = demo.querySelector('#wc3DemoSlots');
+    function loop(){
+      if (!alive || !document.body.contains(instrEl)) return;
+      const words = demoWords[round % demoWords.length];
+      round++;
+      slotsEl.innerHTML = words.map((w,i)=>`<span class="wc3-demo-slot" data-i="${i}">${w}</span>`).join('<span class="wc3-demo-arrow">→</span>');
+      const slots = [...slotsEl.querySelectorAll('.wc3-demo-slot')];
+      slots.forEach(s => s.classList.remove('flashed','recalled'));
+      /* Phase 1: flash each word */
+      let i = 0;
+      function flashNext(){
+        if (!alive) return;
+        if (i >= words.length) { setTimeout(recallPhase, 350); return; }
+        flashEl.textContent = words[i];
+        flashEl.style.color = COLORS[i % COLORS.length];
+        flashEl.className = 'wc3-demo-flash show';
+        slots[i].classList.add('flashed');
+        const t1 = setTimeout(()=>{ if (!alive) return; flashEl.className = 'wc3-demo-flash'; }, 380);
+        i++;
+        const t2 = setTimeout(flashNext, 520);
+        activeTimersWC.push(t1,t2);
+      }
+      function recallPhase(){
+        if (!alive) return;
+        flashEl.textContent = '?';
+        flashEl.style.color = 'var(--primary)';
+        flashEl.className = 'wc3-demo-flash show recall';
+        let j = 0;
+        function recallOne(){
+          if (!alive) return;
+          if (j >= words.length) { setTimeout(loop, 700); return; }
+          slots[j].classList.add('recalled');
+          j++;
+          const t = setTimeout(recallOne, 300);
+          activeTimersWC.push(t);
+        }
+        recallOne();
+      }
+      flashNext();
+    }
+    loop();
+    instrEl._stopDemo = () => { alive = false; };
+  })();
+
   const host=$(`<div></div>`);
   body.appendChild(host);
   function hudHtml(extra){
@@ -101,6 +185,8 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
     setScore(final);
     const newRec=longest>record;
     if(newRec)LS.set('nz_wordchain_record',longest);
+    LS.set('nz_wc_games',(LS.get('nz_wc_games',0)||0)+1);
+    LS.set('nz_wc_total',(LS.get('nz_wc_total',0)||0)+longest);
     if(newRec)confetti(50);
     end({
       title:newRec?'New Record! 🏆':(lives>0?'Chain Master! 🔗':'Chain Over! 💔'),
@@ -116,5 +202,5 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
       </div>${newRec?'<div class="rec">New Personal Record! 🎉</div>':''}`
     });
   }
-  instrEl.querySelector('#wcStart').onclick=()=>{instrEl.remove();startClock&&startClock();startRound();};
+  instrEl.querySelector('#wcStart').onclick=()=>{if(instrEl._stopDemo)instrEl._stopDemo();activeTimersWC.forEach(t=>clearTimeout(t));instrEl.remove();startClock&&startClock();startRound();};
 }
