@@ -1572,6 +1572,88 @@ body.dark .iq-speed-badge{background:#451A03;color:#FCD34D;border-color:#92400E;
 @keyframes onbShake{0%,100%{transform:translateX(0);}20%{transform:translateX(-6px);}40%{transform:translateX(6px);}60%{transform:translateX(-4px);}80%{transform:translateX(4px);}}
 .onb-shake{animation:onbShake .35s ease;}
 
+/* ===================== STATS TAB v2 — PRO POLISH ===================== */
+.pg-mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);}
+.pg-mini-grid>div{text-align:center;}
+.pg-mini-grid span{display:block;font-size:16px;font-weight:900;color:var(--primary);line-height:1.1;}
+.pg-mini-grid small{display:block;font-size:10px;color:var(--text2);font-weight:700;margin-top:2px;}
+.pg-gain-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 4px;}
+.pg-gain{background:var(--card);border-radius:14px;padding:10px 8px;text-align:center;box-shadow:var(--shadow);border:1px solid var(--border);}
+.pg-gain .v{font-size:15px;font-weight:900;background:linear-gradient(135deg,#7C3AED,#4F8EF7);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;line-height:1.15;}
+.pg-gain .l{font-size:9.5px;color:var(--text2);font-weight:700;margin-top:2px;letter-spacing:.02em;}
+/* Top games */
+.pg-topgames{padding:10px 12px;display:flex;flex-direction:column;gap:4px;}
+.pg-tg-row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px dashed var(--border);}
+.pg-tg-row:last-child{border-bottom:none;}
+.pg-tg-rank{font-size:12px;font-weight:900;color:var(--text2);width:26px;flex-shrink:0;}
+.pg-tg-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:#fff;}
+.pg-tg-main{flex:1;min-width:0;}
+.pg-tg-name{font-size:13px;font-weight:800;}
+.pg-tg-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;}
+.pg-tg-chips span{font-size:10px;font-weight:700;color:var(--text2);background:var(--bg);padding:2px 7px;border-radius:20px;border:1px solid var(--border);}
+.pg-ach-count{font-size:12px;color:var(--text2);font-weight:800;}
+
+/* ── ACHIEVEMENTS v2 ── */
+.ach2-group{background:var(--card);border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow);margin-bottom:10px;overflow:hidden;}
+.ach2-group-hd{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;font-size:13px;font-weight:800;cursor:pointer;user-select:none;}
+.ach2-group-count{font-size:11px;font-weight:800;color:var(--primary);background:rgba(124,58,237,.1);padding:2px 9px;border-radius:20px;}
+.ach2-chev{transition:transform .25s;font-size:12px;color:var(--text2);}
+.ach2-group.open .ach2-chev{transform:rotate(180deg);}
+.ach2-rows{display:none;flex-direction:column;padding:0 12px 10px;}
+.ach2-group.open .ach2-rows{display:flex;}
+.ach2-row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-top:1px dashed var(--border);cursor:pointer;}
+.ach2-row:active{opacity:.75;}
+.ach2-badge{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;border:2px solid;background:var(--bg);}
+.ach2-badge.ach2-locked{filter:grayscale(1);opacity:.55;animation:none;box-shadow:none;}
+.ach2-info{flex:1;min-width:0;}
+.ach2-title{font-size:12.5px;font-weight:800;}
+.ach2-check{color:#22C55E;font-weight:900;}
+.ach2-desc{font-size:10.5px;color:var(--text2);margin:1px 0 5px;}
+.ach2-bar{height:5px;background:var(--border);border-radius:20px;overflow:hidden;}
+.ach2-fill{height:100%;border-radius:20px;background:var(--grad);transition:width .6s cubic-bezier(.22,1,.36,1);}
+.ach2-prog{font-size:10.5px;font-weight:800;color:var(--text2);flex-shrink:0;min-width:40px;text-align:right;}
+.ach2-row.unlocked .ach2-prog{color:#22C55E;}
+/* Rarity frames */
+.ach2-frame-common{border-color:#9CA3AF;}
+.ach2-frame-rare{border-color:#3B82F6;box-shadow:0 0 10px rgba(59,130,246,.25);}
+.ach2-frame-epic{border-color:#A855F7;box-shadow:0 0 12px rgba(168,85,247,.30);}
+.ach2-frame-legendary{border-color:#F59E0B;box-shadow:0 0 14px rgba(245,158,11,.40);}
+.ach2-frame-mythic{border-color:#F472B6;box-shadow:0 0 16px rgba(244,114,182,.45);animation:ach2Mythic 3s linear infinite;}
+@keyframes ach2Mythic{0%{filter:hue-rotate(0deg);}100%{filter:hue-rotate(360deg);}}
+/* Rarity fills + text */
+.ach2-fill-common{background:#9CA3AF;}
+.ach2-fill-rare{background:linear-gradient(90deg,#3B82F6,#60A5FA);}
+.ach2-fill-epic{background:linear-gradient(90deg,#A855F7,#C4B5FD);}
+.ach2-fill-legendary{background:linear-gradient(90deg,#F59E0B,#FCD34D);}
+.ach2-fill-mythic{background:linear-gradient(90deg,#F59E0B,#F472B6,#7C3AED);}
+.ach2-txt-common{color:#9CA3AF;}
+.ach2-txt-rare{color:#3B82F6;}
+.ach2-txt-epic{color:#A855F7;}
+.ach2-txt-legendary{color:#F59E0B;}
+.ach2-txt-mythic{background:linear-gradient(90deg,#F59E0B,#F472B6,#7C3AED);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+/* Unlock overlay */
+.ach2-unlock-ov{position:fixed;inset:0;background:rgba(10,6,26,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:400;display:flex;align-items:center;justify-content:center;padding:24px;cursor:pointer;}
+.ach2-unlock-card{background:var(--card);border-radius:24px;padding:28px 24px;text-align:center;max-width:320px;width:100%;border:2px solid;animation:ach2CardPop .5s cubic-bezier(.2,.9,.3,1.4);}
+@keyframes ach2CardPop{0%{opacity:0;transform:scale(.7) translateY(20px);}100%{opacity:1;transform:scale(1) translateY(0);}}
+.ach2-unlock-lbl{font-size:10px;font-weight:900;letter-spacing:.18em;color:var(--primary);margin-bottom:14px;}
+.ach2-unlock-badge{width:76px;height:76px;border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:38px;margin:0 auto 12px;border:3px solid;background:var(--bg);animation:ach2BadgeSpin .7s cubic-bezier(.2,.9,.3,1.4);}
+@keyframes ach2BadgeSpin{0%{transform:scale(0) rotate(-160deg);}70%{transform:scale(1.12) rotate(8deg);}100%{transform:scale(1) rotate(0);}}
+.ach2-unlock-title{font-size:19px;font-weight:900;}
+.ach2-unlock-desc{font-size:12px;color:var(--text2);margin:4px 0 8px;}
+.ach2-unlock-rarity{font-size:10px;font-weight:900;letter-spacing:.14em;margin-bottom:10px;}
+.ach2-unlock-reward{font-size:13px;font-weight:800;color:#22C55E;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);padding:7px 14px;border-radius:20px;display:inline-block;}
+.ach2-unlock-tap{font-size:11px;color:var(--text2);margin-top:14px;opacity:.7;}
+/* Detail modal */
+.ach2-detail{text-align:center;}
+.ach2-detail .ach2-unlock-badge{margin-bottom:8px;}
+.ach2-detail .ach2-bar{height:7px;margin:10px 0 6px;}
+.ach2-detail-prog{font-size:12px;font-weight:800;}
+.ach2-detail-reward{font-size:11.5px;color:var(--text2);margin-top:6px;}
+.ach2-detail-date{font-size:11px;color:var(--primary);font-weight:700;margin-top:4px;}
+@media (prefers-reduced-motion:reduce){
+  .ach2-frame-mythic,.ach2-unlock-badge,.ach2-unlock-card{animation:none;}
+}
+
 /* ===================== MIND TRACE v2 (Canvas) ===================== */
 /* Game layout */
 .mt2-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;padding:4px 0;width:100%;position:relative;}
@@ -1870,3 +1952,71 @@ body.dark .iq-speed-badge{background:#451A03;color:#FCD34D;border-color:#92400E;
 .wk-best{font-size:12px;color:var(--text2);margin-bottom:6px;}
 .wk-rec{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 .wk-rec-btn{padding:4px 10px;background:var(--primary);color:#fff;border-radius:6px;font-size:11px;font-weight:700;}
+
+/* ===================== ONBOARDING v3 — PRO ANIMATED POLISH ===================== */
+/* Ambient aurora glow behind every onboarding screen */
+.onb::before,.onb::after{content:'';position:absolute;border-radius:50%;pointer-events:none;z-index:0;}
+.onb::before{width:420px;height:420px;top:-150px;right:-150px;background:radial-gradient(circle,rgba(124,58,237,.20),transparent 65%);animation:onbAurora 9s ease-in-out infinite alternate;}
+.onb::after{width:380px;height:380px;bottom:-130px;left:-130px;background:radial-gradient(circle,rgba(79,142,247,.16),transparent 65%);animation:onbAurora 12s ease-in-out infinite alternate-reverse;}
+@keyframes onbAurora{from{transform:translate(0,0) scale(1);}to{transform:translate(-28px,22px) scale(1.18);}}
+.onb>*{position:relative;z-index:1;}
+.onb>.onb-particles{z-index:0;}
+
+/* Staggered screen entrance — every element rises in sequence */
+.onb.onb-enter>*{animation:onbRise .5s cubic-bezier(.22,1,.36,1) both;}
+.onb.onb-enter>*:nth-child(2){animation-delay:.05s}
+.onb.onb-enter>*:nth-child(3){animation-delay:.10s}
+.onb.onb-enter>*:nth-child(4){animation-delay:.15s}
+.onb.onb-enter>*:nth-child(5){animation-delay:.20s}
+.onb.onb-enter>*:nth-child(6){animation-delay:.25s}
+.onb.onb-enter>*:nth-child(7){animation-delay:.30s}
+.onb.onb-enter>*:nth-child(8){animation-delay:.35s}
+.onb.onb-enter>*:nth-child(9){animation-delay:.40s}
+.onb.onb-enter>.onb-particles,.onb.onb-exit>.onb-particles{animation:none;}
+@keyframes onbRise{from{opacity:0;transform:translateY(16px) scale(.985);}to{opacity:1;transform:translateY(0) scale(1);}}
+/* Smooth exit before the next screen renders */
+.onb.onb-exit>*{animation:onbSink .2s ease both;}
+@keyframes onbSink{to{opacity:0;transform:translateY(-10px) scale(.985);}}
+
+/* Shimmering gradient title */
+.onb-title{background:linear-gradient(110deg,var(--text) 20%,var(--primary) 40%,#F472B6 50%,var(--primary) 60%,var(--text) 80%);background-size:220% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:onbSheen 5.5s linear infinite;}
+@keyframes onbSheen{to{background-position:-220% center;}}
+
+/* Floating mascot with soft glow */
+.onb-mascot{animation:onbFloat 3.4s ease-in-out infinite;filter:drop-shadow(0 10px 26px rgba(124,58,237,.35));}
+.onb-mascot.pulse{animation:onbFloat 3.4s ease-in-out infinite,mascotPulse 2s ease-in-out infinite;}
+@keyframes onbFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
+
+/* CTA button — glow + shine sweep + press feedback */
+.onb-btn{position:relative;overflow:hidden;box-shadow:0 12px 32px rgba(124,58,237,.35);transition:transform .15s ease,box-shadow .25s ease;}
+.onb-btn:active{transform:scale(.97);box-shadow:0 6px 18px rgba(124,58,237,.30);}
+.onb-btn::after{content:'';position:absolute;top:0;left:-75%;width:45%;height:100%;background:linear-gradient(115deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg);animation:onbShine 3.4s ease-in-out infinite;}
+@keyframes onbShine{0%,60%{left:-75%;}85%,100%{left:135%;}}
+
+/* Choice rows — springy select feedback */
+.onb-row{transition:border-color .25s,background .25s,transform .2s,box-shadow .25s;}
+.onb-row:active{transform:scale(.98);}
+.onb-row.sel{box-shadow:0 8px 24px rgba(124,58,237,.20);animation:onbSelPop .3s cubic-bezier(.2,.9,.3,1.4);}
+@keyframes onbSelPop{0%{transform:scale(.97);}60%{transform:scale(1.02);}100%{transform:scale(1);}}
+
+/* Name input — focus glow */
+.onb-input{transition:border-color .25s,box-shadow .25s;}
+.onb-input:focus{box-shadow:0 0 0 4px rgba(124,58,237,.14);}
+
+/* Progress dots — glow on active */
+.onb-dot{transition:all .35s cubic-bezier(.2,.9,.3,1.3);}
+.onb-dot.active{box-shadow:0 0 10px rgba(124,58,237,.55);}
+
+/* Feature chips — gentle hover lift */
+.onb-feat{transition:transform .2s,box-shadow .2s;}
+.onb-feat:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(124,58,237,.15);}
+
+/* Brain-profile bars grow in after reveal */
+.onb.onb-enter .onb-pbar-fill{transform-origin:left;animation:onbBarGrow 1s cubic-bezier(.22,1,.36,1) .5s both;}
+@keyframes onbBarGrow{from{transform:scaleX(0);}to{transform:scaleX(1);}}
+
+/* Accessibility — respect reduced motion */
+@media (prefers-reduced-motion:reduce){
+  .onb::before,.onb::after,.onb-title,.onb-mascot,.onb-mascot.pulse,.onb-btn::after{animation:none;}
+  .onb.onb-enter>*,.onb.onb-exit>*,.onb.onb-enter .onb-pbar-fill{animation:none;}
+}

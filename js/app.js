@@ -71,7 +71,8 @@ const FRESH={
   nz_week_bs_start:0,nz_week_game_plays:{},
   nz_mastery:{},
   nz_brain_goal:'focus',nz_daily_goal_type:'balanced',nz_calib_done:false,
-  nz_game_plays:{}
+  nz_game_plays:{},
+  nz_ach2:{},nz_game_score_totals:{},nz_daily_ch_count:0
 };
 function S(k){return LS.get(k,FRESH[k])}
 function setS(k,v){LS.set(k,v)}
@@ -388,6 +389,11 @@ function awardScore(rawPts,skillKey,gameId,gameScore,starThresh,isPerfect){
   const gPlays=S('nz_game_plays');
   gPlays[gameId]=(gPlays[gameId]||0)+1;
   setS('nz_game_plays',gPlays);
+  /* Track per-game score totals so the Stats tab can show averages */
+  const gTot=S('nz_game_score_totals')||{};
+  const _gt=gTot[gameId]||{sum:0,n:0};
+  _gt.sum+=Math.max(0,gameScore||0);_gt.n++;
+  gTot[gameId]=_gt;setS('nz_game_score_totals',gTot);
 
   const prevLast=S('nz_last_played');
   const today=todayKey();
@@ -424,7 +430,7 @@ function awardScore(rawPts,skillKey,gameId,gameScore,starThresh,isPerfect){
     farmFactor:af<1?Math.round(af*100):null
   });
 
-  checkAchievements(gameId,gameScore);
+  /* Legacy achievement toasts superseded by ACH2 (checked in endGame) */
 
   const _st2=starThresh||[5,10,15];
   const _xpTiers={
@@ -442,6 +448,7 @@ function awardScore(rawPts,skillKey,gameId,gameScore,starThresh,isPerfect){
   if(dch&&gameId===dch.game&&!dailyDoneToday()&&dch.check(gameScore)){
     xpGain=Math.round(xpGain*1.5);
     setS('nz_daily_challenge_date',today);setS('nz_daily_challenge_done',true);setS('nz_daily_challenge_xp',xpGain);
+    setS('nz_daily_ch_count',(S('nz_daily_ch_count')||0)+1);
     setTimeout(()=>toast('🎯 Daily Challenge complete! Bonus XP!'),600);
   }
   const oldXp=S('nz_xp'),newXp=oldXp+xpGain;
@@ -762,6 +769,136 @@ const GAMES=[
 const CATS=['All','Memory','Focus','Logic','Speed','Reasoning'];
 let gamesFilter='All';
 
+/* ══════════ ACHIEVEMENT SYSTEM v2 — rarity + live progress ══════════
+   Every achievement computes progress LIVE from already-stored stats
+   (best scores, play counts, mastery, streak, Mind Trace stats), so no
+   game code changes are required. Unlocks award Brain Score + XP and
+   fire a premium unlock overlay. */
+const ACH_RARITY={
+  common:   {label:'Common',   reward:{bs:10,xp:15}},
+  rare:     {label:'Rare',     reward:{bs:15,xp:25}},
+  epic:     {label:'Epic',     reward:{bs:25,xp:40}},
+  legendary:{label:'Legendary',reward:{bs:40,xp:60}},
+  mythic:   {label:'Mythic',   reward:{bs:60,xp:100}},
+};
+function _gmet(id){return{best:(S('nz_best_scores')||{})[id]||0,plays:(S('nz_game_plays')||{})[id]||0,mast:getMastery(id).level};}
+function _mtStats(){try{return JSON.parse(localStorage.getItem('nz_mt_stats')||'{}')||{};}catch(e){return{};}}
+const _ACH_GAME_DEFS={
+  schulte:    {first:'First Focus',    t1:['Speed Reader',45],      t2:['Focus Master',70],   vet:['Table Regular',25],   mast:'Schulte Elite'},
+  memory:     {first:'Memory Seed',    t1:['Sharp Recall',20],      t2:['Memory Expert',35],  vet:['Grid Grinder',25],    mast:'Matrix Elite'},
+  pattern:    {first:'Pattern Rookie', t1:['Pattern Solver',8],     t2:['Pattern Legend',14], vet:['Logic Lover',25],     mast:'Pattern Elite'},
+  wordflash:  {first:'First Words',    t1:['Vocabulary Builder',12],t2:['Word Master',20],    vet:['Reader Regular',25],  mast:'Flash Elite'},
+  wordchain:  {first:'Chain Starter',  t1:['Chain x12',12],         t2:['Memory King',20],    vet:['Chain Regular',25],   mast:'Chain Elite'},
+  math:       {first:'First Numbers',  t1:['Mental Calculator',15], t2:['Math Wizard',22],    vet:['Number Cruncher',25], mast:'Math Elite'},
+  stroopx:    {first:'Color Rookie',   t1:['Color Master',30],      t2:['Stroop King',45],    vet:['Color Regular',25],   mast:'Stroop Elite'},
+  iqtest:     {first:'Brain Analyst',  t1:['Score A',110],          t2:['Score S',130],       vet:['Test Taker',5],       mast:'IQ Elite'},
+  reactionlab:{first:'First Reflex',   t1:['Quick Hands',25],       t2:['Lightning',40],      vet:['Reflex Regular',25],  mast:'Reaction Elite'},
+};
+const ACH2=[];
+Object.entries(_ACH_GAME_DEFS).forEach(([gid,d])=>{
+  const gName=(GAMES.find(g=>g.id===gid)||{}).name||gid;
+  ACH2.push(
+    {id:gid+'_first',game:gid,emoji:'🎮',title:d.first,desc:'Play '+gName+' for the first time',rarity:'common',target:1,prog:()=>_gmet(gid).plays},
+    {id:gid+'_t1',game:gid,emoji:'🏆',title:d.t1[0],desc:'Score '+d.t1[1]+'+ in '+gName,rarity:'rare',target:d.t1[1],prog:()=>_gmet(gid).best},
+    {id:gid+'_t2',game:gid,emoji:'👑',title:d.t2[0],desc:'Score '+d.t2[1]+'+ in '+gName,rarity:'epic',target:d.t2[1],prog:()=>_gmet(gid).best},
+    {id:gid+'_vet',game:gid,emoji:'🎯',title:d.vet[0],desc:'Play '+gName+' '+d.vet[1]+' times',rarity:'rare',target:d.vet[1],prog:()=>_gmet(gid).plays},
+    {id:gid+'_mast',game:gid,emoji:'💎',title:d.mast,desc:'Reach Mastery Lv 8 in '+gName,rarity:'legendary',target:8,prog:()=>_gmet(gid).mast}
+  );
+});
+/* Mind Trace — richer long-term stats available */
+ACH2.push(
+  {id:'mt_10',game:'mindtrace',emoji:'✏️',title:'One Stroke Beginner',desc:'Solve 10 Mind Trace puzzles',rarity:'common',target:10,prog:()=>_mtStats().puzzlesSolved||0},
+  {id:'mt_50',game:'mindtrace',emoji:'🏆',title:'Master Tracer',desc:'Solve 50 Mind Trace puzzles',rarity:'rare',target:50,prog:()=>_mtStats().puzzlesSolved||0},
+  {id:'mt_100',game:'mindtrace',emoji:'👑',title:'Trace Legend',desc:'Solve 100 Mind Trace puzzles',rarity:'epic',target:100,prog:()=>_mtStats().puzzlesSolved||0},
+  {id:'mt_perfect',game:'mindtrace',emoji:'✨',title:'Perfect Trace',desc:'Complete 25 perfect puzzles',rarity:'legendary',target:25,prog:()=>_mtStats().perfectPuzzles||0},
+  {id:'mt_combo',game:'mindtrace',emoji:'🔥',title:'Combo x10',desc:'Reach a 10x combo in one run',rarity:'epic',target:10,prog:()=>_mtStats().longestCombo||0}
+);
+/* Global achievements */
+ACH2.push(
+  {id:'g_streak7',game:'global',emoji:'🔥',title:'7 Day Streak',desc:'Train 7 days in a row',rarity:'rare',target:7,prog:()=>S('nz_streak')||0},
+  {id:'g_streak30',game:'global',emoji:'⚡',title:'30 Day Streak',desc:'Train 30 days in a row',rarity:'legendary',target:30,prog:()=>S('nz_streak')||0},
+  {id:'g_allgames',game:'global',emoji:'🗺️',title:'Explorer',desc:'Play every game at least once',rarity:'rare',target:10,prog:()=>GAMES.filter(g=>((S('nz_game_plays')||{})[g.id]||0)>0).length},
+  {id:'g_games100',game:'global',emoji:'🏃',title:'100 Games',desc:'Play 100 games in total',rarity:'epic',target:100,prog:()=>S('nz_games_played')||0},
+  {id:'g_games1000',game:'global',emoji:'🏅',title:'1000 Games',desc:'Play 1000 games in total',rarity:'mythic',target:1000,prog:()=>S('nz_games_played')||0},
+  {id:'g_bs1000',game:'global',emoji:'🧠',title:'Master Mind',desc:'Reach 1000 Brain Score',rarity:'rare',target:1000,prog:()=>S('nz_brain_score')||0},
+  {id:'g_bs5000',game:'global',emoji:'💎',title:'Sharp Mind',desc:'Reach 5000 Brain Score',rarity:'legendary',target:5000,prog:()=>S('nz_brain_score')||0},
+  {id:'g_bs10000',game:'global',emoji:'🌟',title:'Brain Master',desc:'Reach 10000 Brain Score',rarity:'mythic',target:10000,prog:()=>S('nz_brain_score')||0},
+  {id:'g_daily100',game:'global',emoji:'🎯',title:'Daily Devotee',desc:'Complete 100 daily challenges',rarity:'mythic',target:100,prog:()=>S('nz_daily_ch_count')||0},
+  {id:'g_legend',game:'global',emoji:'👑',title:'Legend Rank',desc:'Reach Level 10',rarity:'legendary',target:10,prog:()=>xpLevel(S('nz_xp')||0).cur.lv},
+  {id:'g_collect',game:'global',emoji:'🏆',title:'100% Collection',desc:'Unlock every other achievement',rarity:'mythic',target:1,prog:()=>{const u=S('nz_ach2')||{};return ACH2.filter(a=>a.id!=='g_collect').every(a=>u[a.id])?1:0;}}
+);
+let _achQueue=[],_achShowing=false;
+function _showNextAchUnlock(){
+  if(_achShowing||!_achQueue.length)return;
+  _achShowing=true;
+  const a=_achQueue.shift();
+  const r=ACH_RARITY[a.rarity]||ACH_RARITY.common;
+  playSound('achievement');confetti(60);
+  const ov=$(`<div class="ach2-unlock-ov">
+    <div class="ach2-unlock-card ach2-frame-${a.rarity}">
+      <div class="ach2-unlock-lbl">✨ ACHIEVEMENT UNLOCKED ✨</div>
+      <div class="ach2-unlock-badge ach2-frame-${a.rarity}"><span>${a.emoji}</span></div>
+      <div class="ach2-unlock-title">${a.title}</div>
+      <div class="ach2-unlock-desc">${a.desc}</div>
+      <div class="ach2-unlock-rarity ach2-txt-${a.rarity}">${r.label.toUpperCase()}</div>
+      <div class="ach2-unlock-reward">+${r.reward.bs} Brain Score · +${r.reward.xp} XP</div>
+      <div class="ach2-unlock-tap">Tap to continue</div>
+    </div>
+  </div>`);
+  document.body.appendChild(ov);
+  const close=()=>{ov.style.opacity='0';ov.style.transition='opacity .25s';setTimeout(()=>{ov.remove();_achShowing=false;_showNextAchUnlock();},260);};
+  ov.onclick=close;
+  setTimeout(()=>{if(document.body.contains(ov))close();},5000);
+}
+function checkAchievements2(){
+  const u=S('nz_ach2')||{};
+  const fresh=[];
+  ACH2.forEach(a=>{
+    if(u[a.id])return;
+    let p=0;try{p=a.prog()||0;}catch(e){}
+    if(p>=a.target){
+      u[a.id]=new Date().toISOString();
+      const r=ACH_RARITY[a.rarity]||ACH_RARITY.common;
+      setS('nz_brain_score',Math.max(0,S('nz_brain_score')+r.reward.bs));
+      setS('nz_xp',S('nz_xp')+r.reward.xp);
+      fresh.push(a);
+    }
+  });
+  if(!fresh.length)return;
+  setS('nz_ach2',u);
+  if(fresh.length>3){
+    /* Bulk grant (e.g. veteran player's first visit) — one toast, no spam */
+    playSound('achievement');confetti(80);
+    toast('🏆 '+fresh.length+' achievements unlocked!');
+  }else{
+    fresh.forEach(a=>_achQueue.push(a));
+    _showNextAchUnlock();
+  }
+}
+function showAchDetail(a){
+  const u=S('nz_ach2')||{};
+  const r=ACH_RARITY[a.rarity]||ACH_RARITY.common;
+  let p=0;try{p=a.prog()||0;}catch(e){}
+  const done=!!u[a.id];
+  const pct=done?100:Math.min(100,Math.round(p/a.target*100));
+  const dt=done?new Date(u[a.id]):null;
+  const bg=$(`<div class="modal-bg"></div>`);
+  const box=$(`<div class="modal-box ach2-detail">
+    <div class="ach2-unlock-badge ach2-frame-${a.rarity} ${done?'':'ach2-locked'}"><span>${a.emoji}</span></div>
+    <h3>${a.title}</h3>
+    <div class="ach2-unlock-rarity ach2-txt-${a.rarity}">${r.label.toUpperCase()}</div>
+    <p>${a.desc}</p>
+    <div class="ach2-bar"><div class="ach2-fill ach2-fill-${a.rarity}" style="width:${pct}%"></div></div>
+    <div class="ach2-detail-prog">${done?'✅ Unlocked':Math.min(p,a.target)+' / '+a.target+' · '+pct+'%'}</div>
+    <div class="ach2-detail-reward">Reward: +${r.reward.bs} Brain Score · +${r.reward.xp} XP</div>
+    ${dt?`<div class="ach2-detail-date">Unlocked on ${dt.toLocaleDateString()}</div>`:''}
+    <button class="modal-btn primary">Close</button>
+  </div>`);
+  bg.appendChild(box);document.body.appendChild(bg);
+  bg.onclick=e=>{if(e.target===bg)bg.remove();};
+  box.querySelector('button').onclick=()=>bg.remove();
+}
+
 function renderGames(){
   const p=$(`<div></div>`);
   p.innerHTML=`
@@ -873,6 +1010,7 @@ function openGame(id,wkCtx){
     if(isRec){best[id]=recVal;setS('nz_best_scores',best);}
     const pts=awardScore(Math.max(2,opts.points||2),g.skill,id,opts.value,opts.starThresh);
     const mResult=awardMastery(id,opts.value,opts.starThresh);
+    try{checkAchievements2();}catch(e){}
     playSound('complete');
     const starThresh=opts.starThresh||[5,10,15];
     const stars=opts.value>=starThresh[2]?3:opts.value>=starThresh[1]?2:opts.value>=starThresh[0]?1:0;
@@ -977,6 +1115,20 @@ function renderProgress(){
     hDays.push({label:_dow7[_d.getDay()],short:_short7[_d.getDay()],isToday:_i===0});
   }
   const delta=h[h.length-1]-(h[h.length-2]||0);
+  /* Passively grant achievements already earned from stored stats */
+  try{checkAchievements2();}catch(e){}
+  /* Day-by-day gains for weekly stats */
+  const _gains7=[];
+  for(let _gi=1;_gi<h.length;_gi++)_gains7.push(Math.max(0,h[_gi]-h[_gi-1]));
+  const _activeG=_gains7.filter(v=>v>0);
+  const _dAvg=_gains7.length?Math.round(_gains7.reduce((a,b)=>a+b,0)/_gains7.length):0;
+  const _dHi=_gains7.length?Math.max(..._gains7):0;
+  const _dLo=_activeG.length?Math.min(..._activeG):0;
+  const _score0=S('nz_brain_score');
+  const _todayGain=Math.max(0,h[6]-(h[5]||0));
+  const _weekGain=Math.max(0,_score0-(S('nz_week_bs_start')||0));
+  const _rankLadder=[[500,'Novice'],[1200,'Learner'],[2200,'Focused'],[3500,'Sharp Mind'],[5000,'Analytical'],[6500,'Strategist'],[8000,'Brain Master'],[9000,'Neuro Elite'],[9800,'Legend']];
+  const _nextRank=_rankLadder.find(r=>_score0<r[0]);
   p.innerHTML=`
     <div class="hdr"><div><div class="greet">Track your gains</div><h1>Your Progress</h1></div></div>
     <div class="card line-chart-wrap">
@@ -985,11 +1137,23 @@ function renderProgress(){
         <span style="font-size:12px;color:${delta>=0?'var(--mint)':'#EF4444'};font-weight:600;">${delta>=0?'↗':'-'} ${Math.abs(delta)}</span>
       </div>
       <div id="lineChart"></div>
+      <div class="pg-mini-grid">
+        <div><span>+${_dAvg}</span><small>Daily Avg</small></div>
+        <div><span>+${_dHi}</span><small>Highest Day</small></div>
+        <div><span>+${_dLo}</span><small>Lowest Day</small></div>
+      </div>
+    </div>
+    <div class="pg-gain-grid">
+      <div class="pg-gain"><div class="v">+${_todayGain}</div><div class="l">Today's Gain</div></div>
+      <div class="pg-gain"><div class="v">+${_weekGain}</div><div class="l">Weekly Gain</div></div>
+      <div class="pg-gain">${_nextRank?`<div class="v">${_nextRank[1]}</div><div class="l">Next Rank · ${_nextRank[0]-_score0} left</div>`:`<div class="v">👑 Max</div><div class="l">Highest Rank</div>`}</div>
     </div>
     <div class="sec-title"><h2>Skills Breakdown</h2></div>
     <div class="card" style="padding:18px;">
       <div id="skillBarsP"></div>
     </div>
+    <div class="sec-title"><h2>Top Games</h2></div>
+    <div class="card pg-topgames" id="topGamesP"></div>
     <div class="cmp-card" style="margin-top:16px;">
       ${(()=>{
         const _sc=S('nz_brain_score');
@@ -1005,32 +1169,87 @@ function renderProgress(){
     <div class="pill-row">
       <div class="pill"><div class="v">${S('nz_games_played')}</div><div class="l">Games</div></div>
       <div class="pill"><div class="v">${S('nz_streak')}</div><div class="l">Day Streak</div></div>
-      <div class="pill"><div class="v">${S('nz_achievements').length}</div><div class="l">Achievements</div></div>
+      <div class="pill"><div class="v">${Object.keys(S('nz_ach2')||{}).length}</div><div class="l">Achievements</div></div>
     </div>
-    <div class="sec-title"><h2>Achievements</h2></div>
-    <div class="card"><div class="ach-grid" id="achGrid"></div></div>
+    <div class="sec-title"><h2>Achievements</h2><span class="pg-ach-count" id="achCount"></span></div>
+    <div id="ach2List"></div>
   `;
   const sk=S('nz_skill_scores');const skPrev=S('nz_skill_scores_prev');
   const skBars=p.querySelector('#skillBarsP');
+  /* Distinct colour per skill — instantly readable */
+  const _skCols={memory:'#7C3AED',focus:'#4F8EF7',logic:'#34D399',speed:'#F97316',planning:'#FBBF24',attention:'#F472B6'};
   Object.entries({Memory:'memory',Focus:'focus',Logic:'logic',Speed:'speed',Planning:'planning',Attention:'attention'}).forEach(([label,key])=>{
     const val=sk[key]||0;const prev=skPrev[key]||0;const diff=val-prev;
+    const col=_skCols[key]||'#7C3AED';
     const row=$(`<div class="skill-bar-row">
       <div class="skill-bar-label">${label}</div>
-      <div class="skill-bar-bg"><div class="skill-bar-fill" style="width:0%"></div></div>
+      <div class="skill-bar-bg"><div class="skill-bar-fill" style="width:0%;background:linear-gradient(90deg,${col},${col}cc);"></div></div>
       <div class="skill-bar-val">${val}${diff>0?`<span style="font-size:10px;color:var(--mint)"> +${diff}</span>`:''}</div>
     </div>`);
     skBars.appendChild(row);
     setTimeout(()=>{row.querySelector('.skill-bar-fill').style.width=val+'%';},80);
   });
-  const unlocked=S('nz_achievements');
-  const achGrid=p.querySelector('#achGrid');
-  ACHIEVEMENTS.forEach(a=>{
-    const isUnlocked=unlocked.includes(a.id);
-    const el=$(`<div class="ach ${isUnlocked?'unlocked':'locked'}">
-      <div class="ach-em">${a.emoji}</div>
-      <div class="ach-lbl">${a.title}</div>
+  /* ── Top Games: best / avg / plays / mastery ── */
+  const _tgHost=p.querySelector('#topGamesP');
+  if(_tgHost){
+    const _tot=S('nz_game_score_totals')||{};
+    const _bs2=S('nz_best_scores')||{};
+    const _gp2=S('nz_game_plays')||{};
+    const _tg=Object.keys(_bs2).map(id=>{
+      const g=GAMES.find(x=>x.id===id);if(!g)return null;
+      const t=_tot[id]||{sum:0,n:0};
+      return{g,best:_bs2[id],avg:t.n?Math.round(t.sum/t.n):null,plays:_gp2[id]||0,mast:getMastery(id).level};
+    }).filter(Boolean).sort((a,b)=>b.best-a.best).slice(0,5);
+    if(!_tg.length)_tgHost.innerHTML='<div style="text-align:center;padding:14px;color:var(--text2);font-size:13px;">Play games to see your top scores!</div>';
+    else _tg.forEach((r,i)=>{
+      _tgHost.appendChild($(`<div class="pg-tg-row">
+        <div class="pg-tg-rank">#${i+1}</div>
+        <div class="pg-tg-icon" style="background:${r.g.iconBg}">${r.g.icon}</div>
+        <div class="pg-tg-main">
+          <div class="pg-tg-name">${r.g.name}</div>
+          <div class="pg-tg-chips">
+            <span>🏆 Best ${r.best}</span>
+            ${r.avg!=null?`<span>📊 Avg ${r.avg}</span>`:''}
+            <span>🎮 ${r.plays}×</span>
+            <span>${getMasteryBadge(r.mast)||'💠'} Lv ${r.mast}</span>
+          </div>
+        </div>
+      </div>`));
+    });
+  }
+  /* ── Achievements v2: grouped, rarity frames, live progress ── */
+  const _u2=S('nz_ach2')||{};
+  const achHost=p.querySelector('#ach2List');
+  const _cnt=p.querySelector('#achCount');
+  if(_cnt)_cnt.textContent=ACH2.filter(a=>_u2[a.id]).length+' / '+ACH2.length;
+  const _groups=[{id:'global',name:'🌍 Global'}].concat(GAMES.map(g=>({id:g.id,name:g.icon+' '+g.name})));
+  _groups.forEach((gr,gi)=>{
+    const list=ACH2.filter(a=>a.game===gr.id);
+    if(!list.length)return;
+    const done=list.filter(a=>_u2[a.id]).length;
+    const sec=$(`<div class="ach2-group${gi===0?' open':''}">
+      <div class="ach2-group-hd"><span>${gr.name}</span><span style="display:flex;align-items:center;gap:8px;"><span class="ach2-group-count">${done}/${list.length}</span><span class="ach2-chev">▾</span></span></div>
+      <div class="ach2-rows"></div>
     </div>`);
-    achGrid.appendChild(el);
+    sec.querySelector('.ach2-group-hd').onclick=()=>{playSound('tap');sec.classList.toggle('open');};
+    const rows=sec.querySelector('.ach2-rows');
+    list.forEach(a=>{
+      let pv=0;try{pv=a.prog()||0;}catch(e){}
+      const isU=!!_u2[a.id];
+      const pct=isU?100:Math.min(100,Math.round(pv/a.target*100));
+      const row=$(`<div class="ach2-row ${isU?'unlocked':''}">
+        <div class="ach2-badge ach2-frame-${a.rarity} ${isU?'':'ach2-locked'}"><span>${a.emoji}</span></div>
+        <div class="ach2-info">
+          <div class="ach2-title">${a.title}${isU?' <span class="ach2-check">✓</span>':''}</div>
+          <div class="ach2-desc">${a.desc}</div>
+          <div class="ach2-bar"><div class="ach2-fill ach2-fill-${a.rarity}" style="width:${pct}%"></div></div>
+        </div>
+        <div class="ach2-prog">${isU?'✅':Math.min(pv,a.target)+'/'+a.target}</div>
+      </div>`);
+      row.onclick=()=>{playSound('tap');showAchDetail(a);};
+      rows.appendChild(row);
+    });
+    achHost.appendChild(sec);
   });
   setTimeout(()=>{
     drawLineChart(p.querySelector('#lineChart'),h,hDays);
@@ -1498,8 +1717,9 @@ function renderProfile(){
     .map(([id,v])=>{const g=GAMES.find(x=>x.id===id);return g?{name:g.name,icon:g.icon,v:v,color:g.color}:null;})
     .filter(Boolean)
     .sort((a,b)=>b.v-a.v).slice(0,3);
-  /* Last 3 unlocked achievements */
-  const recentAch=ACHIEVEMENTS.filter(a=>ach.includes(a.id)).slice(-3);
+  /* Last 3 unlocked achievements (ACH2 system, newest first) */
+  const _u2p=S('nz_ach2')||{};
+  const recentAch=ACH2.filter(a=>_u2p[a.id]).sort((x,y)=>_u2p[x.id]<_u2p[y.id]?1:-1).slice(0,3);
   /* Last 7 Days — date-keyed history */
   const _dailyH=S('nz_daily_history')||{};
   // build array for last 7 calendar days (oldest→newest)
@@ -1674,15 +1894,28 @@ function showModal(type){
   bg.onclick=e=>{if(e.target===bg)bg.remove();};
   box.querySelector('.modal-btn.primary,#cancelLogout')?.addEventListener('click',()=>bg.remove());
   box.querySelector('#confirmLogout')?.addEventListener('click',()=>{
+    /* Stop everything BEFORE clearing data — stale timers, audio and DOM
+       from the old session were freezing the app after a reset */
+    try{stopRelaxAudio();}catch(e){}
+    try{_clearAllTimers();}catch(e){}
+    document.querySelectorAll('.game-screen').forEach(el=>{try{el.dispatchEvent(new Event('remove_game'));}catch(e){}el.remove();});
     LS.clear('nz_');
     bg.remove();
     toast('Progress reset. Starting fresh!');
-    setTimeout(()=>init(),300);
+    /* Full reload guarantees a 100% clean state — no orphaned listeners,
+       timers or audio nodes can survive into the fresh onboarding */
+    setTimeout(()=>{try{location.reload();}catch(e){init();}},350);
   });
 }
 
 /* ===================== ONBOARDING (premium 7-screen + calibration) ===================== */
 function showOnboarding(){
+  /* Defensive cleanup — remove any stale UI so onboarding never renders
+     behind an old page or fights orphaned timers (post-reset safety) */
+  try{_clearAllTimers();}catch(e){}
+  document.querySelectorAll('.onb,.game-screen,.modal-bg,.wo-transition').forEach(el=>el.remove());
+  const _appEl=document.getElementById('app');
+  if(_appEl)_appEl.innerHTML='';
   const onb=$(`<div class="onb" id="onbScreen"></div>`);
   document.body.appendChild(onb);
 
@@ -1716,8 +1949,15 @@ function showOnboarding(){
   }
 
   function go(fn){
-    onb.style.cssText='opacity:0;transform:translateY(12px);transition:none';
-    _st(()=>{fn();onb.style.cssText='opacity:1;transform:translateY(0);transition:opacity .25s,transform .25s';},220);
+    playSound('tap');
+    onb.classList.remove('onb-enter');
+    onb.classList.add('onb-exit');
+    _st(()=>{
+      try{fn();}catch(e){}
+      onb.classList.remove('onb-exit');
+      void onb.offsetWidth;          /* restart the staggered entrance */
+      onb.classList.add('onb-enter');
+    },230);
   }
 
   /* ── SCREEN 1: Welcome ── */
@@ -1742,6 +1982,7 @@ function showOnboarding(){
   /* ── SCREEN 2: Name ── */
   function s1(){
     onb.innerHTML=
+      makeParticles(10)+
       '<div class="onb-mascot">😊</div>'+
       '<h1 class="onb-title">What should we<br>call you?</h1>'+
       '<p class="onb-sub">We\'ll personalize your training experience.</p>'+
@@ -1771,6 +2012,7 @@ function showOnboarding(){
       {id:'relax', icon:'😌',label:'Relax Mind',      sub:'Reduce stress, improve clarity'},
     ];
     onb.innerHTML=
+      makeParticles(10)+
       '<div class="onb-mascot">🎯</div>'+
       '<h1 class="onb-title">What\'s your<br>primary goal?</h1>'+
       '<p class="onb-sub">We\'ll personalize your training plan.</p>'+
@@ -1796,6 +2038,7 @@ function showOnboarding(){
       {id:'intensive',icon:'🔥',label:'Intensive',sub:'15 min · 5 games/day',   g:5},
     ];
     onb.innerHTML=
+      makeParticles(10)+
       '<div class="onb-mascot">⏱️</div>'+
       '<h1 class="onb-title">Choose your<br>daily training</h1>'+
       '<p class="onb-sub">How much time can you commit each day?</p>'+
@@ -1989,6 +2232,7 @@ function showOnboarding(){
   }
 
   s0();
+  onb.classList.add('onb-enter');
 }
 
 

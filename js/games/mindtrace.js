@@ -380,6 +380,24 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
      CANVAS
      ================================================================= */
   let canvas, ctx, animId=null, CW=320, CH=320, DPR=1;
+  let destroyed = false;
+  let onResizeHandler = null;
+  const pendingTimeouts = new Set();
+
+  // setTimeout wrapper that is auto-cancelled when the game is removed,
+  // preventing stale callbacks from touching a dead DOM.
+  function safeTimeout(fn, ms) {
+    const id = setTimeout(() => {
+      pendingTimeouts.delete(id);
+      if (!destroyed) fn();
+    }, ms);
+    pendingTimeouts.add(id);
+    return id;
+  }
+  function clearAllTimeouts() {
+    pendingTimeouts.forEach(id => clearTimeout(id));
+    pendingTimeouts.clear();
+  }
 
   function ek(a,b){return a<b?`${a}-${b}`:`${b}-${a}`;}
 
@@ -437,6 +455,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
   }
 
   function roundRect(x,y,w,h,r) {
+    r = Math.max(0, Math.min(r, w/2, h/2));
     ctx.beginPath();
     ctx.moveTo(x+r,y);
     ctx.lineTo(x+w-r,y);
@@ -497,12 +516,12 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       const barW = CW-28, barH = 6, barX = 14, barY = 12;
       ctx.save();
       ctx.fillStyle = 'rgba(255,255,255,0.08)';
-      ctx.beginPath(); ctx.roundRect(barX,barY,barW,barH,3); ctx.fill();
+      roundRect(barX,barY,barW,barH,3); ctx.fill();
       const c = pct>0.6 ? '#7C3AED' : pct>0.3 ? '#F59E0B' : '#EF4444';
       ctx.shadowColor = c;
       ctx.shadowBlur = pct<0.3 ? 10 : 5;
       ctx.fillStyle = c;
-      ctx.beginPath(); ctx.roundRect(barX,barY,barW*pct,barH,3); ctx.fill();
+      if (barW*pct > 1) { roundRect(barX,barY,barW*pct,barH,3); ctx.fill(); }
       if (G.phase==='play' && G.timeLeft<5) {
         ctx.shadowBlur = 0;
         ctx.fillStyle = '#F87171';
@@ -696,14 +715,47 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
   /* =================================================================
      POINTER EVENTS
      ================================================================= */
+  let lastPX = null, lastPY = null;
+
   function getXY(e) {
     const rect = canvas.getBoundingClientRect();
     const src = e.touches ? e.touches[0] : e;
     return [src.clientX - rect.left, src.clientY - rect.top];
   }
+
+  // Attempt to visit the node nearest to (px,py). Returns false when the
+  // puzzle completes or the phase changes (stops further interpolation).
+  function tryVisit(px, py, snap) {
+    const ni = nearestNode(px, py, snap);
+    if (ni === -1 || ni === G.currentNode) return true;
+
+    const prev = G.currentNode;
+    if (!edgeExists(prev, ni)) { G.failAlpha = 0.7; return true; }
+    const key = ek(prev, ni);
+    if (G.tracedEdges.has(key)) { G.failAlpha = 0.7; return true; }
+
+    G.tracedEdges.add(key);
+    G.path.push(ni);
+    G.currentNode = ni;
+    G.visitedNodes.add(ni);
+
+    // small node-hit sparkle
+    const [nx, ny] = nodePos(ni);
+    spawnParticles(nx, ny, '#A7F3D0', 4, {speed:[1,2.5], life:0.4, r:1.5, rjit:1.5, lift:0.6});
+    if (typeof haptic === 'function') haptic(10);
+
+    checkCompletion();
+    return G.phase === 'play';
+  }
+
   function onDown(e) {
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     if (G.phase!=='play') return;
+    // Capture the pointer so tracing keeps working even when the finger
+    // briefly leaves the canvas — no more accidental "lifted" fails.
+    if (canvas.setPointerCapture && e.pointerId !== undefined) {
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    }
     const snap = G.type==='precision' ? CFG.snap*0.55 : CFG.snap;
     const [px,py] = getXY(e);
     const ni = nearestNode(px,py, snap);
@@ -715,9 +767,11 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     G.currentNode = ni;
     G.visitedNodes = new Set([ni]);
     G.hintNodes = [];
+    lastPX = px; lastPY = py;
   }
+
   function onMove(e) {
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     if (!G.drawing || G.phase!=='play') return;
     const snap = G.type==='precision' ? CFG.snap*0.55 : CFG.snap;
     const [px,py] = getXY(e);
@@ -725,56 +779,60 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     // trail particles
     if (Math.random() < 0.35) trailParticle(px,py);
 
-    const ni = nearestNode(px,py, snap);
-    if (ni===-1 || ni===G.currentNode) return;
-
-    const prev = G.currentNode;
-    if (!edgeExists(prev,ni)) { G.failAlpha = 0.7; return; }
-    const key = ek(prev,ni);
-    if (G.tracedEdges.has(key)) {
-      G.failAlpha = 0.7;
-      return;
+    // Interpolate between the previous and current pointer position so a
+    // fast swipe cannot skip over intermediate nodes.
+    const fromX = lastPX === null ? px : lastPX;
+    const fromY = lastPY === null ? py : lastPY;
+    const dist = Math.hypot(px - fromX, py - fromY);
+    const steps = Math.max(1, Math.ceil(dist / Math.max(6, CFG.nodeR * 0.7)));
+    for (let s = 1; s <= steps; s++) {
+      const ix = fromX + (px - fromX) * s / steps;
+      const iy = fromY + (py - fromY) * s / steps;
+      if (!tryVisit(ix, iy, snap)) break;
     }
-
-    G.tracedEdges.add(key);
-    G.path.push(ni);
-    G.currentNode = ni;
-    G.visitedNodes.add(ni);
-
-    // small node-hit sparkle
-    const [nx,ny] = nodePos(ni);
-    spawnParticles(nx,ny,'#A7F3D0', 4, {speed:[1,2.5], life:0.4, r:1.5, rjit:1.5, lift:0.6});
-
-    if (typeof haptic === 'function') haptic(10);
-    checkCompletion();
+    lastPX = px; lastPY = py;
   }
+
   function onUp(e) {
-    e.preventDefault();
+    if (e && e.cancelable) e.preventDefault();
+    lastPX = lastPY = null;
     if (!G.drawing || G.phase!=='play') return;
     G.drawing = false;
-    G.drawTimes.push(Date.now() - G.drawStart);
 
     if (G.tracedEdges.size > 0) {
       const done = G.puzzle.edges.every(([a,b]) => G.tracedEdges.has(ek(a,b)));
       if (!done) handleWrong('Lifted too early!');
+    } else {
+      // Nothing traced yet — allow a fresh start without penalty
+      resetDraw(false);
     }
   }
+
   function bindPointer() {
-    canvas.addEventListener('touchstart', onDown, {passive:false});
-    canvas.addEventListener('touchmove',  onMove, {passive:false});
-    canvas.addEventListener('touchend',   onUp,   {passive:false});
-    canvas.addEventListener('touchcancel',onUp,   {passive:false});
-    canvas.addEventListener('mousedown',  onDown);
-    canvas.addEventListener('mousemove',  e=>{ if (G.drawing) onMove(e); });
-    canvas.addEventListener('mouseup',    onUp);
-    canvas.addEventListener('mouseleave', e=>{ if (G.drawing) onUp(e); });
+    if (window.PointerEvent) {
+      // Unified pointer events: mouse, touch and pen with capture support
+      canvas.addEventListener('pointerdown',   onDown);
+      canvas.addEventListener('pointermove',   onMove);
+      canvas.addEventListener('pointerup',     onUp);
+      canvas.addEventListener('pointercancel', onUp);
+    } else {
+      canvas.addEventListener('touchstart', onDown, {passive:false});
+      canvas.addEventListener('touchmove',  onMove, {passive:false});
+      canvas.addEventListener('touchend',   onUp,   {passive:false});
+      canvas.addEventListener('touchcancel',onUp,   {passive:false});
+      canvas.addEventListener('mousedown',  onDown);
+      canvas.addEventListener('mousemove',  e=>{ if (G.drawing) onMove(e); });
+      canvas.addEventListener('mouseup',    onUp);
+      canvas.addEventListener('mouseleave', e=>{ if (G.drawing) onUp(e); });
+    }
   }
 
   /* =================================================================
      TIMERS
      ================================================================= */
   function stopPuzzleTimer() {
-    if (G.puzzleTimer) { clearInterval(G.puzzleTimer); G.puzzleTimer=null; }
+    if (G.puzzleTimer)  { clearInterval(G.puzzleTimer); G.puzzleTimer=null; }
+    if (G.planTimeout)  { clearTimeout(G.planTimeout);  G.planTimeout=null; }
   }
   function startPuzzleTimer() {
     stopPuzzleTimer();
@@ -797,16 +855,19 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     G.phase = 'plan';
     showPop('👁 Plan your route', '#F59E0B', 900);
 
-    setTimeout(() => {
-      if (G.phase !== 'plan') return;
+    G.planTimeout = setTimeout(() => {
+      G.planTimeout = null;
+      if (destroyed || G.phase !== 'plan') return;
       G.phase = 'play';
       G.planStart = Date.now();
       G.puzzleStart = Date.now();
+      // Timestamp-based countdown — immune to setInterval drift
+      const startTs = Date.now();
       G.puzzleTimer = setInterval(() => {
+        if (destroyed) { stopPuzzleTimer(); return; }
         if (G.phase !== 'play') return;
-        G.timeLeft -= 0.1;
+        G.timeLeft = Math.max(0, G.totalTime - (Date.now() - startTs) / 1000);
         if (G.timeLeft <= 0) {
-          G.timeLeft = 0;
           stopPuzzleTimer();
           handleWrong('Time up! ⏱');
         }
@@ -860,10 +921,12 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
   function handleCorrect() {
     G.phase = 'success';
     G.successAnim = 0;
+    G.drawing = false;
     stopPuzzleTimer();
     const drawMs = Date.now() - (G.drawStart || Date.now());
-    const planMs = G.drawStart - G.planStart;
-    G.totalPlanMs += Math.max(0, planMs);
+    const planMs = Math.max(0, G.drawStart - G.planStart);
+    G.drawTimes.push(drawMs);   // record successful solves for stats
+    G.totalPlanMs += planMs;
     G.correctAnswers++;
     G.combo++;
     G.streak++;
@@ -887,7 +950,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     showComboPop(bd);
     updateHUD();
 
-    setTimeout(() => { G.phase = 'play'; nextPuzzle(); }, 950);
+    safeTimeout(() => nextPuzzle(), 950);
   }
 
   function updateDaily() {
@@ -906,6 +969,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
   function handleWrong(reason) {
     if (G.phase !== 'play') return;
     G.phase = 'fail';
+    G.drawing = false;
     G.lives--;
     G.streak = 0;
     G.combo = 0;
@@ -918,9 +982,9 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     updateHUD();
 
     if (G.lives <= 0) {
-      setTimeout(() => { stopLoop(); gameOver(); }, 950);
+      safeTimeout(() => { stopLoop(); gameOver(); }, 950);
     } else {
-      setTimeout(() => { G.phase = 'play'; resetDraw(false); startPuzzleTimer(); }, 900);
+      safeTimeout(() => { resetDraw(false); startPuzzleTimer(); }, 900);
     }
   }
 
@@ -939,6 +1003,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
      NEXT PUZZLE
      ================================================================= */
   function nextPuzzle() {
+    if (destroyed) return;
     if (G.lives <= 0) { stopLoop(); gameOver(); return; }
     G.round++;
     G.tracedEdges = new Set();
@@ -1168,6 +1233,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
   }
 
   function gameOver() {
+    if (destroyed) return;
     const A = computeAnalysis();
     const saved = mergeStats(G);
     const isNewHighRound = G.round >= (saved.highRound||0);
@@ -1257,11 +1323,12 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       showPop('↺ Restarted', '#F59E0B');
     };
 
-    // Handle resize (rotation)
+    // Handle resize (rotation) — handler is removed on cleanup
     let resizeTimer;
-    window.addEventListener('resize', () => {
+    onResizeHandler = () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
+        if (destroyed) return;
         const boardEl = document.getElementById('mt3Board');
         if (!boardEl) return;
         const newSize = computeBoardSize();
@@ -1272,7 +1339,8 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
         boardEl.appendChild(canvas);
         bindPointer();
       }, 220);
-    });
+    };
+    window.addEventListener('resize', onResizeHandler);
 
     startLoop();
     nextPuzzle();
@@ -1284,8 +1352,13 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
      A tiny canvas that continuously solves random small graphs.
      ================================================================= */
   function startAnimatedDemo(demoCanvas) {
+    // Render crisp on high-DPI (retina) screens
+    const dpr = window.devicePixelRatio || 1;
     const size = demoCanvas.width;
+    demoCanvas.width  = size * dpr;
+    demoCanvas.height = size * dpr;
     const dctx = demoCanvas.getContext('2d');
+    dctx.scale(dpr, dpr);
     let demo = null;
     let solveOrder = [];
     let progress = 0;
@@ -1523,7 +1596,13 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
 
   // Clean up demo if user backs out
   wrap.addEventListener('remove_game', () => {
+    destroyed = true;
     try { stopDemo(); } catch(e){}
     try { stopLoop(); } catch(e){}
+    try { clearAllTimeouts(); } catch(e){}
+    if (onResizeHandler) {
+      window.removeEventListener('resize', onResizeHandler);
+      onResizeHandler = null;
+    }
   });
 }
