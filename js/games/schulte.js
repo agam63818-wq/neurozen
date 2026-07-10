@@ -600,7 +600,7 @@ function playSchulte(body,setScore,end,wrap,startClock){
         _trackT(_st(()=>toast('\uD83C\uDFAF Daily Challenge complete! 2x XP'),700));
       }
       const focusScore=Math.min(100,Math.max(10,Math.round(reached*8+ctx.endlessScore*0.3)));
-      const pts=focusScore>=85?48:focusScore>=65?32:focusScore>=40?20:10;
+      const pts=focusScore>=85?13:focusScore>=65?10:focusScore>=40?7:4;
       end({
         title:'\u267E\uFE0F Endless Run',emoji:'\u267E\uFE0F',
         sub:'Round '+reached+' \u00B7 Score '+ctx.endlessScore+(newPB?' \u00B7 \uD83C\uDFC6 New Best!':''),
@@ -647,7 +647,7 @@ function playSchulte(body,setScore,end,wrap,startClock){
           _trackT(_st(()=>toast('\uD83C\uDFAF Daily Challenge complete! 2x XP'),700));
         }
       }
-      const pts=focusScore>=85?48:focusScore>=65?32:focusScore>=40?20:10;
+      const pts=focusScore>=85?13:focusScore>=65?10:focusScore>=40?7:4;
       end({
         title:rating.emoji+' '+rating.text,emoji:rating.emoji,
         sub:secsR+'s \u00B7 '+m.emoji+' '+m.label+' Mode',

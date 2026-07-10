@@ -1226,7 +1226,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
 
     end({
       value: G.score,
-      points: G.score >= 120 ? 55 : G.score >= 70 ? 40 : G.score >= 30 ? 22 : 8,
+      points: G.score >= 120 ? 15 : G.score >= 70 ? 12 : G.score >= 30 ? 9 : 5,
       starThresh: [30, 70, 120],
       summary: statsHtml
     });

@@ -249,7 +249,7 @@ function playReactionLab(body,setScore,end,wrap,startClock){
       }).join('');
       const chartSvg=last.length?`<svg width="${pw}" height="${ph+14}" viewBox="0 0 ${pw} ${ph+14}" style="display:block;margin:0 auto;overflow:visible;">${bars}</svg>`:'<div style="font-size:11px;color:var(--text2);">No timed taps yet</div>';
       const rank=rlRank(avg||999);
-      const xp=finalRound>=30?45:finalRound>=20?30:finalRound>=10?18:8;
+      const xp=finalRound>=30?11:finalRound>=20?9:finalRound>=10?7:4;
       setScore(score);
       if(newPB)confetti(50);
       end({

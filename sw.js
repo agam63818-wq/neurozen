@@ -1,4 +1,4 @@
-const CACHE_NAME = 'neurozen-v5';
+const CACHE_NAME = 'neurozen-v7';
 const CORE_ASSETS = [
   '/',
   '/index.html',

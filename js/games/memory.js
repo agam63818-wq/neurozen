@@ -401,7 +401,7 @@ function playMemory(body,setScore,end,wrap,startClock){
       end({
         title:`${rank.em} ${rank.txt}`,emoji:rank.em,
         sub:`Round ${finalRound} · ${m.emoji} ${m.label} Mode${newPB?' · 🏆 New Best!':''}`,
-        value:finalRound,points:finalRound>=20?45:finalRound>=12?30:finalRound>=6?18:8,starThresh:[6,12,20],
+        value:finalRound,points:finalRound>=20?14:finalRound>=12?11:finalRound>=6?8:4,starThresh:[6,12,20],
         statsHtml:`<div class="end-stats">
           <div class="row"><span>Round Reached</span><span class="val">${finalRound}</span></div>
           <div class="row"><span>Personal Best</span><span class="val">${Math.max(finalRound,prevBest)}${newPB?' 🏆':''}</span></div>

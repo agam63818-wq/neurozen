@@ -56,13 +56,18 @@ const LS={
 const FRESH={
   nz_brain_score:0,nz_streak:0,nz_games_played:0,nz_today_goal:3,
   nz_dark_mode:false,
-  nz_achievements:[],nz_skill_scores:{memory:0,focus:0,logic:0,speed:0},
-  nz_skill_scores_prev:{memory:0,focus:0,logic:0,speed:0},
+  nz_achievements:[],
+  nz_skill_scores:{memory:0,focus:0,logic:0,speed:0,planning:0,attention:0},
+  nz_skill_scores_prev:{memory:0,focus:0,logic:0,speed:0,planning:0,attention:0},
   nz_best_scores:{},nz_last_played:null,
   nz_settings:{reminders:true,sfx:true,notifications:true},
   nz_onboarded:false,nz_username:'Player',
   nz_schulte_level:0,nz_today_games:0,
   nz_xp:0,nz_daily_challenge_date:null,nz_daily_challenge_done:false,nz_daily_challenge_xp:0,
+  nz_today_game_counts:{date:'',counts:{}},
+  nz_today_categories:{date:'',cats:[]},
+  nz_last_skill_gain:{},
+  nz_week_skill_start:{},nz_week_start_date:'',
   nz_brain_goal:'focus',nz_daily_goal_type:'balanced',nz_calib_done:false,
   nz_game_plays:{}
 };
@@ -137,23 +142,27 @@ function isPlayedToday(){return S('nz_last_played')===todayKey();}
 function brainLevel(s){
   const p=prestigeLevel(s);
   if(p)return p.badge+' '+p.title.toUpperCase();
-  if(s<=250)return'NOVICE';
-  if(s<=800)return'LEARNER';
-  if(s<=1800)return'FOCUSED';
-  if(s<=3500)return'SHARP';
-  if(s<=5500)return'EXPERT';
-  if(s<=8000)return'ELITE';
-  return'MASTER';
+  if(s<500)  return'BEGINNER';
+  if(s<1200) return'NOVICE';
+  if(s<2200) return'LEARNER';
+  if(s<3500) return'FOCUSED';
+  if(s<5000) return'SHARP MIND';
+  if(s<6500) return'ANALYTICAL';
+  if(s<8000) return'STRATEGIST';
+  if(s<9000) return'BRAIN MASTER';
+  if(s<9800) return'NEURO ELITE';
+  return'NEUROZEN LEGEND';
 }
-/* Optional companion: emoji for the tier. Not used by existing UI — safe to call
-   from new code. */
 function brainLevelEmoji(s){
-  if(s<=250)return'🌱';
-  if(s<=800)return'📚';
-  if(s<=1800)return'🎯';
-  if(s<=3500)return'⚡';
-  if(s<=5500)return'🧠';
-  if(s<=8000)return'💎';
+  if(s<500)  return'🌱';
+  if(s<1200) return'📚';
+  if(s<2200) return'🎯';
+  if(s<3500) return'⚡';
+  if(s<5000) return'🧠';
+  if(s<6500) return'🔬';
+  if(s<8000) return'💡';
+  if(s<9000) return'💎';
+  if(s<9800) return'🏆';
   return'👑';
 }
 function greet(){
@@ -291,100 +300,149 @@ function checkAchievements(gameId,score){
 }
 
 /* ===================== SCORE SYSTEM ===================== */
-function awardScore(rawPts,skillKey,gameId,gameScore,starThresh){
-  /* --- 1. Points: NO skill penalty, straightforward addition --- */
-  const pts=Math.max(1,rawPts);
+const GAME_SKILL_MAP={
+  schulte:    {p:'focus',     s:'speed'},
+  memory:     {p:'memory',    s:'attention'},
+  pattern:    {p:'logic',     s:'focus'},
+  wordflash:  {p:'memory',    s:'speed'},
+  wordchain:  {p:'memory',    s:'logic'},
+  math:       {p:'speed',     s:'logic'},
+  stroopx:    {p:'attention', s:'focus'},
+  iqtest:     {p:'logic',     s:'memory'},
+  reactionlab:{p:'speed',     s:'attention'},
+  mindtrace:  {p:'planning',  s:'logic'},
+};
+function diminishFactor(bs){
+  if(bs<2000)return 1.00;
+  if(bs<5000)return 0.80;
+  if(bs<8000)return 0.55;
+  return 0.35;
+}
+function antiFarmFactor(gameId){
+  const today=todayKey();
+  const tc=S('nz_today_game_counts');
+  if(tc.date!==today){tc.date=today;tc.counts={};}
+  const n=(tc.counts[gameId]||0)+1;
+  tc.counts[gameId]=n;
+  setS('nz_today_game_counts',tc);
+  const factors=[1.0,0.85,0.70,0.55,0.40];
+  const f=factors[Math.min(n-1,4)];
+  if(n===3)setTimeout(()=>toast('🔄 Try a different game for more Brain Score!'),500);
+  if(n>=4)setTimeout(()=>toast('🧠 Switch games — your brain needs variety!'),500);
+  return f;
+}
+function diversityBonus(gameId){
+  const today=todayKey();
+  const dc=S('nz_today_categories');
+  if(dc.date!==today){dc.date=today;dc.cats=[];}
+  const cat=(GAMES.find(g=>g.id===gameId)||{}).cat||gameId;
+  if(!dc.cats.includes(cat))dc.cats.push(cat);
+  setS('nz_today_categories',dc);
+  return dc.cats.length===3?5:0;
+}
+function maybeInitWeekSnapshot(){
+  const d=new Date();
+  const monday=new Date(d);
+  monday.setDate(d.getDate()-((d.getDay()+6)%7));
+  const mondayKey=monday.toISOString().slice(0,10);
+  if(S('nz_week_start_date')!==mondayKey){
+    setS('nz_week_start_date',mondayKey);
+    setS('nz_week_skill_start',{...S('nz_skill_scores')});
+  }
+}
+
+function awardScore(rawPts,skillKey,gameId,gameScore,starThresh,isPerfect){
+  maybeInitWeekSnapshot();
+  const basePts=Math.max(1,rawPts);
   const cur=S('nz_brain_score');
+  const df=diminishFactor(cur);
+  const af=antiFarmFactor(gameId);
+
+  /* Perfect bonus: 3 stars + new personal best = +3 */
+  const bestScores=S('nz_best_scores');
+  const isNewBest=!bestScores[gameId]||gameScore>bestScores[gameId];
+  const st2=starThresh||[5,10,15];
+  const got3Stars=gameScore>=(st2[2]||st2[1]*2);
+  const perfectBonus=(got3Stars&&isNewBest)?3:0;
+
+  let pts=Math.max(1,Math.round(basePts*df*af))+perfectBonus;
+
+  const divB=diversityBonus(gameId);
+  if(divB>0){pts+=divB;setTimeout(()=>toast('🎯 Diversity Bonus! +'+divB+' Brain Score'),700);}
+  if(perfectBonus>0)setTimeout(()=>toast('✨ Perfect Performance! +'+perfectBonus+' Brain Score bonus!'),400);
+
   const next=Math.max(0,cur+pts);
   setS('nz_brain_score',next);
 
-  /* --- 2. Prestige milestone check --- */
   const prevPrestige=prestigeLevel(cur);
   const newPrestige=prestigeLevel(next);
   if(newPrestige&&(!prevPrestige||newPrestige.score>prevPrestige.score)){
-    setTimeout(()=>{confetti(120);toast(newPrestige.badge+' Prestige Unlocked! You are now '+newPrestige.title+'!');},1000);
+    setTimeout(()=>{confetti(120);toast(newPrestige.badge+' Prestige: '+newPrestige.title+'!');},1000);
   }
 
-  /* --- 3. Game plays counter --- */
   setS('nz_games_played',S('nz_games_played')+1);
   const gPlays=S('nz_game_plays');
   gPlays[gameId]=(gPlays[gameId]||0)+1;
   setS('nz_game_plays',gPlays);
 
-  /* --- 4. Streak — only toast on FIRST game of the day --- */
   const prevLast=S('nz_last_played');
   const today=todayKey();
   if(prevLast!==today){
     const yDate=new Date(Date.now()-86400000);
     const yesterday=yDate.getFullYear()+'-'+String(yDate.getMonth()+1).padStart(2,'0')+'-'+String(yDate.getDate()).padStart(2,'0');
     const newStreak=prevLast===yesterday?S('nz_streak')+1:1;
-    setS('nz_streak',newStreak);
-    setS('nz_last_played',today);
-    setS('nz_today_games',1);
-    if(newStreak>1)setTimeout(()=>toast('🔥 '+newStreak+' day streak! Keep it up!'),400);
+    setS('nz_streak',newStreak);setS('nz_last_played',today);setS('nz_today_games',1);
+    if(newStreak>1)setTimeout(()=>toast('🔥 '+newStreak+' day streak!'),400);
   }else{
     setS('nz_today_games',S('nz_today_games')+1);
-    /* No toast for 2nd+ game in same day */
   }
 
-  /* --- 5. Daily history for 7-day chart --- */
   const _dh=S('nz_daily_history')||{};
   _dh[today]=Math.max(_dh[today]||0,next);
   const _allKeys=Object.keys(_dh).sort();
-  while(_allKeys.length>7){const _old=_allKeys.shift();delete _dh[_old];}
+  while(_allKeys.length>7){delete _dh[_allKeys.shift()];}
   setS('nz_daily_history',_dh);
 
-  /* --- 6. Skill scores — grow 0→100, NO penalty --- */
-  if(skillKey){
-    const prev=S('nz_skill_scores');
-    const prevPrev=S('nz_skill_scores_prev');
-    prevPrev[skillKey]=prev[skillKey]||0;
-    const skillGain=Math.max(1,Math.round(pts*0.15));
-    prev[skillKey]=Math.min(100,Math.max(0,(prev[skillKey]||0)+skillGain));
-    setS('nz_skill_scores',prev);
-    setS('nz_skill_scores_prev',prevPrev);
-  }
+  const skMap=GAME_SKILL_MAP[gameId]||{p:skillKey,s:null};
+  const sk=S('nz_skill_scores');
+  const skPrev=S('nz_skill_scores_prev');
+  Object.keys(sk).forEach(k=>{skPrev[k]=sk[k]||0;});
+  const pGain=Math.max(1,Math.round(basePts*0.18));
+  const sGain=Math.max(1,Math.round(basePts*0.09));
+  if(skMap.p)sk[skMap.p]=Math.min(100,(sk[skMap.p]||0)+pGain);
+  if(skMap.s)sk[skMap.s]=Math.min(100,(sk[skMap.s]||0)+sGain);
+  setS('nz_skill_scores',sk);
+  setS('nz_skill_scores_prev',skPrev);
+  setS('nz_last_skill_gain',{
+    primary:skMap.p,pGain,secondary:skMap.s,sGain,
+    bsGain:pts,prevBs:cur,newBs:next,
+    divBonus:divB,perfectBonus,
+    farmFactor:af<1?Math.round(af*100):null
+  });
 
-  /* --- 7. Achievements --- */
   checkAchievements(gameId,gameScore);
 
-  /* --- 8. XP — tier-based, normalized per game --- */
   const _st2=starThresh||[5,10,15];
   const _xpTiers={
-    schulte:   [10,22,38,55],
-    memory:    [10,20,35,50],
-    pattern:   [10,22,38,55],
-    wordflash: [10,20,35,50],
-    wordchain: [10,20,35,48],
-    math:      [10,22,38,55],
-    stroopx:   [10,20,35,50],
-    iqtest:    [12,25,42,60],
-    reactionlab:[10,20,35,50],
-    mindtrace:  [10,20,35,50],
+    schulte:[10,22,38,55],memory:[10,20,35,50],pattern:[10,22,38,55],
+    wordflash:[10,20,35,50],wordchain:[10,20,35,48],math:[10,22,38,55],
+    stroopx:[10,20,35,50],iqtest:[12,25,42,60],reactionlab:[10,20,35,50],mindtrace:[10,20,35,50],
   };
   const tiers=_xpTiers[gameId]||[10,20,35,50];
-  /* tiers[0]=base, [1]=1-star, [2]=2-star, [3]=3-star */
   let xpGain;
   if(gameScore>=(_st2[2]||_st2[1]*2))xpGain=tiers[3];
   else if(gameScore>=(_st2[1]||_st2[0]*1.5))xpGain=tiers[2];
   else if(gameScore>=_st2[0])xpGain=tiers[1];
   else xpGain=tiers[0];
-
-  /* Daily challenge: 1.5x XP (not 2x — more balanced) */
   const dch=todayChallenge();
   if(dch&&gameId===dch.game&&!dailyDoneToday()&&dch.check(gameScore)){
     xpGain=Math.round(xpGain*1.5);
-    setS('nz_daily_challenge_date',today);
-    setS('nz_daily_challenge_done',true);
-    setS('nz_daily_challenge_xp',xpGain);
+    setS('nz_daily_challenge_date',today);setS('nz_daily_challenge_done',true);setS('nz_daily_challenge_xp',xpGain);
     setTimeout(()=>toast('🎯 Daily Challenge complete! Bonus XP!'),600);
   }
-
-  const oldXp=S('nz_xp');
-  const newXp=oldXp+xpGain;
+  const oldXp=S('nz_xp'),newXp=oldXp+xpGain;
   setS('nz_xp',newXp);
-  const prevLv=xpLevel(oldXp).cur.lv;
-  const newLv=xpLevel(newXp).cur;
+  const prevLv=xpLevel(oldXp).cur.lv,newLv=xpLevel(newXp).cur;
   if(newLv.lv>prevLv)setTimeout(()=>showLevelUp(newLv),900);
 
   return pts;
@@ -548,7 +606,7 @@ function renderHome(){
   }
   const skillBars=p.querySelector('#skillBars');
   const sk=S('nz_skill_scores');
-  Object.entries({Memory:'memory',Focus:'focus',Logic:'logic',Speed:'speed'}).forEach(([label,key])=>{
+  Object.entries({Memory:'memory',Focus:'focus',Logic:'logic',Speed:'speed',Planning:'planning',Attention:'attention'}).forEach(([label,key])=>{
     const val=sk[key]||0;
     const row=$(`<div class="skill-bar-row">
       <div class="skill-bar-label">${label}</div>
@@ -716,7 +774,20 @@ function openGame(id,wkCtx){
           <span class="star ${stars>=3?'lit':''}">⭐</span>
         </div>
         <div class="rank-chip rank-${rank.toLowerCase()}">RANK ${rank}</div>
-        <div><span class="gain">+${pts} Brain Score</span></div>
+        ${(()=>{
+          const sg=S('nz_last_skill_gain')||{};
+          const L={memory:'Memory',focus:'Focus',logic:'Logic',speed:'Speed',planning:'Planning',attention:'Attention'};
+          return `<div class="end-skill-gain">
+            ${sg.primary?`<div class="esg-row"><span>${L[sg.primary]||sg.primary}</span><span class="esg-plus">+${sg.pGain||0}</span></div>`:''}
+            ${sg.secondary?`<div class="esg-row"><span>${L[sg.secondary]||sg.secondary}</span><span class="esg-plus">+${sg.sGain||0}</span></div>`:''}
+            ${sg.perfectBonus?`<div class="esg-row"><span>✨ Perfect Bonus</span><span class="esg-plus">+${sg.perfectBonus}</span></div>`:''}
+            ${sg.divBonus?`<div class="esg-row"><span>🎯 Diversity Bonus</span><span class="esg-plus">+${sg.divBonus}</span></div>`:''}
+            ${sg.farmFactor?`<div class="esg-row" style="opacity:.6"><span>⚠️ Farm penalty (${sg.farmFactor}%)</span></div>`:''}
+            <div class="esg-divider"></div>
+            <div class="esg-total"><span>Brain Score</span><span class="gain">+${pts}</span></div>
+            <div class="esg-progress">${sg.prevBs||0} → <strong>${sg.newBs||0}</strong></div>
+          </div>`;
+        })()}
         ${isRec?'<div class="rec">✨ New Personal Record!</div>':''}
         ${opts.statsHtml||''}
         <div class="btns">
@@ -818,7 +889,7 @@ function renderProgress(){
   `;
   const sk=S('nz_skill_scores');const skPrev=S('nz_skill_scores_prev');
   const skBars=p.querySelector('#skillBarsP');
-  Object.entries({Memory:'memory',Focus:'focus',Logic:'logic',Speed:'speed'}).forEach(([label,key])=>{
+  Object.entries({Memory:'memory',Focus:'focus',Logic:'logic',Speed:'speed',Planning:'planning',Attention:'attention'}).forEach(([label,key])=>{
     const val=sk[key]||0;const prev=skPrev[key]||0;const diff=val-prev;
     const row=$(`<div class="skill-bar-row">
       <div class="skill-bar-label">${label}</div>
@@ -1269,7 +1340,7 @@ function renderProfile(){
 
     <div class="sec-title"><h2>Skills Snapshot</h2><a href="#" id="pfSeeProgress">Details ›</a></div>
     <div class="card pf-skills">
-      ${[['memory','Memory','#7C3AED'],['focus','Focus','#4F8EF7'],['logic','Logic','#34D399'],['speed','Speed','#F97316']].map(([k,lbl,col])=>{
+      ${[['memory','Memory','#7C3AED'],['focus','Focus','#4F8EF7'],['logic','Logic','#34D399'],['speed','Speed','#F97316'],['planning','Planning','#8B5CF6'],['attention','Attention','#06B6D4']].map(([k,lbl,col])=>{
         const v=Math.min(100,sk[k]||0);
         return `<div class="pf-skill-row">
           <div class="pf-skill-lbl">${lbl}</div>
@@ -1687,8 +1758,8 @@ function showOnboarding(){
       setS('nz_brain_score',0);setS('nz_xp',0);setS('nz_streak',0);
       setS('nz_games_played',0);setS('nz_today_games',0);
       setS('nz_achievements',[]);
-      setS('nz_skill_scores',{memory:calibResults.memory,focus:calibResults.focus,speed:calibResults.speed,logic:0});
-      setS('nz_skill_scores_prev',{memory:0,focus:0,speed:0,logic:0});
+      setS('nz_skill_scores',{memory:calibResults.memory,focus:calibResults.focus,speed:calibResults.speed,logic:0,planning:0,attention:0});
+      setS('nz_skill_scores_prev',{memory:0,focus:0,speed:0,logic:0,planning:0,attention:0});
       setS('nz_best_scores',{});setS('nz_last_played',null);
       setS('nz_settings',{reminders:true,sfx:true,notifications:true});
       setS('nz_onboarded',true);setS('nz_schulte_level',0);setS('nz_daily_history',{});

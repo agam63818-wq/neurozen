@@ -717,7 +717,7 @@ function playMath(body,setScore,end,wrap,startClock){
     end({
       title:rank.em+' '+rank.txt,emoji:rank.em,
       sub:'Score '+G.score+(newPB?' \u00B7 \uD83C\uDFC6 New Best!':''),
-      value:G.score,points:G.score>=40?48:G.score>=22?32:G.score>=10?18:8,starThresh:[10,22,40],
+      value:G.score,points:G.score>=40?13:G.score>=22?10:G.score>=10?7:4,starThresh:[10,22,40],
       statsHtml:'<div class="end-stats">'+
         '<div class="row"><span>Questions Answered</span><span class="val">'+G.q+'</span></div>'+
         '<div class="row"><span>Accuracy</span><span class="val">'+accuracy+'% ('+G.correctCount+'/'+G.attempts+')</span></div>'+

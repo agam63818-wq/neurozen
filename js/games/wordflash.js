@@ -310,7 +310,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     if (newPB) confetti(80);
     end({
       title: newPB ? '🏆 New Best!' : '📝 Word Flash',
-      emoji: '📝', sub: `${score} pts · ${q} rounds · ${acc}%`, value: score, points: score>=70?45:score>=40?30:score>=20?18:8, starThresh: [20, 40, 70],
+      emoji: '📝', sub: `${score} pts · ${q} rounds · ${acc}%`, value: score, points: score>=70?11:score>=40?9:score>=20?7:4, starThresh: [20, 40, 70],
       statsHtml: `<div class="end-stats">
         <div class="row"><span>Score</span><span class="val">${score} pts</span></div>
         <div class="row"><span>Words Seen</span><span class="val">${q}</span></div>
