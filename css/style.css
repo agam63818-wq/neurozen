@@ -1833,3 +1833,9 @@ body.dark .iq-speed-badge{background:#451A03;color:#FCD34D;border-color:#92400E;
 .esg-divider{border-top:1px solid var(--border);margin:8px 0;}
 .esg-total{display:flex;justify-content:space-between;font-size:15px;font-weight:800;padding:2px 0;}
 .esg-progress{font-size:11px;color:var(--text2);margin-top:4px;text-align:right;}
+
+/* ── MASTERY ─────────────────────────────────── */
+.mastery-chip{background:linear-gradient(135deg,rgba(124,58,237,.08),rgba(79,142,247,.08));border:1.5px solid rgba(124,58,237,.2);border-radius:12px;padding:8px 12px;font-size:12px;font-weight:600;margin:6px 0;text-align:center;}
+.mastery-levelup{background:#F59E0B;color:#000;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:800;margin-left:4px;}
+.qp-mastery{font-size:10px;font-weight:700;color:#7C3AED;margin-top:2px;}
+.gm-mastery{font-size:11px;color:#7C3AED;font-weight:600;margin-top:3px;}

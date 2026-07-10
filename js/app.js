@@ -68,6 +68,7 @@ const FRESH={
   nz_today_categories:{date:'',cats:[]},
   nz_last_skill_gain:{},
   nz_week_skill_start:{},nz_week_start_date:'',
+  nz_mastery:{},
   nz_brain_goal:'focus',nz_daily_goal_type:'balanced',nz_calib_done:false,
   nz_game_plays:{}
 };
@@ -491,6 +492,60 @@ function renderNav(){
   return nav;
 }
 
+/* ══════════ GAME MASTERY SYSTEM ══════════════════════════
+   Each game has a Mastery Level 1-30.
+   Mastery XP needed per level increases (50, 55, 61, 68, 75...).
+   Mastery is separate from Brain Score — tracks game-specific depth. */
+
+const MASTERY_TITLES={
+  1:'Beginner',3:'Explorer',5:'Practitioner',8:'Skilled',
+  12:'Expert',16:'Master',20:'Elite',25:'Virtuoso',30:'Legend'
+};
+function masteryXpForLevel(lv){
+  if(lv<=1)return 0;
+  return 45+(lv-1)*5;
+}
+function getMastery(gameId){
+  const m=S('nz_mastery');
+  return m[gameId]||{level:1,xp:0,totalXp:0};
+}
+function getMasteryTitle(level){
+  let title='Beginner';
+  Object.entries(MASTERY_TITLES).forEach(([lv,t])=>{if(level>=+lv)title=t;});
+  return title;
+}
+function getMasteryBadge(level){
+  if(level>=30)return'🏅';
+  if(level>=20)return'💎';
+  if(level>=12)return'🥇';
+  if(level>=5) return'🥈';
+  if(level>=2) return'🥉';
+  return'';
+}
+function awardMastery(gameId,gameScore,starThresh){
+  const st=starThresh||[5,10,15];
+  const mxp=gameScore>=(st[2]||20)?12:gameScore>=(st[1]||10)?8:gameScore>=(st[0]||5)?5:3;
+  const m=S('nz_mastery');
+  if(!m[gameId])m[gameId]={level:1,xp:0,totalXp:0};
+  const g=m[gameId];
+  g.xp+=mxp;
+  g.totalXp=(g.totalXp||0)+mxp;
+  let leveled=false;
+  while(g.level<30&&g.xp>=masteryXpForLevel(g.level+1)){
+    g.xp-=masteryXpForLevel(g.level+1);
+    g.level++;
+    leveled=true;
+  }
+  m[gameId]=g;
+  setS('nz_mastery',m);
+  if(leveled){
+    const gName=(GAMES.find(x=>x.id===gameId)||{}).name||gameId;
+    const badge=getMasteryBadge(g.level);
+    setTimeout(()=>{confetti(50);toast(`${badge} ${gName} Mastery Lv ${g.level}! ${getMasteryTitle(g.level)}`);},1200);
+  }
+  return{mxp,newLevel:g.level,leveled};
+}
+
 /* ===================== HOME ===================== */
 function renderHome(){
   const name=S('nz_username');
@@ -583,9 +638,15 @@ function renderHome(){
   const qp=p.querySelector('#qpRow');
   GAMES.forEach(g=>{
     const best=S('nz_best_scores')[g.id];
+    const m=getMastery(g.id);
+    const mb=getMasteryBadge(m.level);
     const c=$(`<div class="qp-card" style="background:${g.bg}">
       <div class="qico" style="background:${g.iconBg}">${g.icon}</div>
-      <div><div class="qn">${g.name}</div><div class="qlv">${best?'Best: '+best:'New!'}</div></div>
+      <div>
+        <div class="qn">${g.name}</div>
+        <div class="qlv">${best?'Best: '+best:'New!'}</div>
+        ${m.level>1?`<div class="qp-mastery">${mb} Lv ${m.level}</div>`:''}
+      </div>
     </div>`);
     c.onclick=()=>{playSound('tap');openGame(g.id);};
     qp.appendChild(c);
@@ -669,12 +730,14 @@ function renderGames(){
       const plays=S('nz_game_plays')[g.id]||0;
       const isNew=plays<3;
       const isDaily=todayChallenge().game===g.id;
+      const gm=getMastery(g.id);
       const c=$(`<div class="gcard" style="background:${g.bg}">
         ${isNew?'<div class="new-badge">NEW</div>':''}
         ${isDaily?'<div class="featured-badge">🎯 TODAY</div>':''}
         <div class="gico gico-shimmer" style="background:${g.iconBg}">${g.icon}</div>
         <div class="gn">${g.name}</div>
         <div class="gbest">${best?'Best: '+best:'Play to set record!'}</div>
+        ${gm.level>1?`<div class="gm-mastery">${getMasteryBadge(gm.level)} Mastery Lv ${gm.level} · ${getMasteryTitle(gm.level)}</div>`:''}
         <div class="grow"><span class="gtag">${g.cat}</span></div>
         ${best?`<div class="pb-badge">PB: ${best}</div>`:''}
       </div>`);
@@ -756,6 +819,7 @@ function openGame(id,wkCtx){
     const recVal=opts.bestVal!==undefined?opts.bestVal:opts.value;
     if(isRec){best[id]=recVal;setS('nz_best_scores',best);}
     const pts=awardScore(Math.max(2,opts.points||2),g.skill,id,opts.value,opts.starThresh);
+    const mResult=awardMastery(id,opts.value,opts.starThresh);
     playSound('complete');
     const starThresh=opts.starThresh||[5,10,15];
     const stars=opts.value>=starThresh[2]?3:opts.value>=starThresh[1]?2:opts.value>=starThresh[0]?1:0;
@@ -789,6 +853,12 @@ function openGame(id,wkCtx){
           </div>`;
         })()}
         ${isRec?'<div class="rec">✨ New Personal Record!</div>':''}
+        <div class="mastery-chip">
+          ${getMasteryBadge(mResult.newLevel)} ${g.name} Mastery
+          <strong>Lv ${mResult.newLevel}</strong>
+          · ${getMasteryTitle(mResult.newLevel)}
+          ${mResult.leveled?'<span class="mastery-levelup">LEVEL UP! 🎉</span>':''}
+        </div>
         ${opts.statsHtml||''}
         <div class="btns">
           <button class="btn-primary" id="again">Play Again</button>
