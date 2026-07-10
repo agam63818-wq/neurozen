@@ -369,7 +369,12 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     daily:dailyChallenge(), dailyProgress:0,
     // last-puzzle score breakdown (for dopamine popup)
     lastBreakdown:null,
+    // shape-library integration (added for the 200-shape expansion)
+    recentCats:[],           // rolling window of last N category indices
+    puzzleSource:'random',   // 'random' | 'library'
+    libraryPuzzles:0,        // count of library puzzles solved this session
   };
+  const CAT_WINDOW = 5;      // avoid the last 5 library categories
 
   /* =================================================================
      CANVAS
@@ -778,6 +783,12 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     if (G.type==='speed') G.totalTime = 8;
     else if (G.type==='master') G.totalTime = CFG.puzzleTime(diff) * 1.5;
     else if (G.type==='precision') G.totalTime = CFG.puzzleTime(diff) * 1.1;
+    else if (G.puzzleSource === 'library' && G.libraryTimeSec > 0) {
+      /* Library shapes ship with a recommended time. We give the player
+         a small extra planning window on top so handcrafted puzzles feel
+         solveable even when the topology is unfamiliar. */
+      G.totalTime = G.libraryTimeSec + 4;
+    }
     else G.totalTime = CFG.puzzleTime(diff);
 
     // Planning phase — draws disabled until timer starts
@@ -952,9 +963,61 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
         ? Math.max(1, diff-1)
         : diff;
 
-    // Procedural puzzle from a fresh seed
-    const puzzleSeed = (Date.now() ^ (G.round*2654435761)) >>> 0;
-    G.puzzle = makePuzzle(useDiff, puzzleSeed);
+    /* -----------------------------------------------------------------
+       SHAPE LIBRARY MERGE
+       Every 3rd round pulls a puzzle from the handcrafted 200-shape
+       library.  Random puzzles keep their existing behaviour on the
+       other rounds.  A rolling category window prevents the same
+       category appearing twice in the last 5 library rounds so the
+       player sees variety like House -> Fish -> Rocket -> Note.
+       "Special" puzzles (speed / fade / precision / genius / master)
+       always stay on the random branch so their unique modifiers are
+       predictable.
+       ----------------------------------------------------------------- */
+    G.libraryMeta = null;
+    G.libraryTimeSec = 0;
+    const canUseLibrary =
+      window.MT_SHAPES &&
+      chosenType === 'normal' &&           // don't override specials
+      G.round % 3 === 0 &&                  // every 3rd round
+      G.round >= 3;
+    let libPuzzle = null;
+    if (canUseLibrary) {
+      const seed = (Date.now() ^ (G.round*2654435761)) >>> 0;
+      const avoid = new Set(G.recentCats);
+      let attempts = 0;
+      while (attempts < 4 && !libPuzzle) {
+        const meta = window.MT_SHAPES.pickShape(G.round, seed + attempts*7919, avoid);
+        libPuzzle = window.MT_SHAPES.buildFromShape(meta, seed + attempts*104729 + 17);
+        if (libPuzzle) {
+          libPuzzle.diff = Math.max(1, Math.min(5, libPuzzle.diffIdx + 1)); // 0..3 -> 1..4
+          // Master library puzzles bump one more tier
+          if (libPuzzle.diffIdx === 3) libPuzzle.diff = 5;
+          G.libraryMeta = {
+            category   : libPuzzle.category,
+            subLabel   : libPuzzle.subLabel,
+            difficulty : libPuzzle.difficulty,
+            shapeId    : libPuzzle.shapeId,
+          };
+          G.libraryTimeSec = libPuzzle.timeSec;
+          G.recentCats.push(libPuzzle.catIdx);
+          if (G.recentCats.length > CAT_WINDOW) G.recentCats.shift();
+        } else {
+          attempts++;
+        }
+      }
+    }
+
+    if (libPuzzle) {
+      G.puzzle = libPuzzle;
+      G.puzzleSource = 'library';
+      G.libraryPuzzles++;
+    } else {
+      // Procedural puzzle from a fresh seed (existing path — unchanged)
+      const puzzleSeed = (Date.now() ^ (G.round*2654435761)) >>> 0;
+      G.puzzle = makePuzzle(useDiff, puzzleSeed);
+      G.puzzleSource = 'random';
+    }
     G.typeMeta = TYPE_META[chosenType];
     setHintNodes();
 
@@ -991,12 +1054,22 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     const el = document.getElementById('mt3TypeBadge');
     if (!el || !G.typeMeta) return;
     const isSpecial = G.type !== 'normal';
-    el.className = 'mt3-type-badge' + (isSpecial ? ' mt3-special' : '');
+    /* When a library shape is loaded, its category + sub-label take
+       priority over the generic "One Stroke" name so the player sees
+       "Fish", "Rocket", "Snowflake" etc. */
+    const lib = G.puzzleSource === 'library' ? G.libraryMeta : null;
+    const displayName = lib ? lib.subLabel : G.typeMeta.name;
+    const displaySub  = lib
+      ? `${lib.category} · Trace every edge without lifting.`
+      : G.typeMeta.desc;
+    el.className = 'mt3-type-badge'
+      + (isSpecial ? ' mt3-special' : '')
+      + (lib ? ' mt3-lib' : '');
     el.innerHTML = `
       <span class="mt3-badge-icon">${G.typeMeta.icon}</span>
       <div>
-        <strong>${G.typeMeta.name}${isSpecial?' <span class="mt3-tag-special">SPECIAL</span>':''}</strong>
-        <small>${G.typeMeta.desc}</small>
+        <strong>${displayName}${isSpecial?' <span class="mt3-tag-special">SPECIAL</span>':''}${lib?' <span class="mt3-tag-lib">SHAPE</span>':''}</strong>
+        <small>${displaySub}</small>
       </div>`;
   }
 
