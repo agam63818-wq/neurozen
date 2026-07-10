@@ -68,6 +68,7 @@ const FRESH={
   nz_today_categories:{date:'',cats:[]},
   nz_last_skill_gain:{},
   nz_week_skill_start:{},nz_week_start_date:'',
+  nz_week_bs_start:0,nz_week_game_plays:{},
   nz_mastery:{},
   nz_brain_goal:'focus',nz_daily_goal_type:'balanced',nz_calib_done:false,
   nz_game_plays:{}
@@ -349,6 +350,8 @@ function maybeInitWeekSnapshot(){
   if(S('nz_week_start_date')!==mondayKey){
     setS('nz_week_start_date',mondayKey);
     setS('nz_week_skill_start',{...S('nz_skill_scores')});
+    setS('nz_week_bs_start',S('nz_brain_score'));
+    setS('nz_week_game_plays',{...S('nz_game_plays')});
   }
 }
 
@@ -599,6 +602,7 @@ function renderHome(){
     <div id="dailyCh"></div>
     <div class="sec-title"><h2>Your Skills</h2><a href="#" onclick="render('progress');return false;">Details ›</a></div>
     <div class="card skills-card"><div id="skillBars"></div></div>
+    <div id="smartRec"></div>
     <div class="sec-title"><h2>Today's Challenge</h2></div>
     <div class="cta feat-float" id="featuredCard" style="cursor:pointer;">
       <div>
@@ -677,6 +681,55 @@ function renderHome(){
     skillBars.appendChild(row);
     setTimeout(()=>{row.querySelector('.skill-bar-fill').style.width=val+'%';},50);
   });
+  /* Smart Recommendation */
+  const recArea=p.querySelector('#smartRec');
+  if(recArea){
+    const np=getNeuroProfile();
+    const totalPlayed=Object.values(sk).filter(v=>v>0).length;
+    if(totalPlayed>=2){
+      const diff=np.strongest.val-np.weakest.val;
+      const msgStrong=diff>20?`Your ${np.strongest.label} is excellent!`:`Keep training ${np.strongest.label}!`;
+      const recCard=$(`<div class="smart-rec-card">
+        <div class="src-row">
+          <div class="src-icon">🤖</div>
+          <div class="src-text">
+            <div class="src-title">AI Recommendation</div>
+            <div class="src-msg">${msgStrong} Your <strong>${np.weakest.label}</strong> needs training.</div>
+          </div>
+        </div>
+        <button class="src-btn" data-gid="${np.recGame.id}">${np.recGame.icon} Train ${np.weakest.label} with ${np.recGame.name} →</button>
+      </div>`);
+      recCard.querySelector('.src-btn').onclick=()=>{playSound('tap');openGame(np.recGame.id);};
+      recArea.appendChild(recCard);
+    }
+  }
+  /* Weekly Analysis — Monday only */
+  const dayOfWeek=new Date().getDay();
+  if(dayOfWeek===1){
+    const wa=getWeeklyAnalysis();
+    if(wa.weekBsGain>0||wa.gains.length>0){
+      const weekCard=$(`<div class="week-card">
+        <div class="wk-title">📊 Last Week's Brain Growth</div>
+        ${wa.weekBsGain>0?`<div class="wk-bs-gain">+${wa.weekBsGain} Brain Score this week</div>`:''}
+        <div class="wk-skills">
+          ${wa.gains.slice(0,4).map(g=>`
+            <div class="wk-skill-row">
+              <span>${g.label}</span>
+              <span class="wk-plus">+${g.gain}</span>
+            </div>`).join('')}
+        </div>
+        ${wa.bestGame?`<div class="wk-best">🏆 Best Game: ${wa.bestGame.icon} ${wa.bestGame.name} (${wa.bestCount}×)</div>`:''}
+        ${wa.weakest?`<div class="wk-rec">
+          📈 Weakest: <strong>${wa.weakest.label}</strong> — play
+          <button class="wk-rec-btn" data-gid="${wa.recGame.id}">${wa.recGame.icon} ${wa.recGame.name}</button>
+        </div>`:''}
+      </div>`);
+      const wkBtn=weekCard.querySelector('.wk-rec-btn');
+      if(wkBtn)wkBtn.onclick=()=>{playSound('tap');openGame(wkBtn.dataset.gid);};
+      const scoreCardEl=p.querySelector('.score-card');
+      if(scoreCardEl)scoreCardEl.insertAdjacentElement('afterend',weekCard);
+    }
+  }
   setTimeout(()=>{
     const circ=2*Math.PI*100;const pct=Math.min(1,score/10000);
     const fg=p.querySelector('#ringFg');
@@ -1354,6 +1407,77 @@ function renderRelax(){
   return p;
 }
 
+/* ══════════ NEURO PROFILE ═══════════════════════════════ */
+function getNeuroProfile(){
+  const sk=S('nz_skill_scores');
+  const skills=[
+    {key:'memory',   label:'Memory',    emoji:'🧠'},
+    {key:'focus',    label:'Focus',     emoji:'🎯'},
+    {key:'logic',    label:'Logic',     emoji:'💡'},
+    {key:'speed',    label:'Speed',     emoji:'⚡'},
+    {key:'planning', label:'Planning',  emoji:'🗺️'},
+    {key:'attention',label:'Attention', emoji:'👁️'},
+  ];
+  const scored=skills.map(s=>({...s,val:sk[s.key]||0}));
+  scored.sort((a,b)=>b.val-a.val);
+  const strongest=scored[0];
+  const weakest=scored[scored.length-1];
+  const played=scored.filter(s=>s.val>0);
+  let personality='Explorer';
+  let personalityDesc='You\'re just getting started. Train all skills!';
+  if(played.length>=3){
+    if(scored[0].key==='planning'&&scored[1].key==='logic'){
+      personality='Strategist';personalityDesc='You think ahead and reason deeply — a rare combination.';
+    }else if(scored[0].key==='memory'&&scored[1].key==='attention'){
+      personality='Memorist';personalityDesc='Your recall is exceptional. You notice every detail.';
+    }else if(scored[0].key==='speed'&&scored[1].key==='attention'){
+      personality='Quick Thinker';personalityDesc='Fast and sharp — you thrive under pressure.';
+    }else if(scored[0].key==='focus'&&scored[1].key==='attention'){
+      personality='Deep Focuser';personalityDesc='Sustained concentration is your superpower.';
+    }else if(scored[0].key==='logic'){
+      personality='Analytical Mind';personalityDesc='You break down every problem with precision.';
+    }else if(scored[0].key==='speed'){
+      personality='Speed Thinker';personalityDesc='You process information faster than most people.';
+    }else{
+      personality='Balanced Brain';personalityDesc='You excel across multiple skills — a true generalist.';
+    }
+  }
+  const skillToGame={
+    memory:'memory',focus:'schulte',logic:'pattern',
+    speed:'reactionlab',planning:'mindtrace',attention:'stroopx'
+  };
+  const recGameId=skillToGame[weakest.key]||'schulte';
+  const recGame=GAMES.find(g=>g.id===recGameId)||GAMES[0];
+  return{strongest,weakest,personality,personalityDesc,scored,recGame};
+}
+
+/* ══════════ WEEKLY ANALYSIS ════════════════════════════ */
+function getWeeklyAnalysis(){
+  const sk=S('nz_skill_scores');
+  const skStart=S('nz_week_skill_start')||{};
+  const skills=['memory','focus','logic','speed','planning','attention'];
+  const labels={memory:'Memory',focus:'Focus',logic:'Logic',speed:'Speed',planning:'Planning',attention:'Attention'};
+  const gains=skills.map(k=>({
+    key:k,label:labels[k],
+    gain:Math.max(0,(sk[k]||0)-(skStart[k]||0))
+  })).filter(g=>g.gain>0).sort((a,b)=>b.gain-a.gain);
+  const bsNow=S('nz_brain_score');
+  const bsStart=S('nz_week_bs_start')||bsNow;
+  const weekBsGain=bsNow-bsStart;
+  const gPlays=S('nz_game_plays')||{};
+  const weekPlays=S('nz_week_game_plays')||{};
+  let bestGameId=null,bestCount=0;
+  Object.entries(gPlays).forEach(([id,n])=>{
+    const weekN=n-(weekPlays[id]||0);
+    if(weekN>bestCount){bestCount=weekN;bestGameId=id;}
+  });
+  const bestGame=bestGameId?GAMES.find(g=>g.id===bestGameId):null;
+  const weakest=gains.length>0?gains[gains.length-1]:null;
+  const recGameId=weakest?({memory:'memory',focus:'schulte',logic:'pattern',speed:'reactionlab',planning:'mindtrace',attention:'stroopx'}[weakest.key]||'schulte'):'schulte';
+  const recGame=GAMES.find(g=>g.id===recGameId)||GAMES[0];
+  return{gains,weekBsGain,bestGame,bestCount,weakest,recGame};
+}
+
 /* ===================== PROFILE ===================== */
 function renderProfile(){
   const name=S('nz_username');
@@ -1367,6 +1491,7 @@ function renderProfile(){
   const ach=S('nz_achievements')||[];
   const hist=S('nz_score_history')||[];
   const gamesPlayed=S('nz_games_played');
+  const np=getNeuroProfile();
   const p=$(`<div></div>`);
   /* Build top 3 best-score games */
   const bestRows=Object.entries(bestScores||{})
@@ -1406,6 +1531,28 @@ function renderProfile(){
         <div class="prof-stat"><div class="v">${gamesPlayed}</div><div class="l">Games</div></div>
       </div>
       <div class="pf-tier-chip">${tierEm} <span>${tier}</span></div>
+    </div>
+
+    <div class="sec-title"><h2>🧬 Neuro Profile</h2></div>
+    <div class="card neuro-profile-card">
+      <div class="np-personality">
+        <div class="np-pers-title">${np.personality}</div>
+        <div class="np-pers-desc">${np.personalityDesc}</div>
+      </div>
+      <div class="np-strengths">
+        <div class="np-sh">
+          <div class="np-sh-label">💪 Strongest</div>
+          <div class="np-sh-val">${np.strongest.emoji} ${np.strongest.label} · ${np.strongest.val}</div>
+        </div>
+        <div class="np-sh">
+          <div class="np-sh-label">📈 Train Next</div>
+          <div class="np-sh-val">${np.weakest.emoji} ${np.weakest.label} · ${np.weakest.val}</div>
+        </div>
+      </div>
+      <div class="np-rec">
+        <span>Recommended:</span>
+        <button class="np-rec-btn" data-gid="${np.recGame.id}">${np.recGame.icon} ${np.recGame.name}</button>
+      </div>
     </div>
 
     <div class="sec-title"><h2>Skills Snapshot</h2><a href="#" id="pfSeeProgress">Details ›</a></div>
@@ -1493,6 +1640,8 @@ function renderProfile(){
   attachAction(p.querySelector('#settDanger'),'\u{1F6AA}','Log Out','Reset all progress','',()=>showModal('logout'),true);
 
   /* link nav clicks */
+  const npBtn=p.querySelector('.np-rec-btn');
+  if(npBtn)npBtn.onclick=()=>{openGame(npBtn.dataset.gid);};
   const goProgress=p.querySelector('#pfSeeProgress'); if(goProgress)goProgress.onclick=(e)=>{e.preventDefault();render('progress');};
   const goGames   =p.querySelector('#pfSeeGames');    if(goGames)   goGames.onclick   =(e)=>{e.preventDefault();render('games');};
   const goAch     =p.querySelector('#pfSeeAch');      if(goAch)     goAch.onclick     =(e)=>{e.preventDefault();render('progress');};
