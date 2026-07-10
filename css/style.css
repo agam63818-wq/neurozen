@@ -1641,6 +1641,8 @@ body.dark .iq-speed-badge{background:#451A03;color:#FCD34D;border-color:#92400E;
 .mt3-type-badge strong{font-size:14px;display:block;font-weight:800;}
 .mt3-type-badge small{font-size:11.5px;color:var(--text2);line-height:1.4;}
 .mt3-tag-special{display:inline-block;font-size:9px;font-weight:900;padding:2px 6px;border-radius:8px;background:#F59E0B;color:#fff;margin-left:6px;letter-spacing:.06em;vertical-align:middle;}
+.mt3-type-badge.mt3-lib{border-color:#22C55E;background:linear-gradient(135deg,rgba(34,197,94,.08),rgba(79,142,247,.05)),var(--card);box-shadow:0 4px 20px rgba(34,197,94,.16);}
+.mt3-tag-lib{display:inline-block;font-size:9px;font-weight:900;padding:2px 6px;border-radius:8px;background:linear-gradient(135deg,#22C55E,#4F8EF7);color:#fff;margin-left:6px;letter-spacing:.06em;vertical-align:middle;}
 
 /* ---------- Canvas board — big, premium glow ---------- */
 .mt3-board{display:flex;justify-content:center;align-items:center;background:linear-gradient(135deg,rgba(124,58,237,.05),rgba(79,142,247,.05)),var(--card);border-radius:24px;padding:10px;box-shadow:0 8px 40px rgba(124,58,237,.25),0 2px 8px rgba(0,0,0,.05);border:1px solid rgba(124,58,237,.15);width:100%;box-sizing:border-box;overflow:hidden;}
