@@ -1743,10 +1743,10 @@ function playNeuralChain(body,setScore,end,wrap,startClock){
 /* ===================== QUICK MATH ===================== */
 /* Quick Math — endless survival. Modes + adaptive difficulty + combo + sudden death. */
 const QM_MODES={
-  easy:{label:'Easy',emoji:'🟢',sub:'Add / subtract',time:4000,ops:['+','-'],zen:false},
-  medium:{label:'Medium',emoji:'🟡',sub:'× and ÷ included',time:3000,ops:['+','-','×','÷'],zen:false},
-  hard:{label:'Hard',emoji:'🔴',sub:'2-step problems',time:2500,ops:['2step'],zen:false},
-  algebra:{label:'Algebra',emoji:'⚡',sub:'Solve for x',time:2000,ops:['alg'],zen:false},
+  easy:{label:'Easy',emoji:'🟢',sub:'Add / subtract',time:6000,ops:['+','-'],zen:false},
+  medium:{label:'Medium',emoji:'🟡',sub:'× and ÷ included',time:5000,ops:['+','-','×','÷'],zen:false},
+  hard:{label:'Hard',emoji:'🔴',sub:'2-step problems',time:6000,ops:['2step'],zen:false},
+  algebra:{label:'Algebra',emoji:'⚡',sub:'Solve for x',time:4500,ops:['alg'],zen:false},
   zen:{label:'Zen',emoji:'🧘',sub:'No timer, no lives',time:0,ops:['+','-','×','÷'],zen:true},
 };
 function qmDailyChallenge(){
@@ -1770,10 +1770,10 @@ function qmRank(score){
 }
 /* Adaptive number scaling based on question index (1-based). */
 function qmScale(qn){
-  if(qn<=10)return{a:9,b:9,big:12};
-  if(qn<=20)return{a:50,b:12,big:60};
-  if(qn<=30)return{a:150,b:15,big:140};
-  return{a:400,b:25,big:300};
+  if(qn<=10)return{a:15,b:8,big:10};
+  if(qn<=20)return{a:30,b:10,big:20};
+  if(qn<=30)return{a:50,b:12,big:35};
+  return{a:80,b:15,big:50};
 }
 function playMath(body,setScore,end,wrap,startClock){
   let mode='easy';
@@ -1827,22 +1827,22 @@ function playMath(body,setScore,end,wrap,startClock){
     const sc=qmScale(qn);
     const rnd=(n)=>Math.floor(Math.random()*n)+1;
     if(m.ops[0]==='alg'){
-      const a=rnd(qn<=10?5:qn<=20?9:12)+1,x=rnd(qn<=20?9:15),b=rnd(qn<=10?9:20);
+      const a=rnd(qn<=10?5:qn<=20?8:10)+1,x=rnd(qn<=20?7:12),b=rnd(qn<=10?8:15);
       return{display:`${a}x + ${b} = ${a*x+b},  x = ?`,correct:x};
     }
     if(m.ops[0]==='2step'){
-      const a=rnd(Math.min(13,sc.b)),b=rnd(Math.min(13,sc.b)),c=rnd(sc.b);
+      const a=rnd(Math.min(10,sc.b)),b=rnd(Math.min(10,sc.b)),c=rnd(sc.b);
       const add=Math.random()>0.5;
       const correct=add?a*b+c:a*b-c;
       return{display:`${a} × ${b} ${add?'+':'−'} ${c}`,correct};
     }
     const op=m.ops[Math.floor(Math.random()*m.ops.length)];
     if(op==='÷'){
-      const d=rnd(Math.min(12,sc.b))+1,q2=rnd(Math.min(12,sc.b));
+      const d=rnd(Math.min(10,sc.b))+1,q2=rnd(Math.min(10,sc.b));
       return{display:`${d*q2} ÷ ${d}`,correct:q2};
     }
     if(op==='×'){
-      const a=rnd(Math.min(sc.big,qn<=10?6:qn<=20?12:20)),b=rnd(Math.min(15,sc.b));
+      const a=rnd(Math.min(sc.big,qn<=10?5:qn<=20?10:15)),b=rnd(Math.min(12,sc.b));
       return{display:`${a} × ${b}`,correct:a*b};
     }
     if(op==='-'){
