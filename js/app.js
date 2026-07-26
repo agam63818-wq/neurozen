@@ -1712,11 +1712,19 @@ function renderProfile(){
   const gamesPlayed=S('nz_games_played');
   const np=getNeuroProfile();
   const p=$(`<div></div>`);
-  /* Build top 3 best-score games */
+  /* Build top 3 best-score games (normalized, IQ Test excluded) */
+  const GAME_MAX_SCORES={schulte:100,memory:40,pattern:120,wordflash:100,wordchain:80,math:60,stroopx:60,reactionlab:50,mindtrace:200};
   const bestRows=Object.entries(bestScores||{})
-    .map(([id,v])=>{const g=GAMES.find(x=>x.id===id);return g?{name:g.name,icon:g.icon,v:v,color:g.color}:null;})
+    .filter(([id])=>id!=='iqtest')
+    .map(([id,v])=>{
+      const g=GAMES.find(x=>x.id===id);
+      if(!g)return null;
+      const maxScore=GAME_MAX_SCORES[id]||100;
+      const normalizedScore=Math.round((v/maxScore)*100);
+      return{name:g.name,icon:g.icon,v:v,normalized:normalizedScore,color:g.color};
+    })
     .filter(Boolean)
-    .sort((a,b)=>b.v-a.v).slice(0,3);
+    .sort((a,b)=>b.normalized-a.normalized).slice(0,3);
   /* Last 3 unlocked achievements (ACH2 system, newest first) */
   const _u2p=S('nz_ach2')||{};
   const recentAch=ACH2.filter(a=>_u2p[a.id]).sort((x,y)=>_u2p[x.id]<_u2p[y.id]?1:-1).slice(0,3);
