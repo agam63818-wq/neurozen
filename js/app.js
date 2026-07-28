@@ -1713,7 +1713,7 @@ function renderProfile(){
   const np=getNeuroProfile();
   const p=$(`<div></div>`);
   /* Build top 3 best-score games (normalized, IQ Test excluded) */
-  const GAME_MAX_SCORES={schulte:100,memory:40,pattern:120,wordflash:100,wordchain:80,math:60,stroopx:60,reactionlab:50,mindtrace:200};
+  const GAME_MAX_SCORES={schulte:100,memory:40,pattern:120,wordflash:100,wordchain:80,math:60,stroopx:60,reactionlab:50,mindtrace:350};
   const bestRows=Object.entries(bestScores||{})
     .filter(([id])=>id!=='iqtest')
     .map(([id,v])=>{
