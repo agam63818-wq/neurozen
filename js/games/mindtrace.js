@@ -884,29 +884,29 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
   }
 
   function comboTier(c) {
-    if (c >= 20) return { name:'Neuro Genius',   color:'#8B5CF6', mult:2.0 };
-    if (c >= 10) return { name:'Master Planner', color:'#F472B6', mult:1.6 };
-    if (c >= 5)  return { name:'Brain Flow',     color:'#F59E0B', mult:1.35};
-    if (c >= 3)  return { name:'Focus Combo',    color:'#22C55E', mult:1.15};
+    if (c >= 20) return { name:'Neuro Genius',   color:'#8B5CF6', mult:1.6 };
+    if (c >= 10) return { name:'Master Planner', color:'#F472B6', mult:1.4 };
+    if (c >= 5)  return { name:'Brain Flow',     color:'#F59E0B', mult:1.25};
+    if (c >= 3)  return { name:'Focus Combo',    color:'#22C55E', mult:1.1 };
     return { name:'', color:'#94A3B8', mult:1.0 };
   }
 
   function scoreBreakdown(diff, drawMs, planMs) {
-    const base = 10;
-    const diffBonus = (diff-1) * 4;                         // 0,4,8,12,16
+    const base = 3;
+    const diffBonus = Math.round((diff-1) * 1.5);           // 0,2,3,5,6
     // Planning bonus: reward players who paused before drawing
     // Full bonus at ≥ 1.5s planning, none at 0s
     const planSec = planMs/1000;
-    const planBonus = Math.round(Math.max(0, Math.min(6, planSec*4)));
+    const planBonus = Math.round(Math.max(0, Math.min(2, planSec*1.3)));
     // Fast solve — but capped so speed doesn't dominate over planning
     const drawSec = drawMs/1000;
-    const speedBonus = Math.round(Math.max(0, Math.min(5, 5 - drawSec*0.6)));
+    const speedBonus = Math.round(Math.max(0, Math.min(2, 2 - drawSec*0.25)));
     // Perfect route (no reset, no wrong edge this puzzle)
     const perfect = !G.hasErrorThisPuzzle;
-    const perfectBonus = perfect ? 5 : 0;
+    const perfectBonus = perfect ? 2 : 0;
     // Special puzzle bonus
     const specialBonus = ({
-      speed:8, fade:6, precision:6, genius:10, master:12, normal:0,
+      speed:3, fade:2, precision:2, genius:4, master:5, normal:0,
     })[G.type] || 0;
 
     // Combo multiplier applies to the sum
@@ -1292,7 +1292,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
 
     end({
       value: G.score,
-      points: G.score >= 200 ? 13 : G.score >= 100 ? 11 : G.score >= 40 ? 8 : 5,
+      points: G.score >= 100 ? 13 : G.score >= 55 ? 11 : G.score >= 22 ? 8 : 5,
       starThresh: [30, 70, 120],
       summary: statsHtml
     });
