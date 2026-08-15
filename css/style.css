@@ -1730,11 +1730,25 @@ body.dark .iq-speed-badge{background:#451A03;color:#FCD34D;border-color:#92400E;
 .mt3-board{display:flex;justify-content:center;align-items:center;background:linear-gradient(135deg,rgba(124,58,237,.05),rgba(79,142,247,.05)),var(--card);border-radius:24px;padding:10px;box-shadow:0 8px 40px rgba(124,58,237,.25),0 2px 8px rgba(0,0,0,.05);border:1px solid rgba(124,58,237,.15);width:100%;box-sizing:border-box;overflow:hidden;}
 [data-theme="dark"] .mt3-board{background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(79,142,247,.08)),var(--card);}
 
-/* ---------- Reset button ---------- */
-.mt3-foot{width:100%;display:flex;justify-content:center;margin-top:2px;}
-.mt3-reset-btn{padding:9px 26px;border-radius:12px;background:var(--card);border:1.5px solid var(--border);font-size:13px;font-weight:700;cursor:pointer;color:var(--text2);transition:all .2s;font-family:inherit;}
+/* ---------- Action bar (undo / restart / hint) ---------- */
+.mt3-foot{width:100%;display:flex;justify-content:center;gap:8px;margin-top:2px;}
+.mt3-reset-btn{flex:1;min-width:0;padding:10px 8px;border-radius:12px;background:var(--card);border:1.5px solid var(--border);font-size:13px;font-weight:700;cursor:pointer;color:var(--text2);transition:all .18s;font-family:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mt3-reset-btn:active{transform:scale(.96);background:var(--border);}
 .mt3-reset-btn:hover{color:var(--text);border-color:var(--primary);}
+.mt3-reset-btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+.mt3-undo-btn{border-color:rgba(167,139,250,.5);color:#8B5CF6;}
+.mt3-undo-btn:hover{background:rgba(139,92,246,.08);}
+.mt3-hint-btn{border-color:rgba(245,158,11,.55);color:#D97706;}
+.mt3-hint-btn:hover{background:rgba(245,158,11,.1);border-color:#F59E0B;color:#B45309;}
+[data-theme="dark"] .mt3-hint-btn{color:#FBBF24;}
+[data-theme="dark"] .mt3-undo-btn{color:#A78BFA;}
+.mt3-diff{letter-spacing:1px;color:var(--primary);}
+
+/* Contextual coaching line under the board */
+.mt3-tip{width:100%;text-align:center;font-size:11.5px;font-weight:600;color:var(--text2);line-height:1.45;padding:2px 6px;min-height:16px;}
+
+/* End-screen coaching advice */
+.mt3-eo-advice{margin-top:10px;padding:10px 12px;border-radius:12px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.2);font-size:12.5px;line-height:1.5;color:var(--text);font-weight:600;}
 
 /* ---------- Score popups ---------- */
 .mt3-pop{position:fixed;top:36%;left:50%;transform:translateX(-50%);font-size:20px;font-weight:900;padding:10px 26px;border-radius:50px;border:2px solid;z-index:300;pointer-events:none;animation:mt3FlyUp .9s cubic-bezier(.2,.9,.3,1.2) forwards;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
@@ -1774,7 +1788,9 @@ body.dark .iq-speed-badge{background:#451A03;color:#FCD34D;border-color:#92400E;
 /* Rules — simple three-liners */
 .mt3-rules{display:flex;flex-direction:column;gap:6px;width:100%;}
 .mt3-rule{display:flex;align-items:center;gap:12px;font-size:13px;background:var(--card);padding:10px 14px;border-radius:12px;border:1px solid var(--border);color:var(--text);font-weight:600;}
-.mt3-rule span:first-child{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#22C55E,#4ADE80);color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;box-shadow:0 2px 8px rgba(34,197,94,.35);}
+.mt3-rule span:first-child{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#7C3AED,#A78BFA);color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;box-shadow:0 2px 8px rgba(124,58,237,.35);}
+.mt3-rule:first-child span:first-child{background:linear-gradient(135deg,#22C55E,#4ADE80);box-shadow:0 2px 8px rgba(34,197,94,.35);}
+.mt3-rule:nth-child(3) span:first-child{background:linear-gradient(135deg,#F59E0B,#FBBF24);box-shadow:0 2px 8px rgba(245,158,11,.35);}
 
 /* Start button */
 .mt3-start-btn{width:100%;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:10px;font-size:16px;font-weight:800;letter-spacing:.02em;padding:16px;border-radius:16px;}

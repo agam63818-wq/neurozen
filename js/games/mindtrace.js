@@ -26,6 +26,11 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     nodeR           : 13,          // base node radius
     snap            : 42,          // touch snap radius
     padPct          : 10,          // % of board reserved as padding
+    minNodeGap      : 15,          // min distance between 2 nodes (% units)
+    freeLifts       : 1,           // lifts allowed per puzzle before a life is lost
+    hintsPerRun     : 3,           // hints available in one run
+    deadEndPenalty  : 3,           // seconds removed when a dead end is auto-reset
+    assistRounds    : 5,           // rounds where route-breaking moves are blocked
     // Difficulty scaling by round
     diffCap         : (r) => r <= 5  ? 1
                             : r <= 10 ? 2
@@ -142,6 +147,78 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     if (!isConnected(edges, nCount)) return false;
     const odd = oddNodes(edges, nCount).length;
     return odd === 0 || odd === 2;
+  }
+
+  /* =================================================================
+     LIVE SOLVER — used for fair-play assists
+     -----------------------------------------------------------------
+     Everything below works on the *remaining* (untraced) sub-graph so
+     the game can answer three questions at any moment:
+       1. Which nodes are legal starting points?
+       2. Does the move I'm about to make trap me in a dead end?
+       3. Which edge should a hint reveal?
+     ================================================================= */
+
+  // Untraced edges left in the current puzzle
+  function remainingEdges(tracedSet) {
+    if (!G.puzzle) return [];
+    return G.puzzle.edges.filter(([a,b]) => !tracedSet.has(ek(a,b)));
+  }
+
+  // Can an Euler path over `edgesLeft` be walked starting at `start`?
+  function canCompleteFrom(start, edgesLeft) {
+    if (!edgesLeft.length) return true;                 // already solved
+    const deg = {};
+    const adj = {};
+    edgesLeft.forEach(([a,b]) => {
+      deg[a] = (deg[a]||0)+1; deg[b] = (deg[b]||0)+1;
+      (adj[a] = adj[a] || []).push(b);
+      (adj[b] = adj[b] || []).push(a);
+    });
+    if (!deg[start]) return false;                      // start is isolated
+    // every edge must sit in one connected component that contains start
+    const seen = new Set([start]);
+    const q = [start];
+    while (q.length) {
+      const u = q.shift();
+      for (const v of (adj[u]||[])) if (!seen.has(v)) { seen.add(v); q.push(v); }
+    }
+    for (const k in deg) if (!seen.has(+k)) return false;
+    // degree parity: 0 odd -> circuit (start anywhere), 2 odd -> start on an odd node
+    const odd = Object.keys(deg).filter(k => deg[k] % 2 !== 0).map(Number);
+    if (odd.length === 0) return true;
+    if (odd.length === 2) return odd.indexOf(start) !== -1;
+    return false;
+  }
+
+  // All nodes the player is allowed to begin the stroke from
+  function validStartNodes() {
+    if (!G.puzzle) return [];
+    const all = G.puzzle.edges;
+    const out = [];
+    for (let i=0;i<G.puzzle.nCount;i++)
+      if (canCompleteFrom(i, all)) out.push(i);
+    return out;
+  }
+
+  // Would walking current -> next leave the puzzle unsolvable?
+  function moveWouldTrap(from, to) {
+    const key = ek(from,to);
+    const left = remainingEdges(G.tracedEdges).filter(([a,b]) => ek(a,b) !== key);
+    return !canCompleteFrom(to, left);
+  }
+
+  // Next safe edge from the current node (used by the hint button)
+  function bestNextNode(from) {
+    if (!G.puzzle) return -1;
+    const left = remainingEdges(G.tracedEdges);
+    const nbrs = [];
+    left.forEach(([a,b]) => {
+      if (a === from) nbrs.push(b);
+      else if (b === from) nbrs.push(a);
+    });
+    for (const n of nbrs) if (!moveWouldTrap(from, n)) return n;
+    return nbrs.length ? nbrs[0] : -1;
   }
 
   // Generate a random unique graph.  We build it by:
@@ -302,12 +379,124 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     return { nodes, edges, nCount };
   }
 
+  /* Playability filter -------------------------------------------------
+     Two things make a generated graph feel "broken" on a touch screen:
+       a) two nodes sitting so close that the snap radius can't tell them
+          apart, and
+       b) an edge passing right over an unrelated node, so dragging along
+          that edge accidentally snaps to the wrong node.
+     Both are rejected here so the player only ever sees clean boards. */
+  function isPlayable(g) {
+    const { nodes, edges } = g;
+    const minGap = CFG.minNodeGap;
+    for (let i=0;i<nodes.length;i++) {
+      for (let j=i+1;j<nodes.length;j++) {
+        const d = Math.hypot(nodes[i][0]-nodes[j][0], nodes[i][1]-nodes[j][1]);
+        if (d < minGap) return false;
+      }
+    }
+    // Point-to-segment distance for every (node, non-incident edge) pair
+    for (const [a,b] of edges) {
+      const [x1,y1] = nodes[a], [x2,y2] = nodes[b];
+      const dx = x2-x1, dy = y2-y1;
+      const len2 = dx*dx + dy*dy;
+      for (let i=0;i<nodes.length;i++) {
+        if (i===a || i===b) continue;
+        const [px,py] = nodes[i];
+        let t = len2 ? ((px-x1)*dx + (py-y1)*dy) / len2 : 0;
+        t = Math.max(0, Math.min(1, t));
+        const d = Math.hypot(px - (x1+dx*t), py - (y1+dy*t));
+        if (d < minGap*0.62) return false;
+      }
+    }
+    return true;
+  }
+
+  /* Layout relaxation — physically pushes cramped nodes apart instead of
+     throwing the whole puzzle away. Node–node pairs repel each other and
+     nodes sitting on top of an unrelated edge get pushed off it. A few
+     dozen cheap iterations turn almost any raw graph into a clean board. */
+  function relaxLayout(g) {
+    const nodes = g.nodes.map(([x,y]) => [x,y]);
+    const edges = g.edges;
+    const minGap = CFG.minNodeGap;
+    const edgeGap = minGap * 0.62;
+
+    for (let iter=0; iter<70; iter++) {
+      let moved = false;
+
+      // 1) node <-> node repulsion
+      for (let i=0;i<nodes.length;i++) {
+        for (let j=i+1;j<nodes.length;j++) {
+          let dx = nodes[j][0]-nodes[i][0];
+          let dy = nodes[j][1]-nodes[i][1];
+          let d = Math.hypot(dx,dy);
+          if (d >= minGap) continue;
+          if (d < 0.001) { dx = 1; dy = 0; d = 1; }   // exact overlap
+          const push = (minGap - d) / 2 + 0.15;
+          const ux = dx/d, uy = dy/d;
+          nodes[i][0] -= ux*push; nodes[i][1] -= uy*push;
+          nodes[j][0] += ux*push; nodes[j][1] += uy*push;
+          moved = true;
+        }
+      }
+
+      // 2) node <-> non-incident edge repulsion
+      for (const [a,b] of edges) {
+        const [x1,y1] = nodes[a], [x2,y2] = nodes[b];
+        const ex = x2-x1, ey = y2-y1;
+        const len2 = ex*ex + ey*ey;
+        if (len2 < 0.001) continue;
+        for (let i=0;i<nodes.length;i++) {
+          if (i===a || i===b) continue;
+          const [px,py] = nodes[i];
+          let t = ((px-x1)*ex + (py-y1)*ey) / len2;
+          t = Math.max(0, Math.min(1, t));
+          const cx = x1 + ex*t, cy = y1 + ey*t;
+          let dx = px-cx, dy = py-cy;
+          let d = Math.hypot(dx,dy);
+          if (d >= edgeGap) continue;
+          if (d < 0.001) { dx = -ey; dy = ex; d = Math.hypot(dx,dy) || 1; }
+          const push = (edgeGap - d) + 0.15;
+          const ux = dx/d, uy = dy/d;
+          nodes[i][0] += ux*push*0.7; nodes[i][1] += uy*push*0.7;
+          // nudge the edge's endpoints slightly the other way
+          nodes[a][0] -= ux*push*0.15; nodes[a][1] -= uy*push*0.15;
+          nodes[b][0] -= ux*push*0.15; nodes[b][1] -= uy*push*0.15;
+          moved = true;
+        }
+      }
+
+      if (!moved) break;
+    }
+
+    // Re-fit the relaxed cloud back into the visible 8..92 window
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for (const [x,y] of nodes) {
+      if (x<minX)minX=x; if (y<minY)minY=y;
+      if (x>maxX)maxX=x; if (y>maxY)maxY=y;
+    }
+    const w = maxX-minX || 1, h = maxY-minY || 1;
+    const span = 84;
+    const s = Math.min(span/w, span/h, 1.25);
+    const out = nodes.map(([x,y]) => [
+      +Math.max(8, Math.min(92, 50 + (x-(minX+w/2))*s)).toFixed(1),
+      +Math.max(8, Math.min(92, 50 + (y-(minY+h/2))*s)).toFixed(1),
+    ]);
+    return { ...g, nodes: out };
+  }
+
   // Try up to N seeds until a valid graph pops out
   function makePuzzle(diff, roundSeed) {
-    for (let i=0;i<20;i++) {
-      const g = generateGraph(diff, roundSeed + i*7919);
-      if (g) return { ...g, diff };
+    let fallback = null;
+    for (let i=0;i<24;i++) {
+      let g = generateGraph(diff, roundSeed + i*7919);
+      if (!g) continue;
+      if (!isPlayable(g)) g = relaxLayout(g);     // try to fix it up
+      if (isPlayable(g)) return { ...g, diff };
+      if (!fallback) fallback = g;
     }
+    if (fallback) return { ...fallback, diff };
     // Absolute fallback — a triangle
     return {
       nodes: [[50,15],[15,85],[85,85]],
@@ -373,6 +562,16 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     recentCats:[],           // rolling window of last N category indices
     puzzleSource:'random',   // 'random' | 'library'
     libraryPuzzles:0,        // count of library puzzles solved this session
+    // fair-play / assist state
+    startNodes:[],           // nodes a valid one-stroke route can begin from
+    liftsThisPuzzle:0,       // lifts used on the current puzzle
+    hintsLeft:CFG.hintsPerRun,
+    hintEdge:null,           // {from,to,until} highlighted hint edge
+    hintsUsed:0,
+    undosUsed:0,
+    deadEnds:0,              // times the player got stuck
+    blockedMoves:0,          // route-breaking moves prevented in assist rounds
+    lastRemaining:0,         // untraced edge count (for the progress ring)
   };
   const CAT_WINDOW = 5;      // avoid the last 5 library categories
 
@@ -422,10 +621,20 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     return G.puzzle.edges.some(([ea,eb]) =>
       (ea===a&&eb===b)||(ea===b&&eb===a));
   }
+  /* Show the "lines left" number inside nodes during the planning phase
+     (and while idle in play) — this is the core planning aid. Fade
+     puzzles hide it, and it never shows mid-drag so it can't clutter. */
+  function showDegrees() {
+    if (G.type === 'fade') return false;
+    if (G.phase === 'plan' || G.phase === 'intro') return true;
+    return G.phase === 'play' && !G.drawing;
+  }
+
   function setHintNodes() {
-    const odd = oddNodes(G.puzzle.edges, G.puzzle.nCount);
-    G.hintNodes = odd.length === 2 ? odd
-      : G.puzzle.nodes.map((_,i)=>i);
+    // Only nodes that can actually start a full one-stroke route glow.
+    const valid = validStartNodes();
+    G.startNodes = valid.length ? valid : G.puzzle.nodes.map((_,i)=>i);
+    G.hintNodes = G.startNodes.slice();
   }
 
   /* =================================================================
@@ -493,6 +702,13 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     ctx.fillStyle = bgGrad;
     roundRect(0,0,CW,CH,22); ctx.fill();
 
+    // Subtle vignette so the graph pops off the board
+    const vig = ctx.createRadialGradient(CW/2,CH/2,CW*0.25, CW/2,CH/2,CW*0.72);
+    vig.addColorStop(0,'rgba(124,58,237,0.10)');
+    vig.addColorStop(1,'rgba(0,0,0,0.30)');
+    ctx.fillStyle = vig;
+    roundRect(0,0,CW,CH,22); ctx.fill();
+
     // Gradient border glow
     ctx.save();
     ctx.strokeStyle = 'rgba(139,92,246,0.35)';
@@ -532,6 +748,20 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       ctx.restore();
     }
 
+    // === EDGE PROGRESS COUNTER ===
+    // Tells the player exactly how much of the shape is left — removes
+    // the "am I nearly done?" guesswork on big graphs.
+    if (G.puzzle && (G.phase==='play' || G.phase==='plan' || G.phase==='success')) {
+      const total = G.puzzle.edges.length;
+      const done  = G.tracedEdges.size;
+      ctx.save();
+      ctx.font = 'bold 11px system-ui';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = done === total ? '#4ADE80' : 'rgba(196,181,253,0.85)';
+      ctx.fillText(done + '/' + total + ' lines', CW-14, 34);
+      ctx.restore();
+    }
+
     const now = Date.now();
     const p = G.puzzle;
     const isSuccess = G.phase==='success';
@@ -565,6 +795,16 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
         ctx.shadowBlur = 12;
         ctx.strokeStyle = '#4ADE80';
         ctx.lineWidth = 4.8;
+      } else if (G.hintEdge && now < G.hintEdge.until &&
+                 ek(G.hintEdge.from, G.hintEdge.to) === key) {
+        // Hinted edge — bright amber dashes so it reads instantly
+        const p2 = 0.6 + 0.4*Math.sin(now*0.012);
+        ctx.shadowColor = '#F59E0B';
+        ctx.shadowBlur = 20*p2;
+        ctx.strokeStyle = '#FBBF24';
+        ctx.lineWidth = 5;
+        ctx.setLineDash([9,7]);
+        ctx.lineDashOffset = -(now*0.05) % 16;
       } else {
         const glow = 0.35 + 0.15*Math.sin(now*0.0018 + eIdx*1.7);
         ctx.shadowColor = '#7C3AED';
@@ -580,16 +820,61 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       ctx.restore();
     });
 
+    // === RUBBER-BAND PREVIEW LINE ===
+    // While dragging, show a live line from the current node to the
+    // finger so the player always sees where the stroke is heading.
+    if (G.drawing && G.currentNode >= 0 && lastPX !== null && G.phase === 'play') {
+      const [cxp, cyp] = nodePos(G.currentNode);
+      // Preview turns green as soon as the finger is aligned with a real
+      // untraced edge (same corridor test the tracer uses).
+      const target = previewTarget(lastPX, lastPY, activeSnap());
+      const legal = target >= 0 && target !== G.currentNode &&
+                    !G.tracedEdges.has(ek(G.currentNode, target));
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.setLineDash([6,6]);
+      ctx.lineDashOffset = -(now*0.03) % 12;
+      ctx.strokeStyle = legal ? 'rgba(74,222,128,0.9)' : 'rgba(196,181,253,0.55)';
+      ctx.shadowColor = legal ? '#22C55E' : '#8B5CF6';
+      ctx.shadowBlur = legal ? 12 : 6;
+      ctx.lineWidth = legal ? 3.4 : 2.2;
+      ctx.beginPath();
+      ctx.moveTo(cxp, cyp);
+      ctx.lineTo(lastPX, lastPY);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // === NODES ===
+    // Degree label helper — shows how many untraced lines a node still has
+    const degLeft = {};
+    if (G.phase==='play' || G.phase==='plan') {
+      p.edges.forEach(([a,b]) => {
+        if (G.tracedEdges.has(ek(a,b))) return;
+        degLeft[a] = (degLeft[a]||0)+1;
+        degLeft[b] = (degLeft[b]||0)+1;
+      });
+    }
+
     p.nodes.forEach((n,i) => {
       const [x,y] = nodePos(i);
       const isCur = i===G.currentNode;
       const isSt  = i===G.startNode && G.startNode>=0;
       const isHint = G.hintNodes.includes(i) && !G.drawing && G.startNode<0 && G.phase==='play';
       const isPlanGlow = isPlan && G.hintNodes.includes(i);
+      // A node the player cannot legally start from is dimmed before the
+      // first touch — no more "wasted" runs from an impossible node.
+      const isDeadStart = G.startNode < 0 && (G.phase==='play'||isPlan) &&
+                          G.startNodes.length > 0 &&
+                          G.startNodes.length < p.nodes.length &&
+                          G.startNodes.indexOf(i) === -1;
 
       ctx.save();
       let fill, shadow, r=CFG.nodeR;
+
+      if (isDeadStart && !isSuccess) {
+        ctx.globalAlpha = 0.5;
+      }
 
       if (isSuccess) {
         const p2 = 0.7+0.3*Math.sin(now*0.007 + i*1.2);
@@ -622,6 +907,17 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
         ctx.beginPath();
         ctx.arc(x,y,4.2,0,Math.PI*2);
         ctx.fill();
+      }
+
+      // Remaining-lines counter inside each node (planning aid)
+      if (!isCur && !isSuccess && showDegrees() && degLeft[i] > 0) {
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = 'rgba(20,6,45,0.92)';
+        ctx.font = 'bold 11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(degLeft[i]), x, y+0.5);
       }
       ctx.restore();
     });
@@ -717,49 +1013,245 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
      ================================================================= */
   let lastPX = null, lastPY = null;
 
+  function activeSnap() {
+    return G.type==='precision' ? CFG.snap*0.62 : CFG.snap;
+  }
+
   function getXY(e) {
     const rect = canvas.getBoundingClientRect();
     const src = e.touches ? e.touches[0] : e;
     return [src.clientX - rect.left, src.clientY - rect.top];
   }
 
-  // Attempt to visit the node nearest to (px,py). Returns false when the
+  /* Backtrack: dragging back onto the previous node un-draws that edge.
+     This is the single biggest quality-of-life win — a mis-step no
+     longer means restarting the whole puzzle. */
+  function tryBacktrack(ni) {
+    if (G.path.length < 2) return false;
+    if (ni !== G.path[G.path.length-2]) return false;
+    const last = G.path.pop();
+    const key = ek(last, ni);
+    G.tracedEdges.delete(key);
+    G.currentNode = ni;
+    G.undosUsed++;
+    const [nx,ny] = nodePos(ni);
+    spawnParticles(nx, ny, '#C4B5FD', 5, {speed:[0.8,2], life:0.35, r:1.4, rjit:1.2, lift:0.4});
+    if (typeof haptic === 'function') haptic(8);
+    return true;
+  }
+
+  /* -----------------------------------------------------------------
+     EDGE-CORRIDOR TRACING
+     -----------------------------------------------------------------
+     Plain "snap to the nearest node" breaks whenever an unrelated node
+     sits near the line you're drawing along: the finger enters that
+     node's snap circle before reaching the real target and the stroke
+     jumps sideways.
+
+     Instead we track which EDGE the finger is travelling along. For
+     every candidate edge leaving the current node we measure how far
+     the finger has progressed (t) and how far it strays from the line
+     (perp). The best-aligned edge wins, and it only commits once the
+     finger is genuinely near the far end. Bystander nodes are ignored
+     because the finger is never aligned with an edge that leads to
+     them.
+     ----------------------------------------------------------------- */
+  function pickTarget(px, py, snap) {
+    const cur = G.currentNode;
+    if (cur < 0) return -1;
+    const [cx, cy] = nodePos(cur);
+
+    // Undo is checked first and needs the finger to physically come back
+    // to the previous node — never just "point roughly that way", which
+    // would cancel lines whenever a bystander node sits along the route.
+    const prevNode = G.path.length >= 2 ? G.path[G.path.length-2] : -1;
+    if (prevNode >= 0) {
+      const [pxn, pyn] = nodePos(prevNode);
+      if (Math.hypot(px - pxn, py - pyn) <= CFG.nodeR * 1.5) return prevNode;
+    }
+
+    // Forward candidates: untraced neighbours of the current node
+    const cands = [];
+    G.puzzle.edges.forEach(([a,b]) => {
+      const other = a === cur ? b : (b === cur ? a : -1);
+      if (other < 0) return;
+      if (!G.tracedEdges.has(ek(cur, other))) cands.push(other);
+    });
+    if (!cands.length) return -1;
+
+    /* Score every candidate edge by how well the finger is aligned with
+       it, then commit only the BEST-ALIGNED one. Picking "the first
+       committed candidate" instead would let a short edge steal the
+       stroke while the finger is obviously heading down a longer,
+       near-parallel edge. */
+    let best = -1, bestPerp = Infinity, bestCommitted = false;
+    for (const n of cands) {
+      const [nx, ny] = nodePos(n);
+      const vx = nx - cx, vy = ny - cy;
+      const len2 = vx*vx + vy*vy;
+      if (len2 < 1) continue;
+      const len = Math.sqrt(len2);
+      let t = ((px-cx)*vx + (py-cy)*vy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const perp = Math.hypot(px - (cx + vx*t), py - (cy + vy*t));
+
+      // Must stay inside a corridor around the line
+      if (perp > Math.min(snap, len * 0.5)) continue;
+
+      // Commit when most of the way there, or right on top of the node
+      const distToNode = Math.hypot(px - nx, py - ny);
+      const committed = t >= 0.72 || distToNode <= Math.min(snap, len*0.45);
+
+      if (perp < bestPerp) { bestPerp = perp; best = n; bestCommitted = committed; }
+    }
+    // The winner still has to be far enough along before it locks in.
+    return bestCommitted ? best : -1;
+  }
+
+  /* Same corridor test as pickTarget but without the commit threshold —
+     used only to colour the rubber-band preview line. */
+  function previewTarget(px, py, snap) {
+    const cur = G.currentNode;
+    if (cur < 0 || !G.puzzle) return -1;
+    const [cx, cy] = nodePos(cur);
+    let best = -1, bestPerp = Infinity;
+    G.puzzle.edges.forEach(([a,b]) => {
+      const other = a === cur ? b : (b === cur ? a : -1);
+      if (other < 0) return;
+      if (G.tracedEdges.has(ek(cur, other))) return;
+      const [nx, ny] = nodePos(other);
+      const vx = nx-cx, vy = ny-cy;
+      const len2 = vx*vx + vy*vy;
+      if (len2 < 1) return;
+      let t = ((px-cx)*vx + (py-cy)*vy) / len2;
+      if (t < 0.12) return;                     // finger hasn't set off yet
+      t = Math.min(1, t);
+      const perp = Math.hypot(px - (cx+vx*t), py - (cy+vy*t));
+      if (perp > Math.min(snap, Math.sqrt(len2)*0.5)) return;
+      if (perp < bestPerp) { bestPerp = perp; best = other; }
+    });
+    return best;
+  }
+
+  // Attempt to advance the stroke toward (px,py). Returns false when the
   // puzzle completes or the phase changes (stops further interpolation).
   function tryVisit(px, py, snap) {
-    const ni = nearestNode(px, py, snap);
+    const ni = pickTarget(px, py, snap);
     if (ni === -1 || ni === G.currentNode) return true;
 
     const prev = G.currentNode;
-    if (!edgeExists(prev, ni)) { G.failAlpha = 0.7; return true; }
+
+    // 1) Retracing the last edge = undo, not an error
+    if (tryBacktrack(ni)) return true;
+
+    // 2) No line between these nodes / line already used -> soft reject
+    if (!edgeExists(prev, ni)) { softReject(prev); return true; }
     const key = ek(prev, ni);
-    if (G.tracedEdges.has(key)) { G.failAlpha = 0.7; return true; }
+    if (G.tracedEdges.has(key)) { softReject(prev); return true; }
+
+    // 3) Early-round assist: block moves that make the puzzle unsolvable
+    if (G.round <= CFG.assistRounds && G.type === 'normal' && moveWouldTrap(prev, ni)) {
+      G.blockedMoves++;
+      G.failAlpha = 0.45;
+      const [bx,by] = nodePos(ni);
+      spawnParticles(bx, by, '#F59E0B', 5, {speed:[1,2.4], life:0.4, r:1.6, rjit:1.2, lift:0.5});
+      showPop('⚠ That route dead-ends', '#F59E0B', 800);
+      if (typeof haptic === 'function') haptic(25);
+      return true;
+    }
 
     G.tracedEdges.add(key);
     G.path.push(ni);
     G.currentNode = ni;
     G.visitedNodes.add(ni);
+    G.hintEdge = null;
 
     // small node-hit sparkle
     const [nx, ny] = nodePos(ni);
     spawnParticles(nx, ny, '#A7F3D0', 4, {speed:[1,2.5], life:0.4, r:1.5, rjit:1.5, lift:0.6});
     if (typeof haptic === 'function') haptic(10);
+    if (typeof playSound === 'function' && G.tracedEdges.size % 2 === 0) playSound('tap');
 
     checkCompletion();
+    if (G.phase !== 'play') return false;
+
+    // 4) Genuine dead end (all neighbours used) but edges still left
+    checkDeadEnd();
     return G.phase === 'play';
+  }
+
+  // Gentle "nope" feedback — no life lost, just a nudge
+  let lastRejectTs = 0;
+  function softReject(atNode) {
+    const now = Date.now();
+    if (now - lastRejectTs < 260) return;
+    lastRejectTs = now;
+    G.failAlpha = 0.35;
+    if (atNode >= 0) {
+      const [x,y] = nodePos(atNode);
+      spawnParticles(x, y, '#F87171', 3, {speed:[0.8,2], life:0.3, r:1.3, rjit:1, lift:0.4});
+    }
+    if (typeof haptic === 'function') haptic(18);
+  }
+
+  /* If the current node has no untraced edges left but the puzzle isn't
+     finished, the player is stuck. Instead of making them wait for the
+     timer, tell them immediately and rewind to the last safe branch. */
+  function checkDeadEnd() {
+    if (G.phase !== 'play') return;
+    const left = remainingEdges(G.tracedEdges);
+    if (!left.length) return;
+    const hasMove = left.some(([a,b]) => a === G.currentNode || b === G.currentNode);
+    if (hasMove) return;
+
+    G.deadEnds++;
+    G.drawing = false;
+    G.hasErrorThisPuzzle = true;
+    G.failAlpha = 0.8;
+    G.timeLeft = Math.max(1, G.timeLeft - CFG.deadEndPenalty);
+    G.deadline = Date.now() + G.timeLeft * 1000;
+    if (typeof haptic === 'function') haptic([30,20,30]);
+    if (typeof playSound === 'function') playSound('wrong');
+    showPop('🚧 Dead end — retry (-' + CFG.deadEndPenalty + 's)', '#F59E0B', 1000);
+    safeTimeout(() => { if (G.phase === 'play') resetDraw(false); }, 420);
   }
 
   function onDown(e) {
     if (e.cancelable) e.preventDefault();
+    // Tapping during the planning window starts the round early —
+    // confident players shouldn't have to wait for the countdown.
+    if (G.phase === 'plan') { beginPlay(); return; }
     if (G.phase!=='play') return;
     // Capture the pointer so tracing keeps working even when the finger
     // briefly leaves the canvas — no more accidental "lifted" fails.
     if (canvas.setPointerCapture && e.pointerId !== undefined) {
       try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
     }
-    const snap = G.type==='precision' ? CFG.snap*0.55 : CFG.snap;
+    const snap = activeSnap();
     const [px,py] = getXY(e);
+    lastPX = px; lastPY = py;
     const ni = nearestNode(px,py, snap);
     if (ni === -1) return;
+
+    // Resuming a partially drawn stroke: you must grab the node you left
+    // off at (the stroke stays on screen after a lift).
+    if (G.tracedEdges.size > 0) {
+      if (ni !== G.currentNode) {
+        softReject(G.currentNode);
+        showPop('Resume from the glowing node', '#F59E0B', 800);
+        return;
+      }
+      G.drawing = true;
+      return;
+    }
+
+    // Fresh stroke — reject provably impossible starting nodes
+    if (G.startNodes.length && G.startNodes.indexOf(ni) === -1) {
+      softReject(ni);
+      showPop('✗ Can\'t finish from there', '#F59E0B', 900);
+      return;
+    }
+
     G.drawing = true;
     G.drawStart = Date.now();
     G.path = [ni];
@@ -767,14 +1259,13 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     G.currentNode = ni;
     G.visitedNodes = new Set([ni]);
     G.hintNodes = [];
-    lastPX = px; lastPY = py;
   }
 
   function onMove(e) {
     if (e.cancelable) e.preventDefault();
-    if (!G.drawing || G.phase!=='play') return;
-    const snap = G.type==='precision' ? CFG.snap*0.55 : CFG.snap;
     const [px,py] = getXY(e);
+    if (!G.drawing || G.phase!=='play') { lastPX = px; lastPY = py; return; }
+    const snap = activeSnap();
 
     // trail particles
     if (Math.random() < 0.35) trailParticle(px,py);
@@ -788,6 +1279,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     for (let s = 1; s <= steps; s++) {
       const ix = fromX + (px - fromX) * s / steps;
       const iy = fromY + (py - fromY) * s / steps;
+      lastPX = ix; lastPY = iy;
       if (!tryVisit(ix, iy, snap)) break;
     }
     lastPX = px; lastPY = py;
@@ -795,16 +1287,28 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
 
   function onUp(e) {
     if (e && e.cancelable) e.preventDefault();
-    lastPX = lastPY = null;
     if (!G.drawing || G.phase!=='play') return;
     G.drawing = false;
 
-    if (G.tracedEdges.size > 0) {
-      const done = G.puzzle.edges.every(([a,b]) => G.tracedEdges.has(ek(a,b)));
-      if (!done) handleWrong('Lifted too early!');
-    } else {
+    if (G.tracedEdges.size === 0) {
       // Nothing traced yet — allow a fresh start without penalty
       resetDraw(false);
+      return;
+    }
+
+    const done = G.puzzle.edges.every(([a,b]) => G.tracedEdges.has(ek(a,b)));
+    if (done) return;
+
+    // Lift handling: first lift per puzzle is a free warning, the stroke
+    // is kept and can be resumed from the current node. Further lifts
+    // cost a life (the one-stroke rule still matters).
+    G.liftsThisPuzzle++;
+    if (G.liftsThisPuzzle <= CFG.freeLifts) {
+      G.hasErrorThisPuzzle = true;
+      showPop('✋ Keep holding! Resume from the glowing node', '#F59E0B', 1100);
+      if (typeof haptic === 'function') haptic(30);
+    } else {
+      handleWrong('Lifted too early!');
     }
   }
 
@@ -849,30 +1353,49 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     }
     else G.totalTime = CFG.puzzleTime(diff);
 
+    // Library shapes with many edges deserve proportionally more time
+    const edgeCount = G.puzzle.edges.length;
+    if (edgeCount > 10) G.totalTime += (edgeCount - 10) * 1.6;
+
     // Planning phase — draws disabled until timer starts
     const planMs = CFG.planTime(diff) * 1000;
     G.timeLeft = G.totalTime;
     G.phase = 'plan';
+    setTip('👁 Plan your route — the timer starts in a moment');
     showPop('👁 Plan your route', '#F59E0B', 900);
 
     G.planTimeout = setTimeout(() => {
       G.planTimeout = null;
       if (destroyed || G.phase !== 'plan') return;
-      G.phase = 'play';
-      G.planStart = Date.now();
-      G.puzzleStart = Date.now();
-      // Timestamp-based countdown — immune to setInterval drift
-      const startTs = Date.now();
-      G.puzzleTimer = setInterval(() => {
-        if (destroyed) { stopPuzzleTimer(); return; }
-        if (G.phase !== 'play') return;
-        G.timeLeft = Math.max(0, G.totalTime - (Date.now() - startTs) / 1000);
-        if (G.timeLeft <= 0) {
-          stopPuzzleTimer();
-          handleWrong('Time up! ⏱');
-        }
-      }, 100);
+      beginPlay();
     }, planMs);
+  }
+
+  function beginPlay() {
+    if (G.planTimeout) { clearTimeout(G.planTimeout); G.planTimeout = null; }
+    G.phase = 'play';
+    setTip('Start from a glowing node · drag back to undo a line');
+    G.planStart = Date.now();
+    G.puzzleStart = Date.now();
+    // Deadline-based countdown — immune to setInterval drift, and
+    // penalties (dead ends) simply move the deadline closer.
+    G.deadline = Date.now() + G.timeLeft * 1000;
+    let lastTick = Math.ceil(G.timeLeft);
+    G.puzzleTimer = setInterval(() => {
+      if (destroyed) { stopPuzzleTimer(); return; }
+      if (G.phase !== 'play') return;
+      G.timeLeft = Math.max(0, (G.deadline - Date.now()) / 1000);
+      // Tick sound in the final 3 seconds for urgency
+      const t = Math.ceil(G.timeLeft);
+      if (t <= 3 && t !== lastTick && t > 0) {
+        lastTick = t;
+        if (typeof haptic === 'function') haptic(12);
+      }
+      if (G.timeLeft <= 0) {
+        stopPuzzleTimer();
+        handleWrong('Time up! ⏱');
+      }
+    }, 100);
   }
 
   /* =================================================================
@@ -909,13 +1432,23 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       speed:3, fade:2, precision:2, genius:4, master:5, normal:0,
     })[G.type] || 0;
 
+    // Bigger graphs are worth more — a 14-line shape shouldn't pay the
+    // same as a 6-line one at the same difficulty tier.
+    const edgeCount = G.puzzle ? G.puzzle.edges.length : 6;
+    const sizeBonus = Math.max(0, Math.round((edgeCount - 6) * 0.6));
+
     // Combo multiplier applies to the sum
     const tier = comboTier(G.combo + 1); // combo after this correct
-    const sub = base + diffBonus + planBonus + speedBonus + perfectBonus + specialBonus;
+    let sub = base + diffBonus + planBonus + speedBonus + perfectBonus +
+              specialBonus + sizeBonus;
+    // Hints trade score for help
+    const hintPenalty = G.hintUsedThisPuzzle ? Math.min(4, Math.round(sub*0.3)) : 0;
+    sub = Math.max(1, sub - hintPenalty);
     const total = Math.round(sub * tier.mult);
 
     return { base, diffBonus, planBonus, speedBonus, perfect, perfectBonus,
-             specialBonus, mult:tier.mult, tierName:tier.name, sub, total };
+             specialBonus, sizeBonus, hintPenalty,
+             mult:tier.mult, tierName:tier.name, sub, total };
   }
 
   function handleCorrect() {
@@ -995,8 +1528,42 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     G.currentNode = -1;
     G.drawing = false;
     G.failAlpha = 0;
+    G.hintEdge = null;
+    G.liftsThisPuzzle = 0;
     if (fromReset) G.hasErrorThisPuzzle = true;
     if (G.puzzle) setHintNodes();
+    updateHUD();
+  }
+
+  /* =================================================================
+     HINT — reveals one safe next move (limited per run)
+     ================================================================= */
+  function useHint() {
+    if (G.phase !== 'play' && G.phase !== 'plan') return;
+    if (G.hintsLeft <= 0) { showPop('No hints left', '#94A3B8', 800); return; }
+
+    if (G.tracedEdges.size === 0) {
+      // Not started yet — spotlight the best starting node
+      const starts = G.startNodes.length ? G.startNodes : [0];
+      const pick = starts[0];
+      const [x,y] = nodePos(pick);
+      spawnParticles(x, y, '#FBBF24', 14, {speed:[1.5,4], life:0.8, r:2, rjit:2});
+      const nxt = bestNextNode(pick);
+      if (nxt >= 0) G.hintEdge = { from:pick, to:nxt, until: Date.now()+2600 };
+      showPop('💡 Start here', '#F59E0B', 1000);
+    } else {
+      const nxt = bestNextNode(G.currentNode);
+      if (nxt < 0) { showPop('No safe move — restart the puzzle', '#EF4444', 1000); return; }
+      G.hintEdge = { from:G.currentNode, to:nxt, until: Date.now()+2600 };
+      showPop('💡 Next line', '#F59E0B', 900);
+    }
+
+    G.hintsLeft--;
+    G.hintsUsed++;
+    G.hasErrorThisPuzzle = true;   // hinted puzzles aren't "perfect"
+    G.hintUsedThisPuzzle = true;
+    if (typeof haptic === 'function') haptic(15);
+    updateHUD();
   }
 
   /* =================================================================
@@ -1015,6 +1582,11 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     G.successAnim = 0;
     G.hasErrorThisPuzzle = false;
     G.drawing = false;
+    G.liftsThisPuzzle = 0;
+    G.hintUsedThisPuzzle = false;
+    G.hintEdge = null;
+    G.visitedNodes = new Set();
+    lastPX = lastPY = null;
 
     // Difficulty & type
     const diff = CFG.diffCap(G.round);
@@ -1054,6 +1626,15 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       while (attempts < 4 && !libPuzzle) {
         const meta = window.MT_SHAPES.pickShape(G.round, seed + attempts*7919, avoid);
         libPuzzle = window.MT_SHAPES.buildFromShape(meta, seed + attempts*104729 + 17);
+        /* Library shapes go through the same playability pipeline as the
+           procedural ones: most of them ship with nodes packed tighter
+           than the touch snap radius, so relax first and only reject the
+           handful that still can't be untangled. */
+        if (libPuzzle && !isPlayable(libPuzzle)) {
+          const relaxedLib = relaxLayout(libPuzzle);
+          if (isPlayable(relaxedLib)) libPuzzle = relaxedLib;
+          else { libPuzzle = null; attempts++; continue; }
+        }
         if (libPuzzle) {
           libPuzzle.diff = Math.max(1, Math.min(5, libPuzzle.diffIdx + 1)); // 0..3 -> 1..4
           // Master library puzzles bump one more tier
@@ -1109,10 +1690,16 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       <div class="mt3-hud-l">
         <span class="mt3-hearts">${hearts}</span>
         <span class="mt3-rnd">R${G.round}</span>
+        <span class="mt3-rnd mt3-diff">${'◆'.repeat(G.puzzle ? G.puzzle.diff : 1)}</span>
       </div>
       <div class="mt3-hud-r">
         ${comboBadge}
       </div>`;
+    const hb = document.getElementById('mt3Hint');
+    if (hb) {
+      hb.textContent = '💡 Hint · ' + G.hintsLeft;
+      hb.disabled = G.hintsLeft <= 0;
+    }
   }
 
   function updateTypeBadge() {
@@ -1138,6 +1725,11 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       </div>`;
   }
 
+  function setTip(text) {
+    const el = document.getElementById('mt3Tip');
+    if (el) el.textContent = text;
+  }
+
   function showPop(text, color, dur) {
     const ga = document.getElementById('mt3GameArea');
     if (!ga) return;
@@ -1158,7 +1750,9 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     if (bd.perfectBonus)  detail.push('Perfect +'+bd.perfectBonus);
     if (bd.speedBonus)    detail.push('Fast +'+bd.speedBonus);
     if (bd.planBonus)     detail.push('Plan +'+bd.planBonus);
+    if (bd.sizeBonus)     detail.push('Size +'+bd.sizeBonus);
     if (bd.specialBonus)  detail.push('Special +'+bd.specialBonus);
+    if (bd.hintPenalty)   detail.push('Hint −'+bd.hintPenalty);
     if (bd.mult>1)        detail.push('×'+bd.mult.toFixed(2));
     el.innerHTML = `
       <div class="mt3-cp-total">+${bd.total}</div>
@@ -1232,6 +1826,23 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       </div>`;
   }
 
+  /* One actionable coaching line, picked from the weakest habit. */
+  function coachTip(A) {
+    if (G.deadEnds >= 2)
+      return '🚧 You hit ' + G.deadEnds + ' dead ends. Before starting, count the lines at each node — nodes with an odd count are the only safe starting points.';
+    if (A.avgPlan < 1.2)
+      return '⏳ You start drawing almost instantly. Pausing 2 seconds to trace the route with your eyes usually beats fast fingers here.';
+    if (G.hintsUsed >= 2)
+      return '💡 You leaned on hints. Try saving the last line for the node you started from — that\'s the classic one-stroke trick.';
+    if (G.resetsUsed >= 3)
+      return '↺ Lots of restarts. Remember you can drag backwards to undo a single line instead of starting over.';
+    if (A.cons < 45)
+      return '📉 Your solve times swing a lot. Aim for a steady rhythm — consistency scores higher than raw speed.';
+    if (G.bestCombo >= 8)
+      return '🔥 Great combo streak. Push for a x10+ chain next run to unlock the biggest multipliers.';
+    return '✨ Solid run. Larger shapes are worth more points — hold out for the big ones once your combo is hot.';
+  }
+
   function gameOver() {
     if (destroyed) return;
     const A = computeAnalysis();
@@ -1267,6 +1878,16 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
             <div><span>${A.avgPlan.toFixed(1)}s</span><small>Avg Plan</small></div>
             <div><span>${A.avgDraw.toFixed(1)}s</span><small>Avg Draw</small></div>
           </div>
+        </div>
+
+        <div class="mt3-eo-section">
+          <div class="mt3-eo-title">🔍 Habits</div>
+          <div class="mt3-eo-grid">
+            <div><span>${G.hintsUsed}</span><small>Hints Used</small></div>
+            <div><span>${G.undosUsed}</span><small>Undos</small></div>
+            <div><span>${G.deadEnds}</span><small>Dead Ends</small></div>
+          </div>
+          <div class="mt3-eo-advice">${coachTip(A)}</div>
         </div>
 
         <div class="mt3-eo-section">
@@ -1308,8 +1929,11 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
         <div class="mt3-type-badge" id="mt3TypeBadge"></div>
         <div class="mt3-board" id="mt3Board"></div>
         <div class="mt3-foot">
-          <button class="mt3-reset-btn" id="mt3Reset">↺ Restart Puzzle</button>
+          <button class="mt3-reset-btn mt3-undo-btn" id="mt3Undo">↶ Undo</button>
+          <button class="mt3-reset-btn" id="mt3Reset">↺ Restart</button>
+          <button class="mt3-reset-btn mt3-hint-btn" id="mt3Hint">💡 Hint · ${G.hintsLeft}</button>
         </div>
+        <div class="mt3-tip" id="mt3Tip">Tap a glowing node, then drag through every line without lifting.</div>
       </div>`;
 
     makeCanvas();
@@ -1322,6 +1946,21 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       resetDraw(true);
       showPop('↺ Restarted', '#F59E0B');
     };
+
+    document.getElementById('mt3Undo').onclick = () => {
+      if (G.phase !== 'play') return;
+      if (G.path.length < 2) { showPop('Nothing to undo', '#94A3B8', 700); return; }
+      const last = G.path.pop();
+      const prev = G.path[G.path.length-1];
+      G.tracedEdges.delete(ek(last, prev));
+      G.currentNode = prev;
+      G.undosUsed++;
+      G.drawing = false;
+      if (typeof haptic === 'function') haptic(12);
+      showPop('↶ Undo', '#A78BFA', 650);
+    };
+
+    document.getElementById('mt3Hint').onclick = () => useHint();
 
     // Handle resize (rotation) — handler is removed on cleanup
     let resizeTimer;
@@ -1574,9 +2213,10 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       </div>
 
       <div class="mt3-rules">
-        <div class="mt3-rule"><span>✓</span><span>One continuous stroke</span></div>
-        <div class="mt3-rule"><span>✓</span><span>Every edge exactly once</span></div>
-        <div class="mt3-rule"><span>✓</span><span>Don't lift your finger</span></div>
+        <div class="mt3-rule"><span>✓</span><span>Trace every line exactly once, in one stroke</span></div>
+        <div class="mt3-rule"><span>↶</span><span>Drag backwards to undo a line — no penalty</span></div>
+        <div class="mt3-rule"><span>💡</span><span>${CFG.hintsPerRun} hints per run reveal a safe next move</span></div>
+        <div class="mt3-rule"><span>◉</span><span>Only glowing nodes can start a valid route</span></div>
       </div>
 
       <button class="btn-primary mt3-start-btn" id="mt3Start">
