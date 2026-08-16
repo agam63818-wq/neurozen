@@ -1,0 +1,11 @@
+{
+  "name": "neurozen",
+  "private": true,
+  "scripts": {
+    "test:mindtrace": "node tests/mindtrace-harness.cjs",
+    "test:wordflash": "node tests/wordflash-probe.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}
