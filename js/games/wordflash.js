@@ -1,29 +1,29 @@
 /* ===================== WORD FLASH (endless) v2 ===================== */
 const WF_T1=[
-  ['CALM','CLAM','COAL','CALF'],['FORM','FROM','FORT','FOAM'],
-  ['SALT','SLAT','SLOT','SILT'],['WORD','WARD','WARM','CORD'],
-  ['MILE','LIME','MINE','MICE'],['TIDE','TIED','DIET','EDIT'],
-  ['STAR','RATS','SCAR','STIR'],['LOOP','POOL','POLO','LOOT'],
-  ['BEAR','BARE','BEAD','BEAN'],['PALE','PEAL','PLEA','PALM'],
-  ['DEAL','LEAD','DEAR','DENT'],['NOTE','TONE','NONE','NODE'],
-  ['GAME','MAGE','GATE','GAZE'],['RICE','RACE','RIPE','RIDE'],
-  ['SAND','SEND','BAND','SANE'],['WIND','WING','WINE','WIDE'],
-  ['FIRE','FARE','FILE','FIVE'],['BALL','BELL','BILL','BULL'],
+  ['CALM','CLAM','COAL','LAMB'],['FORM','FROM','ROOM','MOOR'],
+  ['SALT','SLAT','LAST','ALTO'],['WORD','WARD','WARM','CORD'],
+  ['MILE','LIME','LIMB','MELT'],['TIDE','TIED','DIET','EDIT'],
+  ['STAR','RATS','ARTS','TSAR'],['LOOP','POOL','POLO','PLOP'],
+  ['BEAR','BARE','BARD','BARN'],['PALE','PEAL','PLEA','LEAP'],
+  ['DEAL','LEAD','DALE','DENT'],['NOTE','TONE','TENT','ONTO'],
+  ['GAME','MAGE','MEGA','GEM'],['RICE','RACE','RIPE','RIDE'],
+  ['SAND','DASH','DANK','SNAP'],['WIND','WING','WINE','WIDE'],
+  ['FIRE','RIFE','TIER','REIN'],['BALL','BELL','BILL','BULL'],
   ['CARE','CORE','CURE','CART'],['DATE','GATE','HATE','FATE'],
-  ['EARN','EAST','EASY','EDGE'],['FACE','FACT','FAIL','FAIR'],
+  ['EARN','EAST','EASY','EDGE'],['FACE','CAFE','FAIL','FAIR'],
   ['GAIN','GAVE','GEAR','GIFT'],['HAND','HANG','HARD','HARM'],
-  ['ICE','ACE','ACT','AGE'],['KING','KIND','KICK','KEEP'],
-  ['LAMP','LAME','LAND','LANE'],['MAZE','MAZE','MARE','MATE'],
-  ['NEST','NEWS','NEXT','NEAT'],['OPEN','OVEN','OVER','OWN'],
-  ['PACE','PACK','PAGE','PAID'],['QUIT','QUIZ','QUAD','QUICK'],
-  ['RAIN','RAIL','RAID','RING'],['SAFE','SAIL','SALE','SAME'],
-  ['TEAM','TEAR','TELL','TENT'],['UNIT','UPON','USED','USER'],
+  ['ICE','ACE','ACT','AGE'],['KING','INKY','KICK','KEEP'],
+  ['LAMP','PALM','LAND','LANE'],['MAZE','MARE','MATE','MAKE'],
+  ['NEST','SENT','TENS','NETS'],['OPEN','PEON','NOPE','PINE'],
+  ['PACE','CAPE','ACME','EPIC'],['QUIT','QUIZ','QUAD','QUICK'],
+  ['RAIN','NAIL','ARID','GRIN'],['SAFE','SAIL','SALE','SAME'],
+  ['TEAM','MATE','MEAT','TAME'],['UNIT','UPON','USED','USER'],
   ['VAST','VOTE','VIEW','VINE'],['WASH','WAVE','WEAR','WEEK'],
-  ['YARD','YARN','YEAR','YELL'],['ZERO','ZONE','ZOOM','ZEAL'],
+  ['YARD','DRAY','YEAR','YELL'],['ZERO','ZONE','ZOOM','ZEAL'],
   ['BARK','DARK','MARK','PARK'],['COLD','BOLD','FOLD','GOLD'],
   ['EACH','ECHO','EDGE','ELSE'],['FAST','FEAR','FEED','FEEL'],
-  ['GOAL','GOAT','GOLD','GOOD'],['HOLD','HOLE','HOLY','HOME'],
-  ['IRON','ISLAND','ITEM','IDEA'],['JUMP','JOIN','JUST','JOKE'],
+  ['GOAL','GAOL','LOGO','HALO'],['HOLD','HOLE','HOLY','HOME'],
+  ['IRON','NOIR','ITEM','IDEA'],['JUMP','JOIN','JUST','JOKE'],
   ['KEEP','KEYS','KICK','KILL']
 ];
 const WF_T2=[
@@ -34,16 +34,16 @@ const WF_T2=[
   ['TRIAL','TRAIL','TRILL','TIDAL'],['BLAME','BLADE','BLARE','BLAZE'],
   ['STEAM','STEAK','STEAL','STEEL'],['GLARE','LARGE','GLAZE','GRACE'],
   ['CRATE','CARET','CATER','TRACE'],['SPARE','SPEAR','PARSE','SPADE'],
-  ['POSE','PROSE','POISE','PURSE'],['NIGHT','RIGHT','NIGHTLY','MIGHT'],
+  ['POSE','PORE','POSH','POLE'],['NIGHT','RIGHT','LIGHT','MIGHT'],
   ['THROUGH','TROUGH','THOROUGH','THOUGHT'],['PRECEDE','PROCEED','PRESIDE','PRECISE'],
   ['DESSERT','DESERTS','DISSENT','DISSECT'],['CONVERSE','CONSERVE','CONVERGE','CONVEYED'],
   ['ADAPTER','ADOPTER','ADAPTED','ADOPTED'],['LATERAL','LITERAL','LITERARY','LITERATE'],
   ['EMINENT','IMMINENT','EMIGRANT','ELEGANT'],['CRYSTAL','CRUCIAL','CYNICAL','CLINICAL'],
-  ['PERSIST','PERSUADE','PERSPIRE','PERSONAL'],['DECLINE','DECLARE','DECIMAL','DECLAIM'],
-  ['ILLUSION','ALLUSION','ELUSION','EVASION'],['STATIONARY','STATIONERY','STATIONS','SITUATION'],
+  ['PERSUADE','PERSPIRE','PERSONAL','PERSIST'],['DECLINE','DECLARE','DECIMAL','DECLAIM'],
+  ['ILLUSION','ALLUSION','ELUSION','EVASION'],['STATIONARY','STATIONERY','STATIONER','SITUATION'],
   ['ACCEPT','EXCEPT','EXPECT','ACCESS'],['AFFECT','EFFECT','AFFLICT','EFFORT'],
-  ['PRINCIPAL','PRINCIPLE','PRINCESS','PRINTING'],['COMPLEMENT','COMPLIMENT','COMPONENT','COMPLETE'],
-  ['BLOOM','BROOM','BLOOM','BROOK'],['CHARM','CHART','CHASE','CHAIN'],
+  ['PRINCIPAL','PRINCIPLE','PRINCESS','PRINTING'],['COMPLEMENT','COMPLIMENT','COMPLACENT','COMMITMENT'],
+  ['BLOOM','BROOM','BROOK','GLOOM'],['CHARM','CHART','CHASE','CHAIN'],
   ['DREAM','DRAIN','DRAWN','DRIVE'],['FLAME','FLARE','FLASH','FLAKE'],
   ['GRAPE','GRASP','GRASS','GRAIN'],['HEART','HEARD','HEAVY','HONEY'],
   ['IMAGE','IMPLY','INDEX','INPUT'],['JOINT','JUDGE','JUICE','JELLY'],
@@ -54,29 +54,108 @@ const WF_T2=[
   ['SCALE','SCENE','SCOPE','SCORE'],['SHARE','SHARP','SHELF','SHIFT']
 ];
 const WF_T3=[
-  ['THROUGH','TROUGH','THOROUGH','THOUGHT'],['PRECEDE','PROCEED','PRESIDE','PRECISE'],
-  ['DESSERT','DESERTS','DISSENT','DISSECT'],['CONVERSE','CONSERVE','CONVERGE','CONVEYED'],
-  ['ADAPTER','ADOPTER','ADAPTED','ADOPTED'],['LATERAL','LITERAL','LITERARY','LITERATE'],
-  ['EMINENT','IMMINENT','EMIGRANT','ELEGANT'],['CRYSTAL','CRUCIAL','CYNICAL','CLINICAL'],
-  ['PERSIST','PERSUADE','PERSPIRE','PERSONAL'],['DECLINE','DECLARE','DECIMAL','DECLAIM'],
-  ['ILLUSION','ALLUSION','ELUSION','EVASION'],['STATIONARY','STATIONERY','STATIONS','SITUATION'],
-  ['ACCEPT','EXCEPT','EXPECT','ACCESS'],['AFFECT','EFFECT','AFFLICT','EFFORT'],
-  ['PRINCIPAL','PRINCIPLE','PRINCESS','PRINTING'],['COMPLEMENT','COMPLIMENT','COMPONENT','COMPLETE'],
-  ['ACKNOWLEDGE','ACQUAINTANCE','ACQUISITION','ACCELERATE'],['APPROPRIATE','APPROXIMATE','APPRECIATE','APPEARANCE'],
-  ['BEAUTIFUL','BENEFICIAL','BELONGINGS','BELLIGERENT'],['CALCULATE','CALENDAR','CAMPAIGN','CANDIDATE'],
-  ['DEFINITELY','DEFICIENT','DELIBERATE','DEMOCRATIC'],['EDUCATION','EFFECTIVE','EFFICIENT','ELABORATE'],
-  ['FASCINATE','FAVORITE','FEASIBLE','FICTITIOUS'],['GENERALLY','GENERATE','GENEROUS','GENUINELY'],
-  ['HESITATE','HERITAGE','HIGHLIGHT','HINDRANCE'],['IDENTICAL','IDENTIFY','IGNORANT','ILLUSTRATE'],
-  ['JUDGMENT','JUSTIFY','JUBILANT','JURISDICTION'],['KNOWLEDGE','KNUCKLE','KIDNAPPER','KINDERGARTEN'],
-  ['LABORATORY','LEGITIMATE','LIABILITY','LITERATURE'],['MAGNIFICENT','MAINTENANCE','MANIFESTO','MANUFACTURE'],
-  ['NECESSARY','NEGOTIATE','NEUTRAL','NOMINATE'],['OBJECTIVE','OBSTACLE','OCCASION','OFFENSIVE'],
-  ['PARAGRAPH','PARTICULAR','PASSENGER','PERCENTAGE'],['QUALIFIED','QUANTITY','QUESTIONNAIRE','QUINTESSENTIAL'],
-  ['REALISTIC','REASONABLE','RECIPIENT','RECOMMEND'],['SACRIFICE','SATISFACTION','SCENARIO','SCHEDULE'],
-  ['TECHNIQUE','TEMPORARY','TENDENCY','TERRITORY'],['ULTIMATUM','UNANIMOUS','UNDERSTAND','UNIVERSITY'],
-  ['VAGUENESS','VALIDATE','VARIATION','VEGETABLE'],['WITHDRAW','WITHSTAND','WITNESS','WONDERFUL'],
-  ['XENOPHOBIA','XENOLITH','XEROX','XENOGENY'],['YESTERDAY','YIELDING','YOUNGSTER','YESTERYEAR'],
-  ['ZEALOUSLY','ZIGZAGGED','ZOOLOGIST','ZESTFULLY']
+  ['ATTENTION','INTENTION','ATTENTIVE','RETENTION'],['PERCEPTION','DECEPTION','RECEPTION','PERFECTION'],
+  ['CONSCIENCE','CONSCIENCES','CONSCIENT','CONFERENCE'],['OCCURRENCE','OCCURRENCES','RECURRENCE','COHERENCE'],
+  ['MAINTAIN','MOUNTAIN','MAINTAINS','MAINSTAY'],['SEPARATE','SEPARATES','GENERATE','DESPERATE'],
+  ['DEFINITION','DEFINITIONS','DEFINITIVE','DEPOSITION'],['RECOMMEND','RECOMMENDS','RECONNECT','RECOUNTED'],
+  ['ACCOMMODATE','ACCOMMODATED','ACCOMPANIED','ACCUMULATE'],['EMBARRASSED','EMBARRASSES','EMBARRASSING','HARASSMENT'],
+  ['PRIVILEGE','PRIVILEGED','PREVAILING','PREJUDICE'],['ESSENTIAL','ESSENTIALS','POTENTIAL','EXISTENCE'],
+  ['GUARANTEE','GUARANTEED','GUARANTOR','QUARANTINE'],['ALGORITHM','ALGORITHMS','LOGARITHM','ARITHMETIC'],
+  ['ENVIRONMENT','ENVIRONMENTS','ENRICHMENT','ENFORCEMENT'],['RESPONSIBLE','RESPONSIBLY','RESPONSIVE','RESPECTABLE'],
+  ['ACKNOWLEDGE','ACKNOWLEDGED','ACQUAINTANCE','ACQUISITION'],['APPROPRIATE','APPROPRIATED','APPROXIMATE','APPRECIATE'],
+  ['BEAUTIFUL','BOUNTIFUL','BEAUTIFIES','BEAUTICIAN'],['CALCULATE','CALCULATED','CALENDAR','CANDIDATE'],
+  ['DELIBERATE','DELIBERATED','DEGENERATE','DESPERATE'],['EDUCATION','EDUCATIONS','EVACUATION','MEDIATION'],
+  ['FASCINATE','FASCINATED','FASCINATOR','FABRICATE'],['GENERALLY','GENUINELY','GENERATED','GENEROUSLY'],
+  ['HESITATE','HESITATED','HERITAGE','HINDRANCE'],['IDENTICAL','IDENTIFIED','IDENTITY','INDICATED'],
+  ['JUDGMENT','JUDGMENTS','JUDICIAL','JUSTICES'],['KNOWLEDGE','KNOWINGLY','KNOWABLE','KNIGHTED'],
+  ['LABORATORY','LEGITIMATE','LIABILITY','LITERATURE'],['MAGNIFICENT','MAGNIFICENCE','MAINTENANCE','MANUFACTURE'],
+  ['NECESSARY','NECESSITY','NEGOTIATE','NOMINATE'],['OBJECTIVE','OBJECTIVES','OBSTACLE','OFFENSIVE'],
+  ['PARAGRAPH','PARAGRAPHS','PASSENGER','PERCENTAGE'],['QUALIFIED','QUALIFIER','QUANTIFIED','LIQUEFIED'],
+  ['REALISTIC','REALITIES','IDEALISTIC','RELATABLE'],['SACRIFICE','SACRIFICES','SATIRICAL','SCARCITY'],
+  ['TECHNIQUE','TECHNICAL','TEMPORARY','TERRITORY'],['ULTIMATUM','ULTIMATUMS','UNANIMOUS','UNDERSTAND'],
+  ['VAGUENESS','VALIDATE','VARIATION','VEGETABLE'],['WITHDRAW','WITHDRAWS','WITHHELD','WITHSTAND'],
+  ['XENOPHOBIA','XENOPHOBIC','XENOPHOBE','XENOPHILE'],['YESTERDAY','YESTERDAYS','YOUNGSTER','YESTERYEAR'],
+  ['ZEALOUSLY','JEALOUSLY','ZIGZAGGED','ZESTFULLY']
 ];
+
+const WF_TIERS = [WF_T1, WF_T2, WF_T3];
+
+/* Fail loudly during startup if a content edit can make a question unfair.
+   The sorted cross-tier key also catches a recycled group whose option order
+   was changed to disguise it. */
+function WF_validateWordPools(tiers = WF_TIERS) {
+  const errors = [];
+  const seenGroups = new Map();
+  tiers.forEach((pool, tierIndex) => {
+    pool.forEach((group, groupIndex) => {
+      const at = `T${tierIndex + 1}[${groupIndex}]`;
+      if (group.length !== 4) errors.push(`${at} has ${group.length} words`);
+      if (new Set(group).size !== group.length) errors.push(`${at} contains duplicate words`);
+      const answerLength = group[0].length;
+      if (!group.slice(1).some(word => word.length === answerLength)) {
+        errors.push(`${at} has a unique answer length`);
+      }
+      group.slice(1).forEach(word => {
+        if (Math.abs(word.length - answerLength) > 1) {
+          errors.push(`${at} distractor ${word} is not length-matched`);
+        }
+      });
+      const key = [...group].sort().join('\u0001');
+      if (seenGroups.has(key)) errors.push(`${at} duplicates ${seenGroups.get(key)}`);
+      else seenGroups.set(key, at);
+    });
+  });
+  if (errors.length) throw new Error(`Word Flash pool validation failed:\n${errors.join('\n')}`);
+  return true;
+}
+WF_validateWordPools();
+
+/* Smooth tier transitions instead of jumping from four-letter words straight
+   to long words. `roll` is injectable so the probe can test every boundary. */
+function WF_tierForRound(q, roll = Math.random()) {
+  const round = q + 1;
+  if (round <= 4) return 1;
+  if (round <= 8) return roll < (round - 4) / 4 ? 2 : 1;
+  if (round <= 11) return 2;
+  if (round <= 16) return roll < (round - 11) / 5 ? 3 : 2;
+  return 3;
+}
+
+/* Content-aware viewing time. Round pressure and Blink mode can tighten the
+   pace, but never below the readability floor of 72ms per visible letter. */
+function WF_flashDuration(q, wordsOnScreen, opts = {}) {
+  const chars = wordsOnScreen.reduce((sum, word) => sum + word.length, 0);
+  const contentMs = 420 + chars * 85;
+  const pacePenalty = Math.min(400, q * 12) + (opts.blink ? 110 : 0);
+  let duration = Math.max(contentMs - pacePenalty, contentMs * 0.65, chars * 72);
+  if (opts.type) duration *= 1.12;
+  return Math.round(duration);
+}
+
+/* Reading four long look-alikes and typing an exact spelling need different
+   answer budgets. Both remain brisk, but long questions no longer share the
+   same six-second deadline as four-letter questions. */
+function WF_answerDuration(words, typeMode = false) {
+  if (typeMode) return Math.min(9000, Math.max(6000, 5200 + words[0].length * 380));
+  const chars = words.reduce((sum, word) => sum + word.length, 0);
+  return Math.min(10000, Math.max(6000, 5000 + chars * 75));
+}
+
+/* Make the second flashed word matter: one answer option comes from its group,
+   preferably the exact word that was shown. */
+function WF_decoyOptions(askGroup, unaskedGroup, roll = Math.random()) {
+  const options = [...askGroup];
+  if (!unaskedGroup) return options;
+  const decoyWord = unaskedGroup.find(word => !options.includes(word));
+  if (!decoyWord) return options;
+  const answerLength = options[0].length;
+  const safeSlots = [1,2,3].filter(slot =>
+    options.some((word, index) => index !== 0 && index !== slot && word.length === answerLength));
+  const slots = safeSlots.length ? safeSlots : [1,2,3];
+  const replaceAt = slots[Math.min(slots.length - 1, Math.floor(roll * slots.length))];
+  options[replaceAt] = decoyWord;
+  return options;
+}
 
 /* Visual effect helpers */
 function shakeScreen(el) {
@@ -139,12 +218,14 @@ function showFloatingText(x, y, text, color = '#34D399') {
   setTimeout(() => el.remove(), 1000);
 }
 
-/* Speed label helper */
-function getSpeedLabel(ms) {
-  if (ms >= 1000) return '🟢 NORMAL';
-  if (ms >= 700) return '🟡 FAST';
-  if (ms >= 500) return '🟠 RAPID';
-  if (ms >= 300) return '🔴 LIGHTNING';
+/* Speed is content-relative: 1.5 seconds for two long words can be more
+   demanding than 700ms for one short word. */
+function getSpeedLabel(ms, chars = 1) {
+  const perChar = ms / Math.max(1, chars);
+  if (perChar >= 150) return '🟢 NORMAL';
+  if (perChar >= 110) return '🟡 FAST';
+  if (perChar >= 90) return '🟠 RAPID';
+  if (perChar >= 78) return '🔴 LIGHTNING';
   return '⚡ BLINK';
 }
 
@@ -162,6 +243,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
   let typeModeUnlocked = false, currentMode = 'select';
   let blinkAnnounced = false, decoyAnnounced = false;
   let highestSpeedLabel = '';
+  let currentAskWord = null, currentFlashMs = 0, currentTier = 1;
   let answerTimeout = null;
   let answerTimedOut = false;
   let activeTimers = [];
@@ -382,38 +464,22 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       confetti(30);
     }
 
-    const tier = q < 5 ? 1 : q < 11 ? 2 : 3;
-    /* PROBLEM 1 — New humane timing curve */
-    const flashMs = Math.max(450, 1400 - q * 25);
-    const decoy = q >= 7;
-    const blinkMode = q >= 15;
-    const typeMode = q >= 5 && Math.random() < 0.35;
-    currentMode = typeMode ? 'type' : 'select';
-    if (typeMode) typeModeUnlocked = true;
+    const tier = WF_tierForRound(q);
+    currentTier = tier;
+    // Tier 3 itself counts as a modifier. On periodic late Blink rounds,
+    // suppress Decoy so no question ever stacks more than two modifiers.
+    const blinkMode = q >= 14 && (tier < 3 || q % 4 === 0);
+    const decoy = q >= 9 && !(tier === 3 && blinkMode);
 
-    const blinkFlashMs = blinkMode ? Math.max(280, flashMs * 0.6) : flashMs;
-    let actualFlashMs = typeMode ? Math.max(550, blinkFlashMs * 1.3) : blinkFlashMs;
-
-    /* Decoy mode: more time since brain tracks two words */
-    if (decoy) {
-      actualFlashMs = Math.round(actualFlashMs * (blinkMode ? 1.5 : 1.3));
-    }
-
-    /* Track highest speed label for end screen */
-    const label = getSpeedLabel(actualFlashMs);
-    if (highestSpeedLabel === '' || ['🟢 NORMAL','🟡 FAST','🟠 RAPID','🔴 LIGHTNING','⚡ BLINK'].indexOf(label) > ['🟢 NORMAL','🟡 FAST','🟠 RAPID','🔴 LIGHTNING','⚡ BLINK'].indexOf(highestSpeedLabel)) {
-      highestSpeedLabel = label;
-    }
-
-    /* IMPROVEMENT 4 — Mode announcements (before showing the round) */
-    if (decoy && !decoyAnnounced && q === 7) {
+    /* Mode announcements (before showing the round) */
+    if (decoy && !decoyAnnounced) {
       decoyAnnounced = true;
       showAnnouncement('🧠 DECOY MODE', 'Two words now! Dono yaad rakho!', '🧠', () => proceedToRound());
       return;
     }
-    if (blinkMode && !blinkAnnounced && q === 15) {
+    if (blinkMode && !blinkAnnounced) {
       blinkAnnounced = true;
-      showAnnouncement('👁️ BLINK MODE', 'Words flash even faster. Stay focused!', '👁️', () => proceedToRound());
+      showAnnouncement('👁️ BLINK MODE', 'Faster pace, with a fair reading floor.', '👁️', () => proceedToRound());
       return;
     }
     proceedToRound();
@@ -429,7 +495,24 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
         askSide = Math.random() < 0.5 ? 0 : 1;
       }
       const askGroup = decoy && askSide === 1 ? group2 : group;
+      const unaskedGroup = decoy ? (askSide === 1 ? group : group2) : null;
       const askWord = askGroup[0];
+
+      // Type mode is an exact-spelling challenge, so it never stacks with
+      // Decoy and never targets words longer than eight characters.
+      const typeMode = q >= 4 && !decoy && !blinkMode && askWord.length <= 8 && Math.random() < 0.35;
+      currentMode = typeMode ? 'type' : 'select';
+      if (typeMode) typeModeUnlocked = true;
+
+      const actualFlashMs = WF_flashDuration(q, words, { blink:blinkMode, type:typeMode });
+      currentAskWord = askWord;
+      currentFlashMs = actualFlashMs;
+      const visibleChars = words.reduce((sum, word) => sum + word.length, 0);
+      const label = getSpeedLabel(actualFlashMs, visibleChars);
+      const speedOrder = ['🟢 NORMAL','🟡 FAST','🟠 RAPID','🔴 LIGHTNING','⚡ BLINK'];
+      if (highestSpeedLabel === '' || speedOrder.indexOf(label) > speedOrder.indexOf(highestSpeedLabel)) {
+        highestSpeedLabel = label;
+      }
 
       const modeText = typeMode ? '⌨️ TYPE MODE — Word likho!' : blinkMode ? '👁️ BLINK MODE — Bahut fast!' : '';
       const modeColor = typeMode ? '#F59E0B' : blinkMode ? '#EF4444' : 'var(--primary)';
@@ -438,7 +521,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       const badge = getStreakBadge(streak);
       const badgeHtml = badge ? `<div class="wf-streak-badge" style="background:${badge.color};box-shadow:0 0 20px ${badge.shadow};">${badge.label}</div>` : '';
 
-      /* PROBLEM 2 — Speed label instead of raw ms */
+      /* Content-relative speed label */
       const roundInfoLabel = `Round ${q + 1} · ${label}${streak >= 3 ? ' · 🔥 x1.5' : ''}${typeMode ? ' · ⌨️ Type' : ''}`;
 
       host.innerHTML = `
@@ -470,7 +553,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
         });
       });
 
-      /* PROBLEM 3 — Warning glow at 75% of flash duration (blink mode) */
+      /* Warning glow at 75% of the flash duration */
       if (blinkMode) {
         const warnTimer = setTimeout(() => {
           const wordsEl = host.querySelector('#wfWords');
@@ -494,7 +577,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
           if (typeMode) {
             showTypeMode(askWord, askGroup, decoy, askSide);
           } else {
-            showSelectMode(askWord, askGroup, decoy, askSide);
+            showSelectMode(askWord, askGroup, unaskedGroup, decoy, askSide);
           }
         }, 280));
       }, actualFlashMs);
@@ -502,8 +585,8 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     }
   }
 
-  function showSelectMode(askWord, askGroup, decoy, askSide) {
-    const opts = [...askGroup].sort(() => Math.random() - .5);
+  function showSelectMode(askWord, askGroup, unaskedGroup, decoy, askSide) {
+    const opts = WF_decoyOptions(askGroup, unaskedGroup).sort(() => Math.random() - .5);
     const askTs = Date.now();
     answerTimedOut = false;
 
@@ -531,7 +614,8 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       optsEl.appendChild(b);
     });
 
-    /* Answer timeout — 6 seconds to answer */
+    const answerMs = WF_answerDuration(opts);
+    showAnswerTimeoutBar(answerMs);
     if (answerTimeout) clearTimeout(answerTimeout);
     answerTimeout = setTimeout(() => {
       if (!answerTimedOut) {
@@ -540,7 +624,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
         playSound('wrong');
         handleTimeout(askWord, optsEl, askTs);
       }
-    }, 6000);
+    }, answerMs);
   }
 
   function showTypeMode(askWord, askGroup, decoy, askSide) {
@@ -678,7 +762,8 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
     host._keyHandler = keyHandler;
     host._typeInput = typeInput;
 
-    /* Answer timeout — 6 seconds */
+    const answerMs = WF_answerDuration([askWord], true);
+    showAnswerTimeoutBar(answerMs);
     if (answerTimeout) clearTimeout(answerTimeout);
     answerTimeout = setTimeout(() => {
       if (!answerTimedOut) {
@@ -687,7 +772,18 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
         playSound('wrong');
         handleTimeout(askWord, null, askTs);
       }
-    }, 6000);
+    }, answerMs);
+  }
+
+  function showWordReveal(askWord) {
+    const stage = host.querySelector('.wf-stage');
+    if (!stage) return;
+    const old = host.querySelector('.wf-answer-reveal');
+    if (old) old.remove();
+    const reveal = document.createElement('div');
+    reveal.className = 'wf-answer-reveal';
+    reveal.innerHTML = `Word was <strong>${askWord}</strong>`;
+    stage.appendChild(reveal);
   }
 
   function handleTimeout(askWord, optsEl, askTs) {
@@ -714,6 +810,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
         typeDisplay.innerHTML = `<span style="color: #34D399;">${askWord}</span>`;
       }
     }
+    showWordReveal(askWord);
 
     shakeScreen(wrap);
 
@@ -787,7 +884,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
 
       if (b && b.style) {
         b.classList.add('wf-wrong');
-        /* IMPROVEMENT 6 — Streak badge break animation */
+        /* Streak badge break animation */
         const badgeEl = host.querySelector('.wf-streak-badge');
         if (badgeEl) {
           badgeEl.classList.add('wf-streak-broken');
@@ -795,7 +892,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
         }
       }
 
-      /* IMPROVEMENT 6 — Highlight correct answer on wrong pick */
+      /* Highlight and reveal the correct answer on a miss */
       if (optsEl) {
         optsEl.querySelectorAll('.word-opt').forEach(bb => {
           if (bb.dataset.w === askWord) bb.classList.add('wf-correct');
@@ -807,6 +904,7 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
           typeDisplay.innerHTML = `<span style="color: #EF4444; text-decoration: line-through;">${inputVal || '?'}</span> <span style="color: #34D399;">${askWord}</span>`;
         }
       }
+      showWordReveal(askWord);
 
       shakeScreen(wrap);
 
@@ -825,8 +923,19 @@ function playWordFlash(body, setScore, end, wrap, startClock) {
       }
 
       q++;
-      activeTimers.push(setTimeout(next, typeModeUnlocked && currentMode === 'type' ? 1200 : 900));
+      activeTimers.push(setTimeout(next, currentMode === 'type' ? 1500 : 1300));
     }
+  }
+
+  /* Test-only state view used by the jsdom full-run probe. The production
+     app never defines this object. */
+  if (window.__WORDFLASH_TEST__) {
+    Object.assign(window.__WORDFLASH_TEST__, {
+      getState: () => ({
+        q, score, streak, lives, currentMode, currentAskWord,
+        currentFlashMs, currentTier, answerTimedOut,
+      }),
+    });
   }
 
   instrEl.querySelector('#wfStart').onclick = () => {

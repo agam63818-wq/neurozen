@@ -502,6 +502,8 @@ body.dark .relax-bg{opacity:.25;}
 @keyframes wfShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 .word-opt.wf-correct{background:rgba(52,211,153,.45);animation:wfBounce .4s ease;}
 .word-opt.wf-wrong{background:rgba(248,113,113,.5);animation:wfShake .35s ease;}
+.wf-answer-reveal{margin-top:16px;padding:10px 14px;border-radius:12px;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.38);color:#A7F3D0;font-size:14px;font-weight:700;animation:fadeInUp .25s ease both;}
+.wf-answer-reveal strong{color:#fff;letter-spacing:.08em;}
 /* Word Chain 2.0 */
 .wc-flash{border-radius:20px;padding:48px 16px;text-align:center;font-size:38px;font-weight:800;color:#fff;animation:wfPop .15s ease;box-shadow:var(--shadow-lg);letter-spacing:.03em;}
 .wc-hearts{display:flex;gap:6px;justify-content:center;margin-bottom:6px;font-size:18px;}
