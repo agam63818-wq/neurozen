@@ -30,12 +30,14 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     freeLifts       : 1,           // lifts allowed per puzzle before a life is lost
     hintsPerRun     : 3,           // hints available in one run
     deadEndPenalty  : 3,           // seconds removed when a dead end is auto-reset
-    assistRounds    : 5,           // rounds where route-breaking moves are blocked
-    // Difficulty scaling by round
-    diffCap         : (r) => r <= 5  ? 1
-                            : r <= 10 ? 2
-                            : r <= 20 ? 3
-                            : r <= 35 ? 4
+    assistRounds    : 1,           // only round 1 blocks route-breaking moves
+    startGuideRounds: 3,           // brief tutorial: show/restrict valid starts
+    degreeGuideRounds: 3,          // degree counts appear only while planning
+    // Difficulty scaling by round — hard boards arrive while players are engaged
+    diffCap         : (r) => r <= 2  ? 1
+                            : r <= 5  ? 2
+                            : r <= 10 ? 3
+                            : r <= 18 ? 4
                             :           5,
     // Base puzzle time (seconds) per difficulty tier
     puzzleTime      : (d) => [0, 20, 22, 25, 28, 32][d] || 25,
@@ -191,7 +193,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     return false;
   }
 
-  // All nodes the player is allowed to begin the stroke from
+  // All nodes from which the remaining graph can be completed
   function validStartNodes() {
     if (!G.puzzle) return [];
     const all = G.puzzle.edges;
@@ -221,34 +223,59 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     return nbrs.length ? nbrs[0] : -1;
   }
 
+  const GRAPH_PROFILE = {
+    nodeRanges: [
+      [0,0],
+      [6, 8],          // diff 1 — enough structure to require a plan
+      [8, 10],         // diff 2
+      [10, 12],        // diff 3
+      [12, 15],        // diff 4
+      [14, 18],        // diff 5
+    ],
+    extraRanges: [
+      [0,0],
+      [1, 2],          // branch choices begin immediately
+      [2, 3],
+      [3, 5],
+      [4, 6],
+      [5, 8],
+    ],
+    preferTwoOdd: true,
+  };
+
+  // Convert an Euler circuit to an open trail when a simple edge is
+  // available. Used for both procedural and handcrafted-library puzzles.
+  function preferOpenTrail(g) {
+    if (oddNodes(g.edges, g.nCount).length !== 0) return g;
+    const edgeSet = new Set(g.edges.map(([a,b]) => a < b ? `${a}-${b}` : `${b}-${a}`));
+    const candidates = [];
+    for (let a=0;a<g.nCount;a++) for (let b=a+1;b<g.nCount;b++) {
+      if (edgeSet.has(`${a}-${b}`)) continue;
+      const [ax,ay]=g.nodes[a], [bx,by]=g.nodes[b];
+      candidates.push({ a, b, d:Math.hypot(ax-bx, ay-by) });
+    }
+    candidates.sort((p,q)=>p.d-q.d);
+    if (!candidates.length) return g;
+    const {a,b} = candidates[0];
+    return { ...g, edges:[...g.edges, [a,b]] };
+  }
+
   // Generate a random unique graph.  We build it by:
   //   1) sampling node positions on a jittered grid
   //   2) building a random spanning tree (guarantees connectivity)
-  //   3) adding extra edges based on difficulty
-  //   4) if odd-node count is > 2, pair remaining odd nodes together
-  //      by adding one more edge until we have 0 or 2 odd nodes.
-  function generateGraph(diff, roundSeed) {
+  //   3) adding difficulty-scaled choice edges
+  //   4) repairing parity, then converting circuits to open Euler trails
+  //      so most puzzles have exactly two possible starts.
+  // `profile` is optional and exists so the regression harness can replay
+  // earlier tuning with the exact same generator implementation.
+  function generateGraph(diff, roundSeed, profile) {
     const rand = rng(roundSeed);
-    // Node counts and edge budget scaled by diff
-    const nodeRange = [
-      [0,0],           // diff 0 (unused)
-      [5, 6],          // diff 1  — very simple, 4–5 edges
-      [6, 8],          // diff 2  — branches, small loops
-      [8, 10],         // diff 3  — loops + intersections
-      [9, 12],         // diff 4  — complex
-      [11, 14],        // diff 5  — large planning puzzles
-    ][diff];
+    const tuning = profile || GRAPH_PROFILE;
+    const nodeRange = tuning.nodeRanges[diff];
     const nCount = Math.floor(nodeRange[0] + rand() * (nodeRange[1] - nodeRange[0] + 1));
 
     // Extra edges above spanning tree (n-1)
-    const extraRange = [
-      [0,0],
-      [0, 1],
-      [1, 2],
-      [2, 4],
-      [3, 5],
-      [4, 7],
-    ][diff];
+    const extraRange = tuning.extraRanges[diff];
 
     // Sample node positions on a soft grid — jittered for organic feel
     // We use a 5x5 or 6x6 grid depending on diff
@@ -371,8 +398,26 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       }
     }
 
+    // A circuit can start anywhere, which removes the start-node deduction.
+    // Turn it into an open Euler trail by adding the shortest available edge;
+    // this toggles exactly two vertices from even to odd. Dense complete graphs
+    // cannot occur at these budgets, but return null defensively if there is no
+    // simple edge left to add.
+    if (tuning.preferTwoOdd && oddNodes(edges, nCount).length === 0) {
+      const candidates = [];
+      for (let a=0;a<nCount;a++) for (let b=a+1;b<nCount;b++) {
+        if (has(a,b)) continue;
+        const [ax,ay]=nodes[a], [bx,by]=nodes[b];
+        candidates.push({ a, b, d:Math.hypot(ax-bx, ay-by) });
+      }
+      candidates.sort((p,q)=>p.d-q.d);
+      if (!candidates.length) return null;
+      const {a,b} = candidates[0];
+      edges.push([a,b]);
+    }
+
     if (!hasEulerPath(edges, nCount)) {
-      // Fallback: just return null and caller retries with new seed
+      // Fallback: just return null and caller retries with a new seed
       return null;
     }
 
@@ -422,7 +467,9 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     const minGap = CFG.minNodeGap;
     const edgeGap = minGap * 0.62;
 
-    for (let iter=0; iter<70; iter++) {
+    // Denser late-game graphs need more settling time than the original
+    // 5–14-node boards. This remains cheap (at most 18 nodes).
+    for (let iter=0; iter<120; iter++) {
       let moved = false;
 
       // 1) node <-> node repulsion
@@ -486,24 +533,66 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     return { ...g, nodes: out };
   }
 
-  // Try up to N seeds until a valid graph pops out
-  function makePuzzle(diff, roundSeed) {
-    let fallback = null;
-    for (let i=0;i<24;i++) {
-      let g = generateGraph(diff, roundSeed + i*7919);
-      if (!g) continue;
-      if (!isPlayable(g)) g = relaxLayout(g);     // try to fix it up
-      if (isPlayable(g)) return { ...g, diff };
-      if (!fallback) fallback = g;
+  // A guaranteed clean fallback. It keeps the requested node-count floor and
+  // uses a serpentine open trail, so even an exhausted retry budget can never
+  // leak an unplayable or Euler-invalid board to the player.
+  function safeFallback(diff, profile) {
+    const tuning = profile || GRAPH_PROFILE;
+    const nCount = tuning.nodeRanges[diff][0];
+    const cols = Math.min(5, Math.ceil(Math.sqrt(nCount)));
+    const rows = Math.ceil(nCount / cols);
+    const nodes = [];
+    for (let row=0;row<rows;row++) {
+      const count = Math.min(cols, nCount - row*cols);
+      const xs = Array.from({length:count}, (_,i) =>
+        count === 1 ? 50 : 10 + i * 80/(count-1));
+      if (row % 2) xs.reverse();
+      const y = rows === 1 ? 50 : 10 + row * 80/(rows-1);
+      xs.forEach(x => nodes.push([+x.toFixed(1), +y.toFixed(1)]));
     }
-    if (fallback) return { ...fallback, diff };
-    // Absolute fallback — a triangle
-    return {
-      nodes: [[50,15],[15,85],[85,85]],
-      edges: [[0,1],[1,2],[0,2]],
-      nCount: 3,
-      diff: 1,
-    };
+    const edges = Array.from({length:nCount-1}, (_,i) => [i,i+1]);
+
+    // Preserve two odd vertices while adding the minimum number of branch
+    // choices for this tier: connect one current odd vertex to an even one,
+    // which simply moves the trail endpoint. Reject any candidate that would
+    // make the clean grid fail the same node/edge corridor rules as gameplay.
+    const targetExtra = tuning.extraRanges[diff][0];
+    for (let added=0;added<targetExtra;added++) {
+      const odd = oddNodes(edges, nCount);
+      const fixedEnd = nCount - 1;
+      const anchor = odd[0] === fixedEnd ? odd[1] : odd[0];
+      const otherOdd = odd[0] === anchor ? odd[1] : odd[0];
+      const edgeSet = new Set(edges.map(([a,b]) => ek(a,b)));
+      const candidates = [];
+      for (let b=0;b<nCount;b++) {
+        if (b === anchor || b === otherOdd || edgeSet.has(ek(anchor,b))) continue;
+        const d = Math.hypot(nodes[anchor][0]-nodes[b][0], nodes[anchor][1]-nodes[b][1]);
+        candidates.push({b,d});
+      }
+      candidates.sort((a,b)=>a.d-b.d);
+      const choice = candidates.find(({b}) =>
+        isPlayable({nodes, edges:[...edges, [Math.min(anchor,b), Math.max(anchor,b)]], nCount}));
+      if (!choice) break;
+      edges.push([Math.min(anchor,choice.b), Math.max(anchor,choice.b)]);
+    }
+
+    const fallback = { nodes, edges, nCount, diff };
+    if (!isPlayable(fallback) || !hasEulerPath(edges, nCount)) {
+      throw new Error('Mind Trace safe fallback invariant failed');
+    }
+    return fallback;
+  }
+
+  // Retry procedural layouts until one passes the touch-safety filter. Never
+  // return the old "best effort" fallback: every displayed puzzle must pass.
+  function makePuzzle(diff, roundSeed, profile) {
+    for (let i=0;i<64;i++) {
+      let g = generateGraph(diff, roundSeed + i*7919, profile);
+      if (!g) continue;
+      if (!isPlayable(g)) g = relaxLayout(g);
+      if (isPlayable(g)) return { ...g, diff };
+    }
+    return safeFallback(diff, profile);
   }
 
   /* =================================================================
@@ -621,20 +710,23 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     return G.puzzle.edges.some(([ea,eb]) =>
       (ea===a&&eb===b)||(ea===b&&eb===a));
   }
-  /* Show the "lines left" number inside nodes during the planning phase
-     (and while idle in play) — this is the core planning aid. Fade
-     puzzles hide it, and it never shows mid-drag so it can't clutter. */
+  /* Remaining-line counts are a short tutorial, not a permanent solver.
+     Rounds 1–3 show them only in the planning window; once drawing starts,
+     and on every later round, players must count the lines themselves. */
   function showDegrees() {
-    if (G.type === 'fade') return false;
-    if (G.phase === 'plan' || G.phase === 'intro') return true;
-    return G.phase === 'play' && !G.drawing;
+    return G.type !== 'fade' &&
+           G.round <= CFG.degreeGuideRounds &&
+           G.phase === 'plan';
   }
 
   function setHintNodes() {
-    // Only nodes that can actually start a full one-stroke route glow.
+    // Keep the solver result for explicit hints, but stop advertising the
+    // answer after the three-round tutorial.
     const valid = validStartNodes();
     G.startNodes = valid.length ? valid : G.puzzle.nodes.map((_,i)=>i);
-    G.hintNodes = G.startNodes.slice();
+    G.hintNodes = G.round <= CFG.startGuideRounds
+      ? G.startNodes.slice()
+      : [];
   }
 
   /* =================================================================
@@ -862,9 +954,10 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       const isSt  = i===G.startNode && G.startNode>=0;
       const isHint = G.hintNodes.includes(i) && !G.drawing && G.startNode<0 && G.phase==='play';
       const isPlanGlow = isPlan && G.hintNodes.includes(i);
-      // A node the player cannot legally start from is dimmed before the
-      // first touch — no more "wasted" runs from an impossible node.
-      const isDeadStart = G.startNode < 0 && (G.phase==='play'||isPlan) &&
+      // During the three-round tutorial, distinguish impossible starts.
+      // Later rounds deliberately give no visual answer.
+      const isDeadStart = G.round <= CFG.startGuideRounds &&
+                          G.startNode < 0 && (G.phase==='play'||isPlan) &&
                           G.startNodes.length > 0 &&
                           G.startNodes.length < p.nodes.length &&
                           G.startNodes.indexOf(i) === -1;
@@ -1245,8 +1338,11 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       return;
     }
 
-    // Fresh stroke — reject provably impossible starting nodes
-    if (G.startNodes.length && G.startNodes.indexOf(ni) === -1) {
+    // The opening tutorial rejects impossible starts while teaching the
+    // rule. After round 3, accept every node: choosing a bad start must be
+    // a discoverable planning mistake, not an invisible input rejection.
+    if (G.round <= CFG.startGuideRounds &&
+        G.startNodes.length && G.startNodes.indexOf(ni) === -1) {
       softReject(ni);
       showPop('✗ Can\'t finish from there', '#F59E0B', 900);
       return;
@@ -1374,7 +1470,9 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
   function beginPlay() {
     if (G.planTimeout) { clearTimeout(G.planTimeout); G.planTimeout = null; }
     G.phase = 'play';
-    setTip('Start from a glowing node · drag back to undo a line');
+    setTip(G.round <= CFG.startGuideRounds
+      ? 'Start from a glowing node · drag back to undo a line'
+      : 'Choose your start carefully · drag back to undo a line');
     G.planStart = Date.now();
     G.puzzleStart = Date.now();
     // Deadline-based countdown — immune to setInterval drift, and
@@ -1432,10 +1530,10 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       speed:3, fade:2, precision:2, genius:4, master:5, normal:0,
     })[G.type] || 0;
 
-    // Bigger graphs are worth more — a 14-line shape shouldn't pay the
-    // same as a 6-line one at the same difficulty tier.
+    // Bigger graphs now carry substantially more decisions, so edge count
+    // matters almost point-for-line instead of being a token bonus.
     const edgeCount = G.puzzle ? G.puzzle.edges.length : 6;
-    const sizeBonus = Math.max(0, Math.round((edgeCount - 6) * 0.6));
+    const sizeBonus = Math.max(0, Math.round((edgeCount - 6) * 0.9));
 
     // Combo multiplier applies to the sum
     const tier = comboTier(G.combo + 1); // combo after this correct
@@ -1546,6 +1644,9 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       // Not started yet — spotlight the best starting node
       const starts = G.startNodes.length ? G.startNodes : [0];
       const pick = starts[0];
+      // Spending a hint is the only way to restore a start-node glow after
+      // the tutorial rounds.
+      G.hintNodes = [pick];
       const [x,y] = nodePos(pick);
       spawnParticles(x, y, '#FBBF24', 14, {speed:[1.5,4], life:0.8, r:2, rjit:2});
       const nxt = bestNextNode(pick);
@@ -1626,6 +1727,22 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
       while (attempts < 4 && !libPuzzle) {
         const meta = window.MT_SHAPES.pickShape(G.round, seed + attempts*7919, avoid);
         libPuzzle = window.MT_SHAPES.buildFromShape(meta, seed + attempts*104729 + 17);
+
+        /* Handcrafted puzzles must meet the same round floor as procedural
+           ones. Otherwise every third round could still collapse to a
+           five-node, nearly-tree shape and bypass the steeper ramp. */
+        if (libPuzzle) {
+          libPuzzle = preferOpenTrail(libPuzzle);
+          const minNodes = GRAPH_PROFILE.nodeRanges[useDiff][0];
+          const minExtra = GRAPH_PROFILE.extraRanges[useDiff][0];
+          if (libPuzzle.nCount < minNodes ||
+              libPuzzle.edges.length < libPuzzle.nCount - 1 + minExtra) {
+            libPuzzle = null;
+            attempts++;
+            continue;
+          }
+        }
+
         /* Library shapes go through the same playability pipeline as the
            procedural ones: most of them ship with nodes packed tighter
            than the touch snap radius, so relax first and only reject the
@@ -1636,9 +1753,10 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
           else { libPuzzle = null; attempts++; continue; }
         }
         if (libPuzzle) {
-          libPuzzle.diff = Math.max(1, Math.min(5, libPuzzle.diffIdx + 1)); // 0..3 -> 1..4
-          // Master library puzzles bump one more tier
-          if (libPuzzle.diffIdx === 3) libPuzzle.diff = 5;
+          const libraryDiff = libPuzzle.diffIdx === 3
+            ? 5
+            : Math.max(1, Math.min(5, libPuzzle.diffIdx + 1));
+          libPuzzle.diff = Math.max(useDiff, libraryDiff);
           G.libraryMeta = {
             category   : libPuzzle.category,
             subLabel   : libPuzzle.subLabel,
@@ -1914,7 +2032,9 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     end({
       value: G.score,
       points: G.score >= 100 ? 13 : G.score >= 55 ? 11 : G.score >= 22 ? 8 : 5,
-      starThresh: [30, 70, 120],
+      // Larger graphs pay more now; keep stars near the intended 3/6/9-solve
+      // milestones instead of handing out all three on the old score curve.
+      starThresh: [35, 90, 150],
       summary: statsHtml
     });
   }
@@ -1933,7 +2053,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
           <button class="mt3-reset-btn" id="mt3Reset">↺ Restart</button>
           <button class="mt3-reset-btn mt3-hint-btn" id="mt3Hint">💡 Hint · ${G.hintsLeft}</button>
         </div>
-        <div class="mt3-tip" id="mt3Tip">Tap a glowing node, then drag through every line without lifting.</div>
+        <div class="mt3-tip" id="mt3Tip">Plan a route, then drag through every line without lifting.</div>
       </div>`;
 
     makeCanvas();
@@ -2174,6 +2294,76 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
     return () => { running = false; };
   }
 
+  /* Test-only seam ----------------------------------------------------
+     The production page never defines this hook. The headless regression
+     harness supplies it before launching the game so it can exercise the
+     real closure-scoped generator, solver, layout filter and tracer instead
+     of maintaining a second implementation that could silently drift. */
+  if (window.__MINDTRACE_TEST__) {
+    Object.assign(window.__MINDTRACE_TEST__, {
+      CFG,
+      GRAPH_PROFILE,
+      G,
+      rng,
+      generateGraph,
+      makePuzzle,
+      safeFallback,
+      preferOpenTrail,
+      isPlayable,
+      relaxLayout,
+      hasEulerPath,
+      oddNodes,
+      validStartNodes,
+      showDegrees,
+      setHintNodes,
+      pickTarget,
+      ek,
+      nodePos,
+      stopPuzzleTimer,
+      setPuzzle(puzzle, round) {
+        G.puzzle = puzzle;
+        G.round = round || 1;
+        G.type = 'normal';
+        G.phase = 'play';
+        G.tracedEdges = new Set();
+        G.path = [];
+        G.startNode = -1;
+        G.currentNode = -1;
+        G.drawing = false;
+        setHintNodes();
+      },
+      prepareTrace(puzzle, start) {
+        G.puzzle = puzzle;
+        G.round = 20;
+        G.type = 'normal';
+        G.phase = 'play';
+        G.tracedEdges = new Set();
+        G.path = [start];
+        G.startNode = start;
+        G.currentNode = start;
+        G.drawing = true;
+      },
+      commitTrace(to) {
+        const from = G.currentNode;
+        G.tracedEdges.add(ek(from, to));
+        G.path.push(to);
+        G.currentNode = to;
+      },
+      startStrokeAtNode(node) {
+        const [clientX,clientY] = nodePos(node);
+        onDown({
+          cancelable:true,
+          preventDefault(){},
+          clientX,
+          clientY,
+        });
+        return G.startNode;
+      },
+      canvasSize() { return { width:CW, height:CH }; },
+      hasCanvas() { return !!canvas; },
+    });
+  }
+
   /* =================================================================
      START SCREEN (Premium landing)
      ================================================================= */
@@ -2216,7 +2406,7 @@ function playMindTrace(body, setScore, end, wrap, startClock) {
         <div class="mt3-rule"><span>✓</span><span>Trace every line exactly once, in one stroke</span></div>
         <div class="mt3-rule"><span>↶</span><span>Drag backwards to undo a line — no penalty</span></div>
         <div class="mt3-rule"><span>💡</span><span>${CFG.hintsPerRun} hints per run reveal a safe next move</span></div>
-        <div class="mt3-rule"><span>◉</span><span>Only glowing nodes can start a valid route</span></div>
+        <div class="mt3-rule"><span>◉</span><span>Choose your starting node carefully — it changes the whole route</span></div>
       </div>
 
       <button class="btn-primary mt3-start-btn" id="mt3Start">
