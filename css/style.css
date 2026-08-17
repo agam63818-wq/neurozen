@@ -2108,11 +2108,20 @@ body.dark .iq5-diff-3{color:#FCA5A5;}
 @media (prefers-reduced-motion:reduce){.iq5-anim-in{animation:none;}}
 .iq5-prompt{font-size:14.5px;font-weight:700;line-height:1.5;color:var(--text);text-align:center;margin-bottom:12px;}
 .iq5-visual{display:flex;justify-content:center;align-items:center;min-height:60px;}
+/* Every generated SVG is fluid: viewBox + width:100% + height:auto.
+   .iq-svg-opt USED TO HAVE NO WIDTH RULE — inside the inline-block mirror
+   wrapper it had nothing to resolve against and collapsed to 0px, which is
+   what made option C render as an empty box. It now has an explicit size. */
+.iq-svg{max-width:100%;height:auto;display:block;}
 .iq5-svg{max-width:100%;height:auto;}
-.iq-svg-matrix{width:min(280px,100%);}
-.iq-svg-seq{width:min(340px,100%);}
-.iq-svg-radar{width:100%;max-width:260px;}
-.iq-svg-fold,.iq-svg-cube{width:min(220px,90%);}
+.iq-svg-matrix{width:min(280px,100%);height:auto;}
+.iq-svg-seq{width:min(340px,100%);height:auto;}
+.iq-svg-radar{width:100%;max-width:260px;height:auto;}
+.iq-svg-fold{width:min(240px,100%);height:auto;}
+.iq-svg-cube{width:min(220px,92%);height:auto;}
+.iq-svg-opt{width:100%;max-width:110px;height:auto;display:block;margin:0 auto;}
+.iq-svg-unfold{max-width:96px;}
+.iq-svg-fallback{opacity:.75;}
 .iq5-target{display:flex;flex-direction:column;align-items:center;gap:4px;}
 .iq5-target-label{font-size:10px;letter-spacing:.15em;color:var(--text2);font-weight:800;text-transform:uppercase;}
 
@@ -2126,6 +2135,10 @@ body.dark .iq5-diff-3{color:#FCA5A5;}
 
 /* ---- Options ---- */
 .iq5-opts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;}
+.iq5-opts-text{grid-template-columns:1fr;}
+.iq5-opts-text .iq5-opt{flex-direction:row;align-items:center;gap:12px;min-height:0;padding:12px 14px;text-align:left;}
+.iq5-opts-text .iq5-opt-body{justify-content:flex-start;}
+.iq5-opts-text .iq5-opt-text{text-align:left;}
 .iq5-opt{display:flex;flex-direction:column;align-items:center;gap:6px;background:var(--card);border:2px solid var(--border);border-radius:14px;padding:10px 8px;cursor:pointer;font-family:inherit;color:var(--text);box-shadow:var(--shadow);transition:transform .12s,border-color .15s,background .15s,box-shadow .15s;min-height:100px;}
 .iq5-opt:hover:not(:disabled){border-color:rgba(124,58,237,.4);background:rgba(124,58,237,.04);}
 .iq5-opt:active:not(:disabled){transform:scale(.97);}
@@ -2148,7 +2161,10 @@ body.dark .iq5-diff-3{color:#FCA5A5;}
 }
 /* text-only options render taller */
 .iq5-opt:has(.iq5-opt-text){min-height:70px;}
-.iq5-mirror{transform:scaleX(-1);display:inline-block;}
+/* Legacy hook. Mirroring now happens inside the SVG transform (IQ_shape reads
+   spec.mirror and emits scale(-1,1)), so this wrapper is no longer emitted —
+   but if anything ever renders it again it must not be able to collapse. */
+.iq5-mirror{transform:scaleX(-1);display:block;width:100%;}
 
 /* ---- Options for cube/paper-fold: use single column so tiles have room ---- */
 
@@ -2212,4 +2228,58 @@ body.dark .iq5-fx-time{color:#FCD34D;}
   .iq5-gauge{width:150px;height:150px;}
   .iq5-gauge-num{font-size:40px;}
   .iq-svg-matrix{width:min(240px,100%);}
+}
+
+/* ---- v6: language chooser ---- */
+.iq5-lang{background:var(--card);border-radius:16px;padding:12px 14px;margin-bottom:12px;box-shadow:var(--shadow);}
+.iq5-lang-label{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);margin-bottom:8px;text-align:center;}
+.iq5-lang-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.iq5-lang-btn{padding:11px 8px;border-radius:12px;border:2px solid var(--border);background:transparent;color:var(--text);font-family:inherit;font-size:13.5px;font-weight:800;cursor:pointer;transition:border-color .15s,background .15s,color .15s;}
+.iq5-lang-btn:hover{border-color:rgba(124,58,237,.45);}
+.iq5-lang-btn.on{border-color:var(--primary);background:rgba(124,58,237,.10);color:var(--primary);}
+
+/* ---- v6: trap line under the explanation ---- */
+.iq5-explain-trap{margin-top:8px;font-size:11.5px;font-weight:700;line-height:1.45;color:var(--text2);background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.28);border-radius:10px;padding:7px 10px;}
+
+/* ---- v6: result extras ---- */
+.iq5-res-conf{font-size:11.5px;opacity:.85;}
+.iq5-review-btn{display:block;width:100%;padding:13px;border-radius:14px;background:var(--card);color:var(--text);border:2px solid var(--primary);font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;margin:12px 0 4px;box-shadow:var(--shadow);}
+.iq5-review-btn:active{transform:scale(.98);}
+
+/* ---- v6: review mode overlay ---- */
+.iq5-review{position:fixed;inset:0;z-index:9000;background:rgba(2,6,23,.62);display:flex;align-items:flex-end;justify-content:center;animation:fadeUp .2s ease;}
+.iq5-rev-sheet{background:var(--bg,var(--card));width:100%;max-width:520px;max-height:92vh;border-radius:22px 22px 0 0;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -12px 40px rgba(0,0,0,.3);}
+.iq5-rev-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--card);}
+.iq5-rev-head b{font-size:14px;}
+.iq5-rev-count{margin-left:auto;font-size:11.5px;font-weight:800;color:var(--text2);}
+.iq5-rev-x{background:none;border:none;font-size:17px;color:var(--text2);cursor:pointer;padding:0 2px;font-family:inherit;}
+.iq5-rev-body{padding:14px 16px 4px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.iq5-rev-meta{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
+.iq5-rev-body .iq5-visual{margin-bottom:12px;}
+.iq5-rev-rows{margin:4px 0 10px;display:flex;flex-direction:column;gap:6px;}
+.iq5-rev-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12.5px;background:var(--card);border-radius:10px;padding:9px 12px;box-shadow:var(--shadow);}
+.iq5-rev-row span{color:var(--text2);font-weight:600;}
+.iq5-rev-row b{font-weight:800;text-align:right;}
+.iq5-rev-row b.good{color:#059669;}
+.iq5-rev-row b.bad{color:#DC2626;}
+body.dark .iq5-rev-row b.good{color:#6EE7B7;}
+body.dark .iq5-rev-row b.bad{color:#FCA5A5;}
+.iq5-rev-nav{display:flex;gap:8px;padding:12px 16px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--border);background:var(--card);}
+.iq5-rev-btn{flex:1;padding:11px 8px;border-radius:12px;border:2px solid var(--border);background:transparent;color:var(--text);font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;}
+.iq5-rev-btn:disabled{opacity:.4;cursor:not-allowed;}
+.iq5-rev-btn.primary{background:var(--grad);color:#fff;border-color:transparent;}
+.iq5-review .iq5-opt{cursor:default;}
+
+/* ---- v6: narrow-phone tuning (320 / 360 / 414) ---- */
+@media (max-width:380px){
+  .iq5-opt{min-height:82px;}
+  .iq-svg-opt{max-width:84px;}
+  .iq-svg-matrix{width:min(230px,100%);}
+  .iq-svg-seq{width:100%;}
+  .iq5-lang-btn{font-size:12.5px;padding:10px 6px;}
+  .iq5-rev-sheet{border-radius:18px 18px 0 0;}
+}
+@media (min-width:520px){
+  .iq5-review{align-items:center;}
+  .iq5-rev-sheet{border-radius:22px;max-height:88vh;}
 }

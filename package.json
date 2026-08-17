@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "test:mindtrace": "node tests/mindtrace-harness.cjs",
-    "test:wordflash": "node tests/wordflash-probe.cjs"
+    "test:wordflash": "node tests/wordflash-probe.cjs",
+    "test:iqtest": "node tests/iqtest-probe.cjs"
   },
   "devDependencies": {
     "jsdom": "26.1.0"
